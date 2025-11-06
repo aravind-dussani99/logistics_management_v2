@@ -22,14 +22,14 @@ resource "google_project_service" "artifact_registry_api" {
 }
 
 # Create an Artifact Registry repository to store your Docker images
-resource "google_artifact_registry_repository" "repository" {
-  provider      = google
-  location      = var.region
-  repository_id = var.service_name
-  format        = "DOCKER"
-  description   = "Docker repository for the LogiTrack application."
-  depends_on    = [google_project_service.artifact_registry_api]
-}
+#resource "google_artifact_registry_repository" "repository" {
+  #provider      = google
+  #location      = var.region
+  #repository_id = var.service_name
+  #format        = "DOCKER"
+  #description   = "Docker repository for the LogiTrack application."
+ # depends_on    = [google_project_service.artifact_registry_api]
+#}
 
 # Create the Cloud Run service to run your container
 resource "google_cloud_run_v2_service" "default" {
