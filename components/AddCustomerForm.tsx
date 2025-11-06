@@ -1,4 +1,3 @@
-// FIX: Added import for uuid to generate unique IDs for new rate entries.
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useData } from '../contexts/DataContext';
@@ -24,7 +23,6 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 
 const AddCustomerForm: React.FC<AddCustomerFormProps> = ({ onClose }) => {
     const { addCustomer } = useData();
-    // FIX: Added missing `openingBalance` property to the initial state.
     const [customerData, setCustomerData] = useState<Omit<Customer, 'id' | 'rates'>>({
         name: '', contactNumber: '', address: '', openingBalance: 0
     });
@@ -45,7 +43,6 @@ const AddCustomerForm: React.FC<AddCustomerFormProps> = ({ onClose }) => {
         setRateData(p => ({ ...p, gstAmount: gstAmt, totalRate: total }));
     }, [rateData.ratePerTon, rateData.gst, rateData.gstPercentage]);
 
-    // FIX: Updated change handler to correctly parse number types.
     const handleCustomerChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         setCustomerData(prev => ({...prev, [name]: type === 'number' ? parseFloat(value) || 0 : value }));
@@ -59,7 +56,6 @@ const AddCustomerForm: React.FC<AddCustomerFormProps> = ({ onClose }) => {
     
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // FIX: Added a unique ID to the new rate entry to satisfy the RateEntry type.
         const newCustomer: Omit<Customer, 'id'> = { ...customerData, rates: [{ ...rateData, id: uuidv4() }] };
         await addCustomer(newCustomer);
         onClose();
@@ -73,7 +69,6 @@ const AddCustomerForm: React.FC<AddCustomerFormProps> = ({ onClose }) => {
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2">
                        <InputField label="Customer Name" id="name" name="name" type="text" value={customerData.name} onChange={handleCustomerChange} required />
                        <InputField label="Contact Number" id="contactNumber" name="contactNumber" type="text" value={customerData.contactNumber} onChange={handleCustomerChange} required />
-                       {/* FIX: Added missing Opening Balance input field. */}
                        <InputField label="Opening Balance (₹)" id="openingBalance" name="openingBalance" type="number" value={customerData.openingBalance} onChange={handleCustomerChange} />
                        <div className="sm:col-span-2">
                             <InputField label="Address" id="address" name="address" type="textarea" value={customerData.address} onChange={handleCustomerChange} required />

@@ -1,16 +1,11 @@
-
-
-
 import React from 'react';
 import FilterPanel, { Filters } from './FilterPanel';
-// FIX: Replaced legacy types with `VehicleOwner`, `CustomerRate`, and `QuarryOwner` to match API data structures.
 import { VehicleOwner, CustomerRate, QuarryOwner } from '../types';
 
 interface FilterSidebarProps {
     filters: Filters;
     setFilters: React.Dispatch<React.SetStateAction<Filters>>;
     data: {
-        // FIX: Corrected prop types to use `VehicleOwner`, `CustomerRate`, and `QuarryOwner`.
         vehicles: VehicleOwner[];
         customers: CustomerRate[];
         quarries: QuarryOwner[];

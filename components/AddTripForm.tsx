@@ -33,8 +33,7 @@ const InputField: React.FC<InputProps> = ({ label, error, type, children, ...pro
                 {renderInput()}
                 {type === 'date' && (
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        {/* FIX: Changed className to class for ion-icon custom element. */}
-                        <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
+                        <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                     </div>
                 )}
             </div>
@@ -117,7 +116,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         
         const selectedVehicle = vehicles.find(v => v.vehicleNumber === formData.vehicleNumber);
         
-        // FIX: Corrected the type of `newTripData` to align with the properties being created and the `addTrip` function signature, which expects an object without `status` or `createdBy` fields.
         const newTripData: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'> = {
             date: formData.date,
             place: formData.place,

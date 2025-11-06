@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, { useState, useEffect } from 'react';
 import { Notification } from '../types';
 import { api } from '../services/mockApi';
@@ -33,8 +28,7 @@ const NotificationsPanel: React.FC = () => {
   return (
     <div className="relative">
       <button onClick={() => setIsOpen(!isOpen)} className="relative text-gray-500 dark:text-gray-300 focus:outline-none">
-        {/* FIX: Changed className to class for ion-icon custom element. */}
-        <ion-icon name="notifications-outline" class="text-2xl"></ion-icon>
+        <ion-icon name="notifications-outline" className="text-2xl"></ion-icon>
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -54,8 +48,7 @@ const NotificationsPanel: React.FC = () => {
                 key={notification.id} 
                 className={`flex p-4 border-b dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer ${!notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
                 onClick={() => handleMarkAsRead(notification.id)}>
-                {/* FIX: Changed className to class for ion-icon custom element. */}
-                <ion-icon name={getIcon(notification.type).icon} class={`text-2xl mr-3 ${getIcon(notification.type).color}`}></ion-icon>
+                <ion-icon name={getIcon(notification.type).icon} className={`text-2xl mr-3 ${getIcon(notification.type).color}`}></ion-icon>
                 <div className="text-sm">
                   <p className="text-gray-700 dark:text-gray-200">{notification.message}</p>
                   <p className="text-xs text-gray-400">{new Date(notification.timestamp).toLocaleString()}</p>

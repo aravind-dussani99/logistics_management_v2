@@ -18,7 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
     { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
     { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
-    { to: '/trips', icon: 'bus-outline', name: 'Daily Trips', roles: [Role.ADMIN, Role.MANAGER, Role.DRIVER] },
+    { to: '/trips', icon: 'bus-outline', name: 'Daily Trips', roles: [Role.ADMIN, Role.MANAGER] },
     { to: '/accounting', icon: 'calculator-outline', name: 'Accounting', roles: [Role.ADMIN, Role.MANAGER] },
     
     // Financials
@@ -57,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       }
       onClick={() => setSidebarOpen(false)}
     >
-      <ion-icon name={icon} class="text-2xl"></ion-icon>
+      <ion-icon name={icon} className="text-2xl"></ion-icon>
       <span className="mx-4 font-medium">{name}</span>
     </NavLink>
   );
@@ -81,7 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       >
         <div className="flex items-center justify-center mt-8">
           <div className="flex items-center">
-            <ion-icon name="server-outline" class="text-3xl text-primary"></ion-icon>
+            <ion-icon name="server-outline" className="text-3xl text-primary"></ion-icon>
             <span className="text-gray-800 dark:text-white text-2xl mx-2 font-semibold">LogiTrack</span>
           </div>
         </div>
@@ -93,7 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
               onClick={logout}
               className="w-full flex items-center px-4 py-2 mt-5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-700 dark:hover:text-red-300 transition-colors duration-200"
             >
-              <ion-icon name="log-out-outline" class="text-2xl"></ion-icon>
+              <ion-icon name="log-out-outline" className="text-2xl"></ion-icon>
               <span className="mx-4 font-medium">Logout</span>
             </button>
         </div>

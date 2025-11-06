@@ -139,7 +139,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
                     {(showFilters.length > 0 || showMoreFilters.length > 0) &&
                         <div className="relative" ref={filterPopoverRef}>
                             <button onClick={() => setFilterPopoverOpen(!isFilterPopoverOpen)} className="flex items-center space-x-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                <ion-icon name="filter-outline" class="text-lg"></ion-icon>
+                                <ion-icon name="filter-outline" className="text-lg"></ion-icon>
                                 <span className="hidden lg:inline">{showFilters.length > 0 ? "More Filters" : "Filters"}</span>
                                 <span className="lg:hidden">Filters</span>
                             </button>
@@ -148,19 +148,19 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
                     }
                     {pageAction ? (
                          <button onClick={pageAction.action} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">
-                            <ion-icon name="add-outline" class="text-xl"></ion-icon>
+                            <ion-icon name="add-outline" className="text-xl"></ion-icon>
                             <span className="hidden md:inline">{pageAction.label}</span>
                         </button>
                     ) : (showAddAction && (
                         <div className="relative" ref={addMenuRef}>
                             <button onClick={() => setAddMenuOpen(!isAddMenuOpen)} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">
-                                <ion-icon name="add-outline" class="text-xl"></ion-icon>
+                                <ion-icon name="add-outline" className="text-xl"></ion-icon>
                                 <span className="hidden md:inline">Add</span>
                             </button>
                             {isAddMenuOpen && (
                                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-20 border dark:border-gray-600 overflow-hidden">
                                     <ul>{addActions.map(action => (<li key={action.action}><button onClick={() => handleAddAction(action.action)} className="w-full flex items-center px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                        <ion-icon name={action.icon} class="text-xl mr-3"></ion-icon><span>{action.name}</span></button></li>))}</ul>
+                                        <ion-icon name={action.icon} className="text-xl mr-3"></ion-icon><span>{action.name}</span></button></li>))}</ul>
                                 </div>
                             )}
                         </div>

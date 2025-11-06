@@ -32,7 +32,7 @@ const Header: React.FC<HeaderProps> = ({ setSidebarOpen }) => {
     <header className="flex justify-between items-center py-4 px-6 bg-white dark:bg-gray-800 border-b-2 border-gray-200 dark:border-gray-700">
       <div className="flex items-center">
         <button onClick={() => setSidebarOpen(true)} className="text-gray-500 dark:text-gray-300 focus:outline-none lg:hidden">
-            <ion-icon name="menu-outline" class="text-2xl"></ion-icon>
+            <ion-icon name="menu-outline" className="text-2xl"></ion-icon>
         </button>
       </div>
 

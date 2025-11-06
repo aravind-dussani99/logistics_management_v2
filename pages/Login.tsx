@@ -24,7 +24,7 @@ const Login: React.FC = () => {
       <div className="w-full max-w-sm p-8 space-y-8 bg-white dark:bg-gray-800 rounded-lg shadow-md">
         <div className="text-center">
             <div className="flex items-center justify-center mb-4">
-                <ion-icon name="server-outline" class="text-5xl text-primary"></ion-icon>
+                <ion-icon name="server-outline" className="text-5xl text-primary"></ion-icon>
                 <span className="text-gray-800 dark:text-white text-4xl mx-2 font-semibold">LogiTrack</span>
             </div>
           <h2 className="text-2xl font-bold text-gray-700 dark:text-white">Sign in to your account</h2>

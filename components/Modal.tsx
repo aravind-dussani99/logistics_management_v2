@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, { ReactNode } from 'react';
 
 interface ModalProps {
@@ -21,8 +16,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
         <div className="sticky top-0 bg-white dark:bg-gray-800 p-4 border-b dark:border-gray-700 flex justify-between items-center z-10">
           <h2 id="modal-title" className="text-xl font-semibold">{title}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white" aria-label="Close modal">
-            {/* FIX: Changed className to class for ion-icon custom element. */}
-            <ion-icon name="close-outline" class="text-2xl"></ion-icon>
+            <ion-icon name="close-outline" className="text-2xl"></ion-icon>
           </button>
         </div>
         <div className="overflow-y-auto">

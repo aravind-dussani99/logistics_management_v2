@@ -20,7 +20,6 @@ const getMtdRange = () => {
 export interface AccountSummary {
     id: string; // This will now be the unique ID from the source object
     name: string;
-    // FIX: Changed Account['type'] to string, as Account has no 'type' property. The type is the category name.
     type: string;
     totalTrips: number;
     totalTonnage: number;
@@ -74,7 +73,6 @@ const Accounting: React.FC = () => {
              summaryMap.set(acc.id, { 
                 id: acc.id, 
                 name: acc.name, 
-                // FIX: Used acc.categoryName for the type, as acc.type does not exist.
                 type: acc.categoryName, 
                 totalTrips: 0, 
                 totalTonnage: 0, 

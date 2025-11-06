@@ -1,10 +1,4 @@
-
-
-
-
-
 import React from 'react';
-// FIX: Replaced legacy types with `VehicleOwner`, `CustomerRate`, and `QuarryOwner` to match API data structures.
 import { VehicleOwner, CustomerRate, QuarryOwner } from '../types';
 
 export interface Filters {
@@ -21,7 +15,6 @@ interface FilterPanelProps {
     filters: Filters;
     setFilters: React.Dispatch<React.SetStateAction<Filters>>;
     data: {
-        // FIX: Corrected prop types to use `VehicleOwner`, `CustomerRate`, and `QuarryOwner`.
         vehicles: VehicleOwner[];
         customers: CustomerRate[];
         quarries: QuarryOwner[];
@@ -32,7 +25,6 @@ interface FilterPanelProps {
 const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data }) => {
     const { vehicles, customers, quarries, royaltyOwners } = data;
     const uniqueTransporters = Array.from(new Set(vehicles.map(v => v.ownerName)));
-    // FIX: Get unique customer names from the `CustomerRate` array.
     const uniqueCustomers = Array.from(new Set(customers.map(c => c.customer)));
 
     const handleFilterChange = (key: keyof Filters, value: string) => {
@@ -61,8 +53,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data }) 
                 <div className="relative">
                     <input type="date" id="dateFrom" className={dateInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChange('dateFrom', e.target.value)} />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        {/* FIX: Changed className to class for ion-icon custom element. */}
-                        <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
+                        <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                     </div>
                 </div>
             </div>
@@ -71,8 +62,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data }) 
                 <div className="relative">
                     <input type="date" id="dateTo" className={dateInputClass} value={filters.dateTo || ''} onChange={e => handleFilterChange('dateTo', e.target.value)} />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        {/* FIX: Changed className to class for ion-icon custom element. */}
-                        <ion-icon name="calendar-outline" class="text-gray-400"></ion-icon>
+                        <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                     </div>
                 </div>
             </div>
@@ -95,7 +85,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data }) 
                 <label htmlFor="customer" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer</label>
                 <select id="customer" className={baseInputClass} value={filters.customer || ''} onChange={e => handleFilterChange('customer', e.target.value)}>
                     <option value="">All Customers</option>
-                    {/* FIX: Mapped over `uniqueCustomers` array to correctly display customer names. */}
                     {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </div>
@@ -103,7 +92,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data }) 
                 <label htmlFor="quarry" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quarry</label>
                 <select id="quarry" className={baseInputClass} value={filters.quarry || ''} onChange={e => handleFilterChange('quarry', e.target.value)}>
                     <option value="">All Quarries</option>
-                    {/* FIX: Changed `q.name` to `q.quarryName` to match the `QuarryOwner` type. */}
                     {quarries.map(q => <option key={q.id} value={q.quarryName}>{q.quarryName}</option>)}
                 </select>
             </div>

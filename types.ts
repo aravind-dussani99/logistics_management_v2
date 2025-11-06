@@ -6,13 +6,9 @@ import React from 'react';
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      'ion-icon': React.HTMLAttributes<HTMLElement> & {
-        name?: string;
-        class?: string;
+      'ion-icon': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        name: string;
       };
-      // FIX: Added index signature to allow all standard HTML elements
-      // This prevents the custom 'ion-icon' definition from overwriting all other intrinsic elements.
-      [elemName: string]: any;
     }
   }
 }

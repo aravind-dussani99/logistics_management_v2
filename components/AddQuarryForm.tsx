@@ -1,4 +1,3 @@
-// FIX: Added import for uuid to generate unique IDs for new rate entries.
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useData } from '../contexts/DataContext';
@@ -24,7 +23,6 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 
 const AddQuarryForm: React.FC<AddQuarryFormProps> = ({ onClose }) => {
     const { addQuarryOwner } = useData();
-    // FIX: Added missing `openingBalance` property to the initial state.
     const [ownerData, setOwnerData] = useState<Omit<QuarryOwner, 'id' | 'rates'>>({
         ownerName: '', quarryName: '', contactNumber: '', quarryArea: 0, address: '', openingBalance: 0
     });
@@ -58,7 +56,6 @@ const AddQuarryForm: React.FC<AddQuarryFormProps> = ({ onClose }) => {
     
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // FIX: Added a unique ID to the new rate entry to satisfy the RateEntry type.
         const newQuarry: Omit<QuarryOwner, 'id'> = { ...ownerData, rates: [{ ...rateData, id: uuidv4() }] };
         await addQuarryOwner(newQuarry);
         onClose();
@@ -74,7 +71,6 @@ const AddQuarryForm: React.FC<AddQuarryFormProps> = ({ onClose }) => {
                        <InputField label="Quarry Name" id="quarryName" name="quarryName" type="text" value={ownerData.quarryName} onChange={handleOwnerChange} required />
                        <InputField label="Contact Number" id="contactNumber" name="contactNumber" type="text" value={ownerData.contactNumber} onChange={handleOwnerChange} />
                        <InputField label="Quarry Area (Hectors)" id="quarryArea" name="quarryArea" type="number" value={ownerData.quarryArea} onChange={handleOwnerChange} />
-                       {/* FIX: Added missing Opening Balance input field. */}
                        <InputField label="Opening Balance (₹)" id="openingBalance" name="openingBalance" type="number" value={ownerData.openingBalance} onChange={handleOwnerChange} />
                        <div className="sm:col-span-2">
                             <InputField label="Address" id="address" name="address" type="textarea" value={ownerData.address} onChange={handleOwnerChange} required />

@@ -185,11 +185,9 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
                             <React.Fragment key={item.id}>
                                 <tr onClick={() => handleRowClick(item.id)} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                                     <td className="px-2">
-                                        {/* FIX: Add class to ion-icon to avoid potential styling issues and for consistency. */}
-                                        <ion-icon class="text-lg" name={expandedRow === item.id ? 'chevron-down-outline' : 'chevron-forward-outline'}></ion-icon>
+                                        <ion-icon className="text-lg" name={expandedRow === item.id ? 'chevron-down-outline' : 'chevron-forward-outline'}></ion-icon>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                    {/* FIX: Use item.type instead of item.categoryName, as AccountSummary does not have categoryName. */}
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.type}</td>
                                     {type !== 'other' && type !== 'aged' && (
                                         <>

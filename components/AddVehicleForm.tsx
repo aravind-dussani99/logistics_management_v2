@@ -1,4 +1,3 @@
-// FIX: Added import for uuid to generate unique IDs for new rate entries.
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useData } from '../contexts/DataContext';
@@ -25,7 +24,6 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 
 const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onClose }) => {
     const { addVehicleOwner } = useData();
-    // FIX: Added missing `openingBalance` property to the initial state.
     const [ownerData, setOwnerData] = useState<Omit<VehicleOwner, 'id' | 'rates'>>({
         ownerName: '', contactNumber: '', address: '', vehicleNumber: '', vehicleType: '', vehicleCapacity: 0, openingBalance: 0
     });
@@ -61,7 +59,6 @@ const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onClose }) => {
     
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // FIX: Added a unique ID to the new rate entry to satisfy the RateEntry type.
         const newVehicle: Omit<VehicleOwner, 'id'> = {
             ...ownerData,
             rates: [{ ...rateData, id: uuidv4() }]
@@ -81,7 +78,6 @@ const AddVehicleForm: React.FC<AddVehicleFormProps> = ({ onClose }) => {
                        <InputField label="Vehicle Number" id="vehicleNumber" name="vehicleNumber" type="text" value={ownerData.vehicleNumber} onChange={handleOwnerChange} required />
                        <InputField label="Vehicle Type" id="vehicleType" name="vehicleType" type="text" value={ownerData.vehicleType} onChange={handleOwnerChange} />
                        <InputField label="Vehicle Capacity (T)" id="vehicleCapacity" name="vehicleCapacity" type="number" value={ownerData.vehicleCapacity} onChange={handleOwnerChange} />
-                       {/* FIX: Added missing Opening Balance input field. */}
                        <InputField label="Opening Balance (₹)" id="openingBalance" name="openingBalance" type="number" value={ownerData.openingBalance} onChange={handleOwnerChange} />
                        <div className="sm:col-span-2 lg:col-span-3">
                             <InputField label="Address" id="address" name="address" type="textarea" value={ownerData.address} onChange={handleOwnerChange} required />
