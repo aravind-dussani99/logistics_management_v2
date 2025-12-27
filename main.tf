@@ -31,10 +31,10 @@ resource "google_artifact_registry_repository" "repository" {
   depends_on    = [google_project_service.artifact_registry_api]
 }
 
-import {
-  id = "projects/{{project}}/locations/{{location}}/services/{{name}}"
-  to = google_cloud_run_v2_service.default
-}
+# import {
+#   id = "projects/{{project}}/locations/{{location}}/services/{{name}}"
+#   to = google_cloud_run_v2_service.default
+# }
 
 # Create the Cloud Run service to run your container
 resource "google_cloud_run_v2_service" "default" {
