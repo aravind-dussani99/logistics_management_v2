@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
+import { formatDateDisplay } from '../utils';
 import { useUI } from '../contexts/UIContext';
 import { Advance } from '../types';
 import PageHeader from '../components/PageHeader';
 import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
 import AdvanceForm from '../components/AdvanceForm';
-import { api } from '../services/mockApi';
 import { formatCurrency } from '../utils';
 import { Filters } from '../components/FilterPanel';
 
@@ -102,7 +102,7 @@ const AdvancesPage: React.FC = () => {
                         data={paginatedAdvances}
                         renderRow={(advance: Advance) => (
                             <tr key={advance.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{advance.date}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(advance.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{advance.toAccount}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{advance.purpose}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-500">{formatCurrency(advance.amount)}</td>

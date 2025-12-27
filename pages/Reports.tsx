@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { formatDateDisplay } from '../utils';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import DataTable from '../components/DataTable';
@@ -98,7 +99,7 @@ const Reports: React.FC = () => {
             case 'trips':
                 return <DataTable title="" headers={["Date", "Vehicle", "Customer", "Material", "Quarry", "Net Weight", "Status"]} data={paginatedData} renderRow={(t: Trip) => (
                     <tr key={t.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{t.date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{t.vehicleNumber}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.material}</td>
@@ -110,7 +111,7 @@ const Reports: React.FC = () => {
             case 'advances':
                  return <DataTable title="" headers={["Date", "From", "To", "Purpose", "Amount"]} data={paginatedData} renderRow={(a: Advance) => (
                     <tr key={a.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{a.date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(a.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{a.fromAccount}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{a.toAccount}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{a.purpose}</td>
@@ -120,7 +121,7 @@ const Reports: React.FC = () => {
             case 'expenses':
                  return <DataTable title="" headers={["Date", "Supervisor", "To", "Amount", "Type"]} data={paginatedData} renderRow={(e: DailyExpense) => (
                      <tr key={e.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{e.date}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(e.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{e.from}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{e.to}</td>
                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${e.type === 'DEBIT' ? 'text-red-500' : 'text-green-500'}`}>{formatCurrency(e.amount)}</td>

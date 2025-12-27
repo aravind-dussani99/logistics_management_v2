@@ -25,6 +25,21 @@ import DailyExpenses from './pages/DailyExpenses';
 import ReceivedTrips from './pages/ReceivedTrips';
 import Advances from './pages/Advances';
 import Reports from './pages/Reports';
+import Materials from './pages/Materials';
+import Vehicles from './pages/Vehicles';
+import SiteLocations from './pages/SiteLocations';
+import MerchantTypes from './pages/MerchantTypes';
+import Merchants from './pages/Merchants';
+import MerchantBankAccounts from './pages/MerchantBankAccounts';
+import AccountTypes from './pages/AccountTypes';
+import MineQuarryData from './pages/MineQuarryData';
+import VendorCustomerData from './pages/VendorCustomerData';
+import RoyaltyOwnerData from './pages/RoyaltyOwnerData';
+import TransportOwnerData from './pages/TransportOwnerData';
+import TransportOwnerVehicles from './pages/TransportOwnerVehicles';
+import MaterialTypes from './pages/MaterialTypes';
+import MaterialRates from './pages/MaterialRates';
+import TripData from './pages/TripData';
 
 const ProtectedLayout: React.FC = () => (
   <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.DRIVER, Role.SUPERVISOR]}>
@@ -77,6 +92,21 @@ const AppRoutes: React.FC = () => (
       <Route path="/transport" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Transport /></ProtectedRoute>} />
       <Route path="/accounts" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Accounts /></ProtectedRoute>} />
       <Route path="/categories" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Categories /></ProtectedRoute>} />
+      <Route path="/materials" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Materials /></ProtectedRoute>} />
+      <Route path="/vehicles" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Vehicles /></ProtectedRoute>} />
+      <Route path="/sites" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><SiteLocations /></ProtectedRoute>} />
+      <Route path="/merchant-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><MerchantTypes /></ProtectedRoute>} />
+      <Route path="/merchants" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><Merchants /></ProtectedRoute>} />
+      <Route path="/merchant-accounts" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><MerchantBankAccounts /></ProtectedRoute>} />
+      <Route path="/account-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><AccountTypes /></ProtectedRoute>} />
+      <Route path="/mine-quarry-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><MineQuarryData /></ProtectedRoute>} />
+      <Route path="/vendor-customer-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><VendorCustomerData /></ProtectedRoute>} />
+      <Route path="/royalty-owner-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><RoyaltyOwnerData /></ProtectedRoute>} />
+      <Route path="/transport-owner-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><TransportOwnerData /></ProtectedRoute>} />
+      <Route path="/transport-owner-vehicles" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><TransportOwnerVehicles /></ProtectedRoute>} />
+      <Route path="/material-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><MaterialTypes /></ProtectedRoute>} />
+      <Route path="/material-rates" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><MaterialRates /></ProtectedRoute>} />
+      <Route path="/trip-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><TripData /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute roles={[Role.ADMIN]}><Users /></ProtectedRoute>} />
     </Route>
   </Routes>

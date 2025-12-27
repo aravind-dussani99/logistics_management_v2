@@ -18,12 +18,13 @@ const InputField: React.FC<InputProps> = ({ label, error, type, children, ...pro
     const baseClasses = "mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm";
     const errorClasses = "border-red-500 focus:ring-red-500 focus:border-red-500";
     const finalClasses = `${baseClasses} ${error ? errorClasses : ''} ${type === 'date' ? 'pr-8' : ''}`;
+    const inputValue = type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
 
     const renderInput = () => {
         if (type === 'select') {
             return <select {...props} className={finalClasses}>{children}</select>
         }
-        return <input type={type} {...props} className={finalClasses} />
+        return <input type={type} {...props} value={inputValue} className={finalClasses} />
     }
 
     return (
@@ -63,6 +64,8 @@ const FileInputField: React.FC<FileInputProps> = ({ label, id, fileName, ...prop
 const initialFormData = {
     date: '',
     place: '',
+    pickupPlace: '',
+    dropOffPlace: '',
     customer: '',
     invoiceDCNumber: '',
     quarryName: '',
@@ -70,6 +73,7 @@ const initialFormData = {
     material: '',
     vehicleNumber: '',
     transporterName: '',
+    transportOwnerMobileNumber: '',
     netWeight: '0',
     royaltyNumber: '',
     royaltyM3: '',
@@ -80,18 +84,20 @@ const initialFormData = {
 
 const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     const formRef = useRef<HTMLFormElement>(null);
-    const { addTrip, vehicles, quarries, customers, materials, royaltyOwners } = useData();
+    const { addTrip, vehicles, materialTypeDefinitions, siteLocations, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
 
     const [formData, setFormData] = useState(initialFormData);
     const [files, setFiles] = useState<{ [key: string]: string }>({});
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const uniqueCustomers = Array.from(new Set(customers.map(c => c.name)));
+    const pickupSites = siteLocations.filter(site => site.type === 'pickup' || site.type === 'both');
+    const dropOffSites = siteLocations.filter(site => site.type === 'drop-off' || site.type === 'both');
+    const customerNames = Array.from(new Set(vendorCustomers.map(item => item.name)));
 
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
-        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'vehicleNumber', 'netWeight'];
+        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'vehicleNumber', 'netWeight', 'pickupPlace', 'dropOffPlace'];
         
         requiredFields.forEach(field => {
             if (!formData[field] || (field === 'netWeight' && parseFloat(formData[field]) <= 0)) {
@@ -118,7 +124,9 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         
         const newTripData: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'> = {
             date: formData.date,
-            place: formData.place,
+            place: formData.place || formData.dropOffPlace,
+            pickupPlace: formData.pickupPlace,
+            dropOffPlace: formData.dropOffPlace,
             vendorName: formData.quarryName, 
             customer: formData.customer,
             invoiceDCNumber: formData.invoiceDCNumber,
@@ -126,7 +134,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
             royaltyOwnerName: formData.royaltyOwnerName,
             material: formData.material,
             vehicleNumber: formData.vehicleNumber,
-            transporterName: selectedVehicle?.ownerName || formData.transporterName,
+            transporterName: formData.transporterName || selectedVehicle?.ownerName || '',
             emptyWeight: 0, 
             grossWeight: netWeight, 
             netWeight: netWeight,
@@ -150,7 +158,16 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     };
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.id]: e.target.value });
+        const { id, value } = e.target;
+        const updated = { ...formData, [id]: value };
+        if (id === 'dropOffPlace') {
+            updated.place = value;
+        }
+        if (id === 'transporterName') {
+            const owner = transportOwnerProfiles.find(item => item.name === value);
+            updated.transportOwnerMobileNumber = owner?.contactNumber || '';
+        }
+        setFormData(updated);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,28 +190,44 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">1. Enter Details</h3>
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                         <InputField label="Date" id="date" type="date" required error={errors.date} value={formData.date} onChange={handleInputChange}/>
-                        <InputField label="Place" id="place" type="text" placeholder="e.g., Construction Site A" value={formData.place} onChange={handleInputChange} />
-                        <InputField label="Customer Name" id="customer" type="select" required error={errors.customer} value={formData.customer} onChange={handleInputChange}>
-                            <option value="">Select Customer</option>
-                            {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
+                        <InputField label="Pickup Place" id="pickupPlace" type="select" value={formData.pickupPlace} onChange={handleInputChange}>
+                            <option value="">Select Pickup</option>
+                            {pickupSites.map(site => (
+                                <option key={site.id} value={site.name}>{site.name}</option>
+                            ))}
+                        </InputField>
+                        <InputField label="Drop-off Place" id="dropOffPlace" type="select" value={formData.dropOffPlace} onChange={handleInputChange}>
+                            <option value="">Select Drop-off</option>
+                            {dropOffSites.map(site => (
+                                <option key={site.id} value={site.name}>{site.name}</option>
+                            ))}
+                        </InputField>
+                        <InputField label="Vendor & Customer Name" id="customer" type="select" required error={errors.customer} value={formData.customer} onChange={handleInputChange}>
+                            <option value="">Select Vendor/Customer</option>
+                            {customerNames.map(c => <option key={c} value={c}>{c}</option>)}
                         </InputField>
                         <InputField label="DC Number" id="invoiceDCNumber" type="text" placeholder="e.g., DC-12345" value={formData.invoiceDCNumber} onChange={handleInputChange}/>
-                        <InputField label="Quarry Name" id="quarryName" type="select" required error={errors.quarryName} value={formData.quarryName} onChange={handleInputChange}>
-                             <option value="">Select Quarry</option>
-                             {quarries.map(q => <option key={q.id} value={q.quarryName}>{q.quarryName} ({q.ownerName})</option>)}
+                        <InputField label="Mine & Quarry Name" id="quarryName" type="select" required error={errors.quarryName} value={formData.quarryName} onChange={handleInputChange}>
+                             <option value="">Select Mine/Quarry</option>
+                             {mineQuarries.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                         </InputField>
                         <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="select" value={formData.royaltyOwnerName} onChange={handleInputChange}>
                              <option value="">Select Royalty Owner</option>
-                             {royaltyOwners.map(r => <option key={r.id} value={r.ownerName}>{r.ownerName}</option>)}
+                             {royaltyOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                         </InputField>
                         <InputField label="Material Type" id="material" type="select" required error={errors.material} value={formData.material} onChange={handleInputChange}>
                              <option value="">Select Material</option>
-                             {materials.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                             {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                         </InputField>
                         <InputField label="Vehicle Number" id="vehicleNumber" type="select" required error={errors.vehicleNumber} value={formData.vehicleNumber} onChange={handleInputChange}>
                             <option value="">Select Vehicle</option>
                             {vehicles.map(v => <option key={v.id} value={v.vehicleNumber}>{v.vehicleNumber} ({v.ownerName})</option>)}
                         </InputField>
+                        <InputField label="Transport & Owner Name" id="transporterName" type="select" value={formData.transporterName} onChange={handleInputChange}>
+                            <option value="">Select Transport Owner</option>
+                            {transportOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                        </InputField>
+                        <InputField label="Transport & Owner Mobile Number" id="transportOwnerMobileNumber" type="text" value={formData.transportOwnerMobileNumber} onChange={handleInputChange} />
                         <InputField label="Agent" id="agent" type="text" placeholder="e.g., Agent Name" value={formData.agent} onChange={handleInputChange} />
                     </div>
                 </div>

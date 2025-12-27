@@ -17,6 +17,8 @@ export interface Trip {
   id: number;
   date: string;
   place: string;
+  pickupPlace?: string;
+  dropOffPlace?: string;
   vendorName: string;
   customer: string;
   invoiceDCNumber: string;
@@ -46,27 +48,45 @@ export interface Trip {
   // New fields for supervisor workflow
   status: 'pending upload' | 'in transit' | 'pending validation' | 'completed';
   createdBy: string;
-  ewayBillUpload?: string;
-  invoiceDCUpload?: string;
-  waymentSlipUpload?: string;
-  royaltyUpload?: string;
-  taxInvoiceUpload?: string;
+  ewayBillUpload?: TripUploadPayload;
+  invoiceDCUpload?: TripUploadPayload;
+  waymentSlipUpload?: TripUploadPayload;
+  royaltyUpload?: TripUploadPayload;
+  taxInvoiceUpload?: TripUploadPayload;
 
   // New fields for received trips
   receivedDate?: string;
   endEmptyWeight?: number;
   endGrossWeight?: number;
   endNetWeight?: number;
-  endWaymentSlipUpload?: string;
+  endWaymentSlipUpload?: TripUploadPayload;
   weightDifferenceReason?: string;
+  pendingRequestType?: 'delete' | 'update' | 'sent-back' | string;
+  pendingRequestMessage?: string;
+  pendingRequestBy?: string;
+  pendingRequestRole?: string;
+  pendingRequestAt?: string;
 }
+
+export interface TripUploadFile {
+  name: string;
+  url: string;
+}
+
+export type TripUploadPayload = string | TripUploadFile[];
 
 export interface DailyExpense {
     id: string;
     date: string;
     from: string; // Supervisor name
     to: string; // Freeform text
+    via?: string;
+    ratePartyType?: RatePartyType;
+    ratePartyId?: string;
+    counterpartyName?: string;
     amount: number;
+    category?: string;
+    subCategory?: string;
     remarks: string;
     availableBalance: number;
     closingBalance: number;
@@ -77,6 +97,9 @@ export interface Advance {
   id: string;
   date: string;
   tripId?: number;
+  ratePartyType?: RatePartyType;
+  ratePartyId?: string;
+  counterpartyName?: string;
   fromAccount: string;
   toAccount: string;
   place?: string;
@@ -86,6 +109,7 @@ export interface Advance {
   purpose: string;
   amount: number;
   voucherSlipUpload?: string;
+  remarks?: string;
 }
 
 export interface Payment {
@@ -114,14 +138,22 @@ export interface User {
     role: Role;
     avatar: string;
     password?: string;
+    dropOffLocationName?: string;
 }
 
 export interface Notification {
-    id: number;
+    id: string;
     message: string;
     type: 'alert' | 'info' | 'success';
     timestamp: string;
     read: boolean;
+    targetRole?: string | null;
+    targetUser?: string | null;
+    tripId?: number | null;
+    requestType?: 'delete' | 'update' | 'sent-back' | string | null;
+    requesterName?: string | null;
+    requesterRole?: string | null;
+    requestMessage?: string | null;
 }
 
 export interface DailySummary {
@@ -211,6 +243,173 @@ export interface CustomerRate {
   rejectionRemarks: string;
   locationFrom: string;
   locationTo: string;
+}
+
+export interface SiteLocation {
+    id: string;
+    name: string;
+    type: 'pickup' | 'drop-off' | 'both';
+    address: string;
+    pointOfContact: string;
+    remarks: string;
+}
+
+export interface MerchantType {
+    id: string;
+    name: string;
+    remarks: string;
+}
+
+export interface Merchant {
+    id: string;
+    merchantTypeId: string;
+    merchantTypeName?: string;
+    name: string;
+    contactNumber: string;
+    email: string;
+    siteLocationId: string;
+    siteLocationName?: string;
+    companyName: string;
+    gstOptIn: boolean;
+    gstNumber: string;
+    gstDetails: string;
+    remarks: string;
+}
+
+export interface MerchantBankAccount {
+    id: string;
+    merchantId: string;
+    merchantName?: string;
+    accountType: string;
+    ratePartyType?: RatePartyType;
+    ratePartyId?: string;
+    ratePartyName?: string;
+    accountName: string;
+    accountNumber: string;
+    ifscCode: string;
+    remarks: string;
+}
+
+export interface AccountType {
+    id: string;
+    name: string;
+    remarks: string;
+}
+
+export interface MineQuarryData {
+    id: string;
+    merchantTypeId: string;
+    merchantTypeName?: string;
+    name: string;
+    contactNumber: string;
+    email: string;
+    siteLocationId: string;
+    siteLocationName?: string;
+    companyName: string;
+    gstOptIn: boolean;
+    gstNumber: string;
+    gstDetails: string;
+    remarks: string;
+}
+
+export interface VendorCustomerData {
+    id: string;
+    merchantTypeId: string;
+    merchantTypeName?: string;
+    name: string;
+    contactNumber: string;
+    email: string;
+    siteLocationId: string;
+    siteLocationName?: string;
+    companyName: string;
+    gstOptIn: boolean;
+    gstNumber: string;
+    gstDetails: string;
+    remarks: string;
+}
+
+export interface RoyaltyOwnerData {
+    id: string;
+    merchantTypeId: string;
+    merchantTypeName?: string;
+    name: string;
+    contactNumber: string;
+    email: string;
+    siteLocationId: string;
+    siteLocationName?: string;
+    companyName: string;
+    gstOptIn: boolean;
+    gstNumber: string;
+    gstDetails: string;
+    remarks: string;
+}
+
+export interface TransportOwnerData {
+    id: string;
+    merchantTypeId: string;
+    merchantTypeName?: string;
+    name: string;
+    contactNumber: string;
+    email: string;
+    siteLocationId: string;
+    siteLocationName?: string;
+    companyName: string;
+    gstOptIn: boolean;
+    gstNumber: string;
+    gstDetails: string;
+    remarks: string;
+}
+
+export interface TransportOwnerVehicle {
+    id: string;
+    transportOwnerId: string;
+    transportOwnerName?: string;
+    vehicleNumber?: string;
+    effectiveFrom: string;
+    effectiveTo?: string;
+    remarks: string;
+}
+
+export interface MaterialTypeDefinition {
+    id: string;
+    name: string;
+    remarks: string;
+}
+
+export type RatePartyType = 'mine-quarry' | 'vendor-customer' | 'royalty-owner' | 'transport-owner';
+
+export interface MaterialRate {
+    id: string;
+    materialTypeId: string;
+    materialTypeName?: string;
+    ratePartyType: RatePartyType;
+    ratePartyId: string;
+    ratePartyName?: string;
+    pickupLocationId: string;
+    pickupLocationName?: string;
+    dropOffLocationId: string;
+    dropOffLocationName?: string;
+    totalKm: number;
+    ratePerKm: number;
+    ratePerTon: number;
+    gstChargeable: boolean;
+    gstPercentage: number;
+    gstAmount: number;
+    totalRatePerTon: number;
+    effectiveFrom: string;
+    effectiveTo?: string;
+    status?: string;
+    remarks: string;
+}
+
+export interface VehicleMaster {
+    id: string;
+    vehicleNumber: string;
+    vehicleType: string;
+    capacity: number;
+    ownerName: string;
+    contactNumber: string;
+    remarks: string;
 }
 
 export interface Material {

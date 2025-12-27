@@ -1,19 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { Notification } from '../types';
-import { api } from '../services/mockApi';
+import { notificationApi } from '../services/notificationApi';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const NotificationsPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
   
   useEffect(() => {
-    api.getNotifications().then(setNotifications);
-  }, []);
+    if (!currentUser?.role) return;
+    const fetchNotifications = currentUser?.name
+      ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
+      : notificationApi.getAll(currentUser.role);
+    fetchNotifications.then(setNotifications).catch(error => {
+      console.error('Failed to load notifications', error);
+    });
+    const intervalId = setInterval(() => {
+      const refresh = currentUser?.name
+        ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
+        : notificationApi.getAll(currentUser.role);
+      refresh.then(setNotifications).catch(error => {
+        console.error('Failed to refresh notifications', error);
+      });
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, [currentUser?.role, currentUser?.name]);
+
+  useEffect(() => {
+    if (!isOpen || !currentUser?.role) return;
+    const fetchNotifications = currentUser?.name
+      ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
+      : notificationApi.getAll(currentUser.role);
+    fetchNotifications.then(setNotifications).catch(error => {
+      console.error('Failed to refresh notifications', error);
+    });
+  }, [isOpen, currentUser?.role, currentUser?.name]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleMarkAsRead = (id: number) => {
-    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  const handleNotificationClick = (notification: Notification) => {
+    notificationApi.markRead(notification.id).then(updated => {
+      setNotifications(notifications.map(n => n.id === notification.id ? updated : n));
+    }).catch(error => {
+      console.error('Failed to mark notification as read', error);
+    });
+
+    if (notification.tripId) {
+      const destination = currentUser?.role === 'Supervisor' ? '/dashboard' : '/daily-trips';
+      navigate(`${destination}?notificationId=${notification.id}&tripId=${notification.tripId}&requestType=${notification.requestType || ''}`);
+      setIsOpen(false);
+    }
   };
 
   const getIcon = (type: Notification['type']) => {
@@ -47,7 +86,7 @@ const NotificationsPanel: React.FC = () => {
               <li 
                 key={notification.id} 
                 className={`flex p-4 border-b dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer ${!notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                onClick={() => handleMarkAsRead(notification.id)}>
+                onClick={() => handleNotificationClick(notification)}>
                 <ion-icon name={getIcon(notification.type).icon} className={`text-2xl mr-3 ${getIcon(notification.type).color}`}></ion-icon>
                 <div className="text-sm">
                   <p className="text-gray-700 dark:text-gray-200">{notification.message}</p>

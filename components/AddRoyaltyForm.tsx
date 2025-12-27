@@ -22,7 +22,8 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 );
 
 const AddRoyaltyForm: React.FC<AddRoyaltyFormProps> = ({ onClose }) => {
-    const { addRoyaltyOwner } = useData();
+    const { addRoyaltyOwner, materials, siteLocations } = useData();
+    const pickupSites = siteLocations.filter(site => site.type === 'pickup' || site.type === 'both');
     const [ownerData, setOwnerData] = useState<Omit<RoyaltyOwner, 'id' | 'rates'>>({
         ownerName: '', contactNumber: '', quarryArea: 0, address: '', openingBalance: 0
     });
@@ -45,12 +46,12 @@ const AddRoyaltyForm: React.FC<AddRoyaltyFormProps> = ({ onClose }) => {
 
     const handleOwnerChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
-        setOwnerData(prev => ({...prev, [name]: type === 'number' ? parseFloat(value) || 0 : value }));
+        setOwnerData(prev => ({...prev, [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value }));
     }
     const handleRateChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? parseFloat(value) || 0 : value;
+        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? (value === '' ? '' : parseFloat(value)) : value;
         setRateData(prev => ({ ...prev, [name]: val }));
     };
     
@@ -79,8 +80,14 @@ const AddRoyaltyForm: React.FC<AddRoyaltyFormProps> = ({ onClose }) => {
                  <div>
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">2. Initial Rate</h3>
                      <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
-                        <InputField label="From Site" id="fromSite" name="fromSite" type="text" value={rateData.fromSite} onChange={handleRateChange} required />
-                        <InputField label="Material Type" id="materialType" name="materialType" type="text" value={rateData.materialType} onChange={handleRateChange} required />
+                        <InputField label="From Site" id="fromSite" name="fromSite" type="select" value={rateData.fromSite} onChange={handleRateChange} required>
+                            <option value="">Select Site</option>
+                            {pickupSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
+                        </InputField>
+                        <InputField label="Material Type" id="materialType" name="materialType" type="select" value={rateData.materialType} onChange={handleRateChange} required>
+                            <option value="">Select Material</option>
+                            {materials.map(material => <option key={material.id} value={material.name}>{material.name}</option>)}
+                        </InputField>
                         <InputField label="Rate per m³" id="ratePerM3" name="ratePerM3" type="number" value={rateData.ratePerM3} onChange={handleRateChange} required />
                         
                         <InputField label="GST" id="gst" name="gst" type="select" value={rateData.gst} onChange={handleRateChange}>

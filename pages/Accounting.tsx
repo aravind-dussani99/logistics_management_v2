@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import { useData } from '../contexts/DataContext';
 import AccountingTable from '../components/AccountingTable';
+import { formatDateDisplay } from '../utils';
 
 const getMtdRange = () => {
     const today = new Date();
@@ -206,8 +207,8 @@ const Accounting: React.FC = () => {
     
     const dateRangeSubtitle = useMemo(() => {
         if (!filters.dateFrom || !filters.dateTo) return "Showing all transactions";
-        const from = new Date(filters.dateFrom + 'T00:00:00').toLocaleDateString();
-        const to = new Date(filters.dateTo + 'T00:00:00').toLocaleDateString();
+        const from = formatDateDisplay(filters.dateFrom);
+        const to = formatDateDisplay(filters.dateTo);
         return `Showing transactions from ${from} to ${to}`;
     }, [filters.dateFrom, filters.dateTo]);
 

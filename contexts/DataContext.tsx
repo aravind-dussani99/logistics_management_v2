@@ -1,6 +1,22 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { api } from '../services/mockApi';
-import { Trip, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance } from '../types';
+import { siteLocationApi } from '../services/siteLocationApi';
+import { merchantTypeApi } from '../services/merchantTypeApi';
+import { merchantApi } from '../services/merchantApi';
+import { merchantBankApi } from '../services/merchantBankApi';
+import { accountTypeApi } from '../services/accountTypeApi';
+import { mineQuarryApi } from '../services/mineQuarryApi';
+import { vendorCustomerApi } from '../services/vendorCustomerApi';
+import { royaltyOwnerDataApi } from '../services/royaltyOwnerDataApi';
+import { transportOwnerApi } from '../services/transportOwnerApi';
+import { transportOwnerVehicleApi } from '../services/transportOwnerVehicleApi';
+import { materialTypeDefinitionApi } from '../services/materialTypeDefinitionApi';
+import { materialRateApi } from '../services/materialRateApi';
+import { vehicleMasterApi } from '../services/vehicleMasterApi';
+import { advanceApi } from '../services/advanceApi';
+import { dailyExpenseApi } from '../services/dailyExpenseApi';
+import { tripApi } from '../services/tripApi';
+import { Trip, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, SiteLocation, MerchantType, Merchant, MerchantBankAccount, AccountType, MineQuarryData, VendorCustomerData, RoyaltyOwnerData, TransportOwnerData, TransportOwnerVehicle, MaterialTypeDefinition, MaterialRate, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance, VehicleMaster } from '../types';
 import { useAuth } from './AuthContext';
 
 // Define the type for a new trip from the form
@@ -16,6 +32,19 @@ interface DataContextType {
   customers: Customer[];
   royaltyStock: RoyaltyStock[];
   customerRates: CustomerRate[];
+  siteLocations: SiteLocation[];
+  merchantTypes: MerchantType[];
+  merchants: Merchant[];
+  merchantBankAccounts: MerchantBankAccount[];
+  accountTypes: AccountType[];
+  vehicleMasters: VehicleMaster[];
+  mineQuarries: MineQuarryData[];
+  vendorCustomers: VendorCustomerData[];
+  royaltyOwnerProfiles: RoyaltyOwnerData[];
+  transportOwnerProfiles: TransportOwnerData[];
+  transportOwnerVehicles: TransportOwnerVehicle[];
+  materialTypeDefinitions: MaterialTypeDefinition[];
+  materialRates: MaterialRate[];
   materials: Material[];
   accounts: Account[];
   accountCategories: AccountCategory[];
@@ -41,8 +70,14 @@ interface DataContextType {
 
   addAccount: (account: Omit<Account, 'id'>) => Promise<void>;
   addAccountCategory: (category: Omit<AccountCategory, 'id'>) => Promise<void>;
+
+  addVehicleMaster: (vehicle: Omit<VehicleMaster, 'id'>) => Promise<void>;
+  updateVehicleMaster: (id: string, vehicle: Omit<VehicleMaster, 'id'>) => Promise<void>;
+  deleteVehicleMaster: (id: string) => Promise<void>;
   
   addVehicleOwner: (vehicleOwner: Omit<VehicleOwner, 'id'>) => Promise<void>;
+  updateVehicleOwner: (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => Promise<void>;
+  deleteVehicleOwner: (id: string) => Promise<void>;
   addTransportRate: (transportId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateTransportRate: (transportId: string, rate: RateEntry) => Promise<void>;
   deleteTransportRate: (transportId: string, rateId: string) => Promise<void>;
@@ -61,6 +96,58 @@ interface DataContextType {
   addCustomerRate: (customerId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateCustomerRate: (customerId: string, rate: RateEntry) => Promise<void>;
   deleteCustomerRate: (customerId: string, rateId: string) => Promise<void>;
+
+  addSiteLocation: (site: Omit<SiteLocation, 'id'>) => Promise<void>;
+  updateSiteLocation: (id: string, site: Omit<SiteLocation, 'id'>) => Promise<void>;
+  deleteSiteLocation: (id: string) => Promise<void>;
+
+  addMerchantType: (data: Omit<MerchantType, 'id'>) => Promise<void>;
+  updateMerchantType: (id: string, data: Omit<MerchantType, 'id'>) => Promise<void>;
+  deleteMerchantType: (id: string) => Promise<void>;
+
+  addMerchant: (data: Omit<Merchant, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  updateMerchant: (id: string, data: Omit<Merchant, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  deleteMerchant: (id: string) => Promise<void>;
+
+  addMerchantBankAccount: (data: Omit<MerchantBankAccount, 'id' | 'merchantName'>) => Promise<void>;
+  updateMerchantBankAccount: (id: string, data: Omit<MerchantBankAccount, 'id' | 'merchantName'>) => Promise<void>;
+  deleteMerchantBankAccount: (id: string) => Promise<void>;
+
+  addAccountType: (data: Omit<AccountType, 'id'>) => Promise<void>;
+  updateAccountType: (id: string, data: Omit<AccountType, 'id'>) => Promise<void>;
+  deleteAccountType: (id: string) => Promise<void>;
+
+  addMineQuarry: (data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  updateMineQuarry: (id: string, data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  deleteMineQuarry: (id: string) => Promise<void>;
+
+  addVendorCustomer: (data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  updateVendorCustomer: (id: string, data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  deleteVendorCustomer: (id: string) => Promise<void>;
+
+  addRoyaltyOwnerProfile: (data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  updateRoyaltyOwnerProfile: (id: string, data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  deleteRoyaltyOwnerProfile: (id: string) => Promise<void>;
+
+  addTransportOwnerProfile: (data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  updateTransportOwnerProfile: (id: string, data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
+  deleteTransportOwnerProfile: (id: string) => Promise<void>;
+
+  addTransportOwnerVehicle: (data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => Promise<void>;
+  updateTransportOwnerVehicle: (id: string, data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => Promise<void>;
+  deleteTransportOwnerVehicle: (id: string) => Promise<void>;
+
+  addMaterialTypeDefinition: (data: Omit<MaterialTypeDefinition, 'id'>) => Promise<void>;
+  updateMaterialTypeDefinition: (id: string, data: Omit<MaterialTypeDefinition, 'id'>) => Promise<void>;
+  deleteMaterialTypeDefinition: (id: string) => Promise<void>;
+
+  addMaterialRate: (data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => Promise<void>;
+  updateMaterialRate: (id: string, data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => Promise<void>;
+  deleteMaterialRate: (id: string) => Promise<void>;
+
+  addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
+  updateMaterial: (id: number, material: Omit<Material, 'id'>) => Promise<void>;
+  deleteMaterial: (id: number) => Promise<void>;
 
   getRoyaltyStock: () => Promise<RoyaltyStock[]>;
   addRoyaltyStock: (stock: Omit<RoyaltyStock, 'id'>) => Promise<void>;
@@ -85,6 +172,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [royaltyStock, setRoyaltyStock] = useState<RoyaltyStock[]>([]);
   const [customerRates, setCustomerRates] = useState<CustomerRate[]>([]);
+  const [siteLocations, setSiteLocations] = useState<SiteLocation[]>([]);
+  const [merchantTypes, setMerchantTypes] = useState<MerchantType[]>([]);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [merchantBankAccounts, setMerchantBankAccounts] = useState<MerchantBankAccount[]>([]);
+  const [accountTypes, setAccountTypes] = useState<AccountType[]>([]);
+  const [vehicleMasters, setVehicleMasters] = useState<VehicleMaster[]>([]);
+  const [mineQuarries, setMineQuarries] = useState<MineQuarryData[]>([]);
+  const [vendorCustomers, setVendorCustomers] = useState<VendorCustomerData[]>([]);
+  const [royaltyOwnerProfiles, setRoyaltyOwnerProfiles] = useState<RoyaltyOwnerData[]>([]);
+  const [transportOwnerProfiles, setTransportOwnerProfiles] = useState<TransportOwnerData[]>([]);
+  const [transportOwnerVehicles, setTransportOwnerVehicles] = useState<TransportOwnerVehicle[]>([]);
+  const [materialTypeDefinitions, setMaterialTypeDefinitions] = useState<MaterialTypeDefinition[]>([]);
+  const [materialRates, setMaterialRates] = useState<MaterialRate[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountCategories, setAccountCategories] = useState<AccountCategory[]>([]);
@@ -98,16 +198,53 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const fetchData = async () => {
         setLoading(true);
         const [
-            tripsData, advancesData, ledgerData, vehiclesData, quarriesData, royaltyData, customersData, customerRatesData, materialsData, royaltyStockData, accountsData, categoriesData
+            tripsData,
+            advancesData,
+            ledgerData,
+            vehiclesData,
+            quarriesData,
+            royaltyData,
+            customersData,
+            customerRatesData,
+            siteLocationsData,
+            merchantTypesData,
+            merchantsData,
+            merchantBankAccountsData,
+            accountTypesData,
+            vehicleMasterData,
+            mineQuarryData,
+            vendorCustomerData,
+            royaltyOwnerData,
+            transportOwnerData,
+            transportOwnerVehicleData,
+            materialTypeDefinitionData,
+            materialRateData,
+            materialsData,
+            royaltyStockData,
+            accountsData,
+            categoriesData
         ] = await Promise.all([
-            api.getTrips(),
-            api.getAdvances(),
+            tripApi.getAll(),
+            advanceApi.getAll(),
             api.getLedgerEntries(),
             api.getVehicleOwners(),
             api.getQuarryOwners(),
             api.getRoyaltyOwners(),
             api.getCustomers(),
             api.getCustomerRates(),
+            siteLocationApi.getAll(),
+            merchantTypeApi.getAll(),
+            merchantApi.getAll(),
+            merchantBankApi.getAll(),
+            accountTypeApi.getAll(),
+            vehicleMasterApi.getAll(),
+            mineQuarryApi.getAll(),
+            vendorCustomerApi.getAll(),
+            royaltyOwnerDataApi.getAll(),
+            transportOwnerApi.getAll(),
+            transportOwnerVehicleApi.getAll(),
+            materialTypeDefinitionApi.getAll(),
+            materialRateApi.getAll(),
             api.getMaterials(),
             api.getRoyaltyStock(),
             api.getAccounts(),
@@ -121,6 +258,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setRoyaltyOwners(royaltyData);
         setCustomers(customersData);
         setCustomerRates(customerRatesData);
+        setSiteLocations(siteLocationsData);
+        setMerchantTypes(merchantTypesData);
+        setMerchants(merchantsData);
+        setMerchantBankAccounts(merchantBankAccountsData);
+        setAccountTypes(accountTypesData);
+        setVehicleMasters(vehicleMasterData);
+        setMineQuarries(mineQuarryData);
+        setVendorCustomers(vendorCustomerData);
+        setRoyaltyOwnerProfiles(royaltyOwnerData);
+        setTransportOwnerProfiles(transportOwnerData);
+        setTransportOwnerVehicles(transportOwnerVehicleData);
+        setMaterialTypeDefinitions(materialTypeDefinitionData);
+        setMaterialRates(materialRateData);
         setMaterials(materialsData);
         setRoyaltyStock(royaltyStockData);
         setAccounts(accountsData);
@@ -132,24 +282,100 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addTrip = async (trip: Omit<NewTripData, 'createdBy'>) => {
     if (!currentUser) throw new Error("User not authenticated");
-    const newTripData = { ...trip, createdBy: currentUser.name };
-    await api.addTrip(newTripData);
-    refreshData();
+    const getRatePartyIdByName = (type: string, name?: string) => {
+      if (!name) return '';
+      switch (type) {
+        case 'vendor-customer':
+          return vendorCustomers.find(item => item.name === name)?.id || '';
+        case 'mine-quarry':
+          return mineQuarries.find(item => item.name === name)?.id || '';
+        case 'royalty-owner':
+          return royaltyOwnerProfiles.find(item => item.name === name)?.id || '';
+        case 'transport-owner':
+          return transportOwnerProfiles.find(item => item.name === name)?.id || '';
+        default:
+          return '';
+      }
+    };
+
+    const getMaterialTypeIdByName = (name?: string) => {
+      if (!name) return '';
+      return materialTypeDefinitions.find(item => item.name === name)?.id || '';
+    };
+
+    const getLocationIdByName = (name?: string) => {
+      if (!name) return '';
+      return siteLocations.find(item => item.name === name)?.id || '';
+    };
+
+    const findRate = (ratePartyType: string, partyName?: string) => {
+      const partyId = getRatePartyIdByName(ratePartyType, partyName);
+      const materialTypeId = getMaterialTypeIdByName(trip.material);
+      const pickupLocationId = getLocationIdByName(trip.pickupPlace);
+      const dropOffLocationId = getLocationIdByName(trip.dropOffPlace);
+      if (!partyId || !materialTypeId || !pickupLocationId || !dropOffLocationId) return 0;
+      const tripDate = new Date(trip.date);
+      const candidates = materialRates.filter(rate =>
+        rate.ratePartyType === ratePartyType
+        && rate.ratePartyId === partyId
+        && rate.materialTypeId === materialTypeId
+        && rate.pickupLocationId === pickupLocationId
+        && rate.dropOffLocationId === dropOffLocationId
+        && new Date(rate.effectiveFrom) <= tripDate
+        && (!rate.effectiveTo || new Date(rate.effectiveTo) >= tripDate)
+      );
+      if (candidates.length === 0) return 0;
+      const latest = candidates.sort((a, b) => new Date(b.effectiveFrom).getTime() - new Date(a.effectiveFrom).getTime())[0];
+      return latest.totalRatePerTon || 0;
+    };
+
+    const netWeight = Number(trip.netWeight || 0);
+    const customerRate = findRate('vendor-customer', trip.customer);
+    const quarryRate = findRate('mine-quarry', trip.quarryName);
+    const transportRate = findRate('transport-owner', trip.transporterName);
+    const royaltyRate = findRate('royalty-owner', trip.royaltyOwnerName);
+
+    const revenue = customerRate * netWeight;
+    const materialCost = quarryRate * netWeight;
+    const transportCost = transportRate * netWeight;
+    const royaltyCost = royaltyRate * netWeight;
+    const profit = revenue - (materialCost + transportCost + royaltyCost);
+
+    const newTripData = {
+      ...trip,
+      createdBy: currentUser.name,
+      revenue,
+      materialCost,
+      transportCost,
+      royaltyCost,
+      profit,
+    };
+    const createdTrip = await tripApi.create(newTripData);
+    setTrips(prev => [createdTrip, ...prev]);
   }
   
   const updateTrip = async (tripId: number, tripData: Partial<Trip>) => {
-    await api.updateTrip(tripId, tripData);
-    refreshData();
+    const updatedTrip = await tripApi.update(tripId, tripData);
+    setTrips(prev => prev.map(trip => trip.id === tripId ? updatedTrip : trip));
   };
 
   const deleteTrip = async (tripId: number) => {
-    await api.deleteTrip(tripId);
-    refreshData();
+    await tripApi.remove(tripId);
+    setTrips(prev => prev.filter(trip => trip.id !== tripId));
   };
 
-  const addAdvance = async (advance: Omit<Advance, 'id'>) => { await api.addAdvance(advance); refreshData(); };
-  const updateAdvance = async (id: string, data: Omit<Advance, 'id'>) => { await api.updateAdvance(id, data); refreshData(); };
-  const deleteAdvance = async (id: string) => { await api.deleteAdvance(id); refreshData(); };
+  const addAdvance = async (advance: Omit<Advance, 'id'>) => {
+    await advanceApi.create(advance);
+    refreshData();
+  };
+  const updateAdvance = async (id: string, data: Omit<Advance, 'id'>) => {
+    await advanceApi.update(id, data);
+    refreshData();
+  };
+  const deleteAdvance = async (id: string) => {
+    await advanceApi.remove(id);
+    refreshData();
+  };
 
   const addLedgerEntry = async (entry: Omit<LedgerEntry, 'id'>) => {
     await api.addLedgerEntry(entry);
@@ -176,13 +402,36 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshData();
   }
 
-  const getDailyExpenses = useCallback(async (supervisorName: string) => api.getDailyExpenses(supervisorName), []);
-  const addDailyExpense = async (expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => { await api.addDailyExpense(expense); };
-  const updateDailyExpense = async (id: string, expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => { await api.updateDailyExpense(id, expense); };
-  const deleteDailyExpense = async (id: string) => { await api.deleteDailyExpense(id); };
+  const addVehicleMaster = async (vehicle: Omit<VehicleMaster, 'id'>) => {
+    const newVehicle = await vehicleMasterApi.create(vehicle);
+    setVehicleMasters(prev => [...prev, newVehicle]);
+  };
+
+  const updateVehicleMaster = async (id: string, vehicle: Omit<VehicleMaster, 'id'>) => {
+    const updatedVehicle = await vehicleMasterApi.update(id, vehicle);
+    setVehicleMasters(prev => prev.map(item => item.id === id ? updatedVehicle : item));
+  };
+
+  const deleteVehicleMaster = async (id: string) => {
+    await vehicleMasterApi.remove(id);
+    setVehicleMasters(prev => prev.filter(item => item.id !== id));
+  };
+
+  const getDailyExpenses = useCallback(async (supervisorName: string) => dailyExpenseApi.getBySupervisor(supervisorName), []);
+  const addDailyExpense = async (expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => {
+    await dailyExpenseApi.create(expense);
+  };
+  const updateDailyExpense = async (id: string, expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => {
+    await dailyExpenseApi.update(id, expense);
+  };
+  const deleteDailyExpense = async (id: string) => {
+    await dailyExpenseApi.remove(id);
+  };
   const getSupervisorAccounts = useCallback(async () => api.getSupervisorAccounts(), []);
 
   const addVehicleOwner = async (vehicleOwner: Omit<VehicleOwner, 'id'>) => { await api.addVehicleOwner(vehicleOwner); refreshData(); };
+  const updateVehicleOwner = async (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => { await api.updateVehicleOwner(id, vehicleOwner); refreshData(); };
+  const deleteVehicleOwner = async (id: string) => { await api.deleteVehicleOwner(id); refreshData(); };
   const addTransportRate = async (transportId: string, rate: Omit<RateEntry, 'id'>) => { await api.addTransportRate(transportId, rate); refreshData(); };
   const updateTransportRate = async (transportId: string, rate: RateEntry) => { await api.updateTransportRate(transportId, rate); refreshData(); };
   const deleteTransportRate = async (transportId: string, rateId: string) => { await api.deleteTransportRate(transportId, rateId); refreshData(); };
@@ -201,6 +450,166 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addCustomerRate = async (customerId: string, rate: Omit<RateEntry, 'id'>) => { await api.addCustomerRate(customerId, rate); refreshData(); };
   const updateCustomerRate = async (customerId: string, rate: RateEntry) => { await api.updateCustomerRate(customerId, rate); refreshData(); };
   const deleteCustomerRate = async (customerId: string, rateId: string) => { await api.deleteCustomerRate(customerId, rateId); refreshData(); };
+
+  const addSiteLocation = async (site: Omit<SiteLocation, 'id'>) => {
+    const newSite = await siteLocationApi.create(site);
+    setSiteLocations(prev => [...prev, newSite]);
+  };
+  const updateSiteLocation = async (id: string, site: Omit<SiteLocation, 'id'>) => {
+    const updatedSite = await siteLocationApi.update(id, site);
+    setSiteLocations(prev => prev.map(location => location.id === id ? updatedSite : location));
+  };
+  const deleteSiteLocation = async (id: string) => {
+    await siteLocationApi.remove(id);
+    setSiteLocations(prev => prev.filter(location => location.id !== id));
+  };
+
+  const addMerchantType = async (data: Omit<MerchantType, 'id'>) => {
+    const newType = await merchantTypeApi.create(data);
+    setMerchantTypes(prev => [...prev, newType]);
+  };
+  const updateMerchantType = async (id: string, data: Omit<MerchantType, 'id'>) => {
+    const updatedType = await merchantTypeApi.update(id, data);
+    setMerchantTypes(prev => prev.map(type => type.id === id ? updatedType : type));
+  };
+  const deleteMerchantType = async (id: string) => {
+    await merchantTypeApi.remove(id);
+    setMerchantTypes(prev => prev.filter(type => type.id !== id));
+  };
+
+  const addMerchant = async (data: Omit<Merchant, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const newMerchant = await merchantApi.create(data);
+    setMerchants(prev => [...prev, newMerchant]);
+  };
+  const updateMerchant = async (id: string, data: Omit<Merchant, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const updatedMerchant = await merchantApi.update(id, data);
+    setMerchants(prev => prev.map(merchant => merchant.id === id ? updatedMerchant : merchant));
+  };
+  const deleteMerchant = async (id: string) => {
+    await merchantApi.remove(id);
+    setMerchants(prev => prev.filter(merchant => merchant.id !== id));
+  };
+
+  const addMerchantBankAccount = async (data: Omit<MerchantBankAccount, 'id' | 'merchantName'>) => {
+    const newAccount = await merchantBankApi.create(data);
+    setMerchantBankAccounts(prev => [...prev, newAccount]);
+  };
+  const updateMerchantBankAccount = async (id: string, data: Omit<MerchantBankAccount, 'id' | 'merchantName'>) => {
+    const updatedAccount = await merchantBankApi.update(id, data);
+    setMerchantBankAccounts(prev => prev.map(account => account.id === id ? updatedAccount : account));
+  };
+  const deleteMerchantBankAccount = async (id: string) => {
+    await merchantBankApi.remove(id);
+    setMerchantBankAccounts(prev => prev.filter(account => account.id !== id));
+  };
+
+  const addAccountType = async (data: Omit<AccountType, 'id'>) => {
+    const newType = await accountTypeApi.create(data);
+    setAccountTypes(prev => [...prev, newType]);
+  };
+  const updateAccountType = async (id: string, data: Omit<AccountType, 'id'>) => {
+    const updatedType = await accountTypeApi.update(id, data);
+    setAccountTypes(prev => prev.map(type => type.id === id ? updatedType : type));
+  };
+  const deleteAccountType = async (id: string) => {
+    await accountTypeApi.remove(id);
+    setAccountTypes(prev => prev.filter(type => type.id !== id));
+  };
+
+  const addMineQuarry = async (data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const newItem = await mineQuarryApi.create(data);
+    setMineQuarries(prev => [...prev, newItem]);
+  };
+  const updateMineQuarry = async (id: string, data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const updatedItem = await mineQuarryApi.update(id, data);
+    setMineQuarries(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteMineQuarry = async (id: string) => {
+    await mineQuarryApi.remove(id);
+    setMineQuarries(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addVendorCustomer = async (data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const newItem = await vendorCustomerApi.create(data);
+    setVendorCustomers(prev => [...prev, newItem]);
+  };
+  const updateVendorCustomer = async (id: string, data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const updatedItem = await vendorCustomerApi.update(id, data);
+    setVendorCustomers(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteVendorCustomer = async (id: string) => {
+    await vendorCustomerApi.remove(id);
+    setVendorCustomers(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addRoyaltyOwnerProfile = async (data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const newItem = await royaltyOwnerDataApi.create(data);
+    setRoyaltyOwnerProfiles(prev => [...prev, newItem]);
+  };
+  const updateRoyaltyOwnerProfile = async (id: string, data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const updatedItem = await royaltyOwnerDataApi.update(id, data);
+    setRoyaltyOwnerProfiles(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteRoyaltyOwnerProfile = async (id: string) => {
+    await royaltyOwnerDataApi.remove(id);
+    setRoyaltyOwnerProfiles(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addTransportOwnerProfile = async (data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const newItem = await transportOwnerApi.create(data);
+    setTransportOwnerProfiles(prev => [...prev, newItem]);
+  };
+  const updateTransportOwnerProfile = async (id: string, data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
+    const updatedItem = await transportOwnerApi.update(id, data);
+    setTransportOwnerProfiles(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteTransportOwnerProfile = async (id: string) => {
+    await transportOwnerApi.remove(id);
+    setTransportOwnerProfiles(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addTransportOwnerVehicle = async (data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => {
+    const newItem = await transportOwnerVehicleApi.create(data);
+    setTransportOwnerVehicles(prev => [...prev, newItem]);
+  };
+  const updateTransportOwnerVehicle = async (id: string, data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => {
+    const updatedItem = await transportOwnerVehicleApi.update(id, data);
+    setTransportOwnerVehicles(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteTransportOwnerVehicle = async (id: string) => {
+    await transportOwnerVehicleApi.remove(id);
+    setTransportOwnerVehicles(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addMaterialTypeDefinition = async (data: Omit<MaterialTypeDefinition, 'id'>) => {
+    const newItem = await materialTypeDefinitionApi.create(data);
+    setMaterialTypeDefinitions(prev => [...prev, newItem]);
+  };
+  const updateMaterialTypeDefinition = async (id: string, data: Omit<MaterialTypeDefinition, 'id'>) => {
+    const updatedItem = await materialTypeDefinitionApi.update(id, data);
+    setMaterialTypeDefinitions(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteMaterialTypeDefinition = async (id: string) => {
+    await materialTypeDefinitionApi.remove(id);
+    setMaterialTypeDefinitions(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addMaterialRate = async (data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => {
+    const newItem = await materialRateApi.create(data);
+    setMaterialRates(prev => [...prev, newItem]);
+  };
+  const updateMaterialRate = async (id: string, data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => {
+    const updatedItem = await materialRateApi.update(id, data);
+    setMaterialRates(prev => prev.map(item => item.id === id ? updatedItem : item));
+  };
+  const deleteMaterialRate = async (id: string) => {
+    await materialRateApi.remove(id);
+    setMaterialRates(prev => prev.filter(item => item.id !== id));
+  };
+
+  const addMaterial = async (material: Omit<Material, 'id'>) => { await api.addMaterial(material); refreshData(); };
+  const updateMaterial = async (id: number, material: Omit<Material, 'id'>) => { await api.updateMaterial(id, material); refreshData(); };
+  const deleteMaterial = async (id: number) => { await api.deleteMaterial(id); refreshData(); };
   
   const getRoyaltyStock = async () => api.getRoyaltyStock();
   const addRoyaltyStock = async (stock: Omit<RoyaltyStock, 'id'>) => { await api.addRoyaltyStock(stock); refreshData(); };
@@ -215,6 +624,19 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     customers,
     royaltyStock,
     customerRates,
+    siteLocations,
+    merchantTypes,
+    merchants,
+    merchantBankAccounts,
+    accountTypes,
+    vehicleMasters,
+    mineQuarries,
+    vendorCustomers,
+    royaltyOwnerProfiles,
+    transportOwnerProfiles,
+    transportOwnerVehicles,
+    materialTypeDefinitions,
+    materialRates,
     materials,
     accounts,
     accountCategories,
@@ -235,7 +657,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     getSupervisorAccounts,
     addAccount,
     addAccountCategory,
+    addVehicleMaster,
+    updateVehicleMaster,
+    deleteVehicleMaster,
     addVehicleOwner,
+    updateVehicleOwner,
+    deleteVehicleOwner,
     addTransportRate, updateTransportRate, deleteTransportRate,
     addQuarryOwner,
     addQuarryRate, updateQuarryRate, deleteQuarryRate,
@@ -243,6 +670,45 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addRoyaltyRate, updateRoyaltyRate, deleteRoyaltyRate,
     addCustomer,
     addCustomerRate, updateCustomerRate, deleteCustomerRate,
+    addSiteLocation,
+    updateSiteLocation,
+    deleteSiteLocation,
+    addMerchantType,
+    updateMerchantType,
+    deleteMerchantType,
+    addMerchant,
+    updateMerchant,
+    deleteMerchant,
+    addMerchantBankAccount,
+    updateMerchantBankAccount,
+    deleteMerchantBankAccount,
+    addAccountType,
+    updateAccountType,
+    deleteAccountType,
+    addMineQuarry,
+    updateMineQuarry,
+    deleteMineQuarry,
+    addVendorCustomer,
+    updateVendorCustomer,
+    deleteVendorCustomer,
+    addRoyaltyOwnerProfile,
+    updateRoyaltyOwnerProfile,
+    deleteRoyaltyOwnerProfile,
+    addTransportOwnerProfile,
+    updateTransportOwnerProfile,
+    deleteTransportOwnerProfile,
+    addTransportOwnerVehicle,
+    updateTransportOwnerVehicle,
+    deleteTransportOwnerVehicle,
+    addMaterialTypeDefinition,
+    updateMaterialTypeDefinition,
+    deleteMaterialTypeDefinition,
+    addMaterialRate,
+    updateMaterialRate,
+    deleteMaterialRate,
+    addMaterial,
+    updateMaterial,
+    deleteMaterial,
     getRoyaltyStock, addRoyaltyStock,
     refreshKey,
     refreshData,

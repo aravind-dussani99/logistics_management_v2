@@ -5,7 +5,7 @@ interface DataTableProps<T> {
   title: string;
   headers: string[];
   data: T[];
-  renderRow: (item: T) => React.ReactNode;
+  renderRow: (item: T, index: number) => React.ReactNode;
 }
 
 const DataTable = <T,>({ title, headers, data, renderRow }: DataTableProps<T>) => {
@@ -28,7 +28,7 @@ const DataTable = <T,>({ title, headers, data, renderRow }: DataTableProps<T>) =
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {data.map((item, index) => (
                 <React.Fragment key={index}>
-                    {renderRow(item)}
+                    {renderRow(item, index)}
                 </React.Fragment>
             ))}
           </tbody>

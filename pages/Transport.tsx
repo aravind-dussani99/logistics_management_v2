@@ -11,7 +11,7 @@ import { formatCurrency, safeToFixed } from '../utils';
 const getActiveRate = (rates: RateEntry[]): RateEntry | undefined => rates.find(r => r.active === 'active');
 
 const TransportPage: React.FC = () => {
-    const { vehicles, addTransportRate, updateTransportRate, deleteTransportRate, quarries, materials } = useData();
+    const { vehicles, addTransportRate, updateTransportRate, deleteTransportRate, materials, siteLocations } = useData();
     const { openModal, closeModal } = useUI();
     const [filters, setFilters] = useState<Filters>({});
     const [activePopover, setActivePopover] = useState<string | null>(null);
@@ -157,10 +157,10 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 
 
 const TransportForm: React.FC<{ transport: TransportType, initialData?: Partial<RateEntry>, onSave: (transportId: string, data: Partial<RateEntry>) => void, onClose: () => void }> = ({ transport, initialData, onSave, onClose }) => {
-    const { quarries, materials } = useData();
+    const { materials, siteLocations } = useData();
     const [formData, setFormData] = useState({ ...emptyRate, ...initialData });
 
-    const uniqueSites = useMemo(() => Array.from(new Set(quarries.map(q => q.quarryName))), [quarries]);
+    const uniqueSites = useMemo(() => Array.from(new Set(siteLocations.filter(site => site.type === 'pickup' || site.type === 'both').map(site => site.name))), [siteLocations]);
     const uniqueMaterials = useMemo(() => Array.from(new Set(materials.map(m => m.name))), [materials]);
 
     useEffect(() => {
@@ -185,7 +185,7 @@ const TransportForm: React.FC<{ transport: TransportType, initialData?: Partial<
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? parseFloat(value) || 0 : value;
+        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? (value === '' ? '' : parseFloat(value)) : value;
         setFormData(prev => ({ ...prev, [name]: val }));
     };
 

@@ -8,6 +8,12 @@ import { useUI } from '../../contexts/UIContext';
 import SupervisorTripForm from '../../components/SupervisorTripForm';
 import DataTable from '../../components/DataTable';
 import Pagination from '../../components/Pagination';
+import { tripApi } from '../../services/tripApi';
+import { formatDateDisplay } from '../../utils';
+import RequestDialog from '../../components/RequestDialog';
+import { useLocation } from 'react-router-dom';
+import { notificationApi } from '../../services/notificationApi';
+import { Notification } from '../../types';
 
 const SUPERVISOR_TRIPS_PER_PAGE = 10;
 
@@ -25,9 +31,12 @@ const SupervisorTripReport: React.FC = () => {
     const { currentUser } = useAuth();
     const { trips, refreshKey, deleteTrip } = useData();
     const { openModal, closeModal } = useUI();
+    const location = useLocation();
     const [myTrips, setMyTrips] = useState<Trip[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [filters, setFilters] = useState<{dateFrom?: string; dateTo?: string}>(getMtdRange());
+    const [requestMessage, setRequestMessage] = useState('');
+    const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
     
     useEffect(() => {
         if (currentUser) {
@@ -36,11 +45,29 @@ const SupervisorTripReport: React.FC = () => {
             setMyTrips(supervisorTrips);
         }
     }, [trips, currentUser, refreshKey]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const notificationId = params.get('notificationId');
+        if (!notificationId) return;
+        notificationApi.getById(notificationId).then(note => {
+            setActiveNotification(note);
+            if (note.tripId) {
+                const trip = trips.find(t => t.id === note.tripId);
+                if (trip) {
+                    openModal(`Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />);
+                }
+            }
+        }).catch(error => {
+            console.error('Failed to load notification', error);
+        });
+    }, [location.search, trips, openModal, closeModal]);
     
     const filteredTrips = useMemo(() => {
         return myTrips.filter(trip => {
-            if (filters.dateFrom && trip.date < filters.dateFrom) return false;
-            if (filters.dateTo && trip.date > filters.dateTo) return false;
+            const tripDate = trip.date ? trip.date.split('T')[0] : '';
+            if (filters.dateFrom && tripDate < filters.dateFrom) return false;
+            if (filters.dateTo && tripDate > filters.dateTo) return false;
             return true;
         });
     }, [myTrips, filters]);
@@ -74,6 +101,30 @@ const SupervisorTripReport: React.FC = () => {
         }
     };
 
+    const handleRequestDelete = async (trip: Trip) => {
+        if (!currentUser) return;
+        openModal('Request Delete', (
+            <RequestDialog
+                title={`Request delete for Trip #${trip.id}`}
+                confirmLabel="Send Request"
+                onCancel={closeModal}
+                onConfirm={async (reason) => {
+                    try {
+                        await tripApi.requestDelete(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        setRequestMessage('Delete request sent to admin for approval.');
+                        setTimeout(() => setRequestMessage(''), 4000);
+                    } catch (error) {
+                        console.error('Failed to request delete', error);
+                        setRequestMessage('Failed to send delete request. Please try again.');
+                        setTimeout(() => setRequestMessage(''), 4000);
+                    } finally {
+                        closeModal();
+                    }
+                }}
+            />
+        ));
+    };
+
     const getStatusBadge = (status: Trip['status']) => {
         switch(status) {
             case 'pending upload': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending Upload</span>;
@@ -84,7 +135,7 @@ const SupervisorTripReport: React.FC = () => {
         }
     }
     
-    const headers = ['Date', 'Vehicle No.', 'Customer', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Royalty M3', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
 
     return (
         <div className="relative">
@@ -114,15 +165,35 @@ const SupervisorTripReport: React.FC = () => {
                             onPageChange={setCurrentPage}
                         />
                     </div>
+                    {activeNotification && (
+                        <div className="px-4 py-2 text-sm bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 border-b dark:border-gray-700">
+                            {activeNotification.message}
+                        </div>
+                    )}
+                    {requestMessage && (
+                        <div className="px-4 py-2 text-sm bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 border-b dark:border-gray-700">
+                            {requestMessage}
+                        </div>
+                    )}
                     <DataTable
                         title=""
                         headers={headers}
                         data={paginatedTrips}
-                        renderRow={(trip: Trip) => (
+                        renderRow={(trip: Trip, index: number) => (
                             <tr key={trip.id}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{trip.vehicleNumber}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * SUPERVISOR_TRIPS_PER_PAGE + index + 1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.invoiceDCNumber || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.transporterName || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{trip.vehicleNumber || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.quarryName || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyOwnerName || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyM3 ?? '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.netWeight ?? '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.pickupPlace || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.dropOffPlace || trip.place || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatusBadge(trip.status)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                 {trip.status === 'pending upload' ? (
@@ -135,7 +206,13 @@ const SupervisorTripReport: React.FC = () => {
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                                         <button onClick={() => handleEdit(trip)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
-                                        <button onClick={() => handleDelete(trip.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
+                                        <button
+                                            onClick={() => handleRequestDelete(trip)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'delete' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'delete'}
+                                        >
+                                            {trip.pendingRequestType === 'delete' ? 'Delete Requested' : 'Request Delete'}
+                                        </button>
                                     </>
                                 ) : (
                                      <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>

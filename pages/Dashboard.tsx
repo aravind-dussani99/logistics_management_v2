@@ -9,7 +9,7 @@ import { useData } from '../contexts/DataContext';
 import { Filters } from '../components/FilterPanel';
 import Pagination from '../components/Pagination';
 import PageHeader from '../components/PageHeader';
-import { safeToFixed } from '../utils';
+import { formatDateDisplay, safeToFixed } from '../utils';
 import SupervisorTripReport from './Supervisor/TripReport';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF'];
@@ -127,10 +127,9 @@ const Dashboard: React.FC = () => {
             return true;
         });
 
-        const formatDateForDisplay = (dateStr: string) => new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const subtitle = isMtd
-            ? `Showing data for Month to Date (${formatDateForDisplay(filters.dateFrom)} - ${formatDateForDisplay(filters.dateTo)})`
-            : `Showing data for ${formatDateForDisplay(filters.dateFrom)} - ${formatDateForDisplay(filters.dateTo)}`;
+            ? `Showing data for Month to Date (${formatDateDisplay(filters.dateFrom)} - ${formatDateDisplay(filters.dateTo)})`
+            : `Showing data for ${formatDateDisplay(filters.dateFrom)} - ${formatDateDisplay(filters.dateTo)}`;
 
         return { filteredTrips: currentPeriodTrips, previousPeriodTrips: prevPeriodTrips, dateRangeSubtitle: subtitle };
 
@@ -220,7 +219,7 @@ const Dashboard: React.FC = () => {
                             <Link to="/trips" className="text-sm font-medium text-primary hover:underline flex-shrink-0">Show All</Link>
                         </div>
                     </div>
-                    <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.date}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.tonnage)} T</td></tr>))}</tbody></table></div>
+                    <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.tonnage)} T</td></tr>))}</tbody></table></div>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">

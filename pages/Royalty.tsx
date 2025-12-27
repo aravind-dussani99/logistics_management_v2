@@ -163,10 +163,10 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
 );
 
 const RoyaltyForm: React.FC<{ royaltyOwner: RoyaltyOwnerType, initialData?: Partial<RateEntry>, onSave: (royaltyId: string, data: Partial<RateEntry>) => void, onClose: () => void }> = ({ royaltyOwner, initialData, onSave, onClose }) => {
-    const { quarries, materials } = useData();
+    const { materials, siteLocations } = useData();
     const [formData, setFormData] = useState({ ...emptyRate, ...initialData });
 
-    const uniqueSites = useMemo(() => Array.from(new Set(quarries.map(q => q.quarryName))), [quarries]);
+    const uniqueSites = useMemo(() => Array.from(new Set(siteLocations.filter(site => site.type === 'pickup' || site.type === 'both').map(site => site.name))), [siteLocations]);
     const uniqueMaterials = useMemo(() => Array.from(new Set(materials.map(m => m.name))), [materials]);
 
     useEffect(() => {
@@ -187,7 +187,7 @@ const RoyaltyForm: React.FC<{ royaltyOwner: RoyaltyOwnerType, initialData?: Part
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? parseFloat(value) || 0 : value;
+        const val = type === 'checkbox' ? (checked ? 'active' : 'not active') : (type === 'number' && name !== 'gstPercentage') ? (value === '' ? '' : parseFloat(value)) : value;
         setFormData(prev => ({ ...prev, [name]: val }));
     };
 

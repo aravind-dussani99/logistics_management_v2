@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { AccountSummary } from '../pages/Accounting';
 import { Trip, QuarryOwner, LedgerEntry, VehicleOwner, Customer, RoyaltyOwner, Account } from '../types';
 import Pagination from './Pagination';
-import { formatCurrency, safeToFixed } from '../utils';
+import { formatCurrency, formatDateDisplay, safeToFixed } from '../utils';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -134,7 +134,7 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                             {transactions.map((t, index) => (
                                 <tr key={index}>
-                                    <td className="px-2 py-2">{t.date}</td>
+                                    <td className="px-2 py-2">{formatDateDisplay(t.date)}</td>
                                     <td className="px-2 py-2">{t.description}</td>
                                     <td className="px-2 py-2">{t.type}</td>
                                     <td className="px-2 py-2 text-green-500">{t.credit > 0 ? formatCurrency(t.credit) : '-'}</td>
@@ -196,7 +196,7 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
                                         </>
                                     )}
                                     {type === 'aged' && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.lastActivityDate || 'N/A'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.lastActivityDate ? formatDateDisplay(item.lastActivityDate) : 'N/A'}</td>
                                     )}
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${item.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
                                         {formatCurrency(Math.abs(item.balance))}

@@ -1,4 +1,4 @@
-import { Trip, Payment, PaymentType, ChartData, User, Role, Notification, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance } from '../types';
+import { Trip, Payment, PaymentType, ChartData, User, Role, Notification, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, SiteLocation, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // --- MOCK DATA ---
@@ -7,13 +7,13 @@ const mockUsers: User[] = [
     { id: 1, name: 'Admin User', role: Role.ADMIN, avatar: 'https://i.pravatar.cc/150?u=admin', password: 'malli275' },
     { id: 2, name: 'Manager User', role: Role.MANAGER, avatar: 'https://i.pravatar.cc/150?u=manager', password: 'password' },
     { id: 3, name: 'Driver User', role: Role.DRIVER, avatar: 'https://i.pravatar.cc/150?u=driver', password: 'password' },
-    { id: 4, name: 'Malli', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=malli', password: 'password' },
+    { id: 4, name: 'Malli', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=malli', password: 'password', dropOffLocationName: 'Site A' },
 ];
 
 const mockNotifications: Notification[] = [
-    { id: 1, message: 'Trip INV-001 has been marked as paid.', type: 'success', timestamp: new Date().toISOString(), read: false },
-    { id: 2, message: 'Royalty stock is low. Please purchase more.', type: 'alert', timestamp: new Date(Date.now() - 3600 * 1000).toISOString(), read: false },
-    { id: 3, message: 'New vehicle TN03EF7890 added to Fast Transports.', type: 'info', timestamp: new Date(Date.now() - 3600 * 2000).toISOString(), read: true },
+    { id: uuidv4(), message: 'Trip INV-001 has been marked as paid.', type: 'success', timestamp: new Date().toISOString(), read: false },
+    { id: uuidv4(), message: 'Royalty stock is low. Please purchase more.', type: 'alert', timestamp: new Date(Date.now() - 3600 * 1000).toISOString(), read: false },
+    { id: uuidv4(), message: 'New vehicle TN03EF7890 added to Fast Transports.', type: 'info', timestamp: new Date(Date.now() - 3600 * 2000).toISOString(), read: true },
 ];
 
 const importedTrips: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'vendorName' | 'tonnage' | 'status' | 'createdBy'>[] = [
@@ -68,6 +68,12 @@ let mockCustomers: Customer[] = [
     ]},
 ];
 let mockCustomerRates: CustomerRate[] = [];
+let mockSiteLocations: SiteLocation[] = [
+    { id: uuidv4(), name: "Rock Quarry", type: "pickup", address: "Quarry Road", pointOfContact: "Ravi", remarks: "" },
+    { id: uuidv4(), name: "Riverbed Mining", type: "pickup", address: "River Bank", pointOfContact: "Suresh", remarks: "" },
+    { id: uuidv4(), name: "Site A", type: "drop-off", address: "Construction Site A", pointOfContact: "Anita", remarks: "" },
+    { id: uuidv4(), name: "Site B", type: "drop-off", address: "Infra Project B", pointOfContact: "Deepak", remarks: "" },
+];
 let mockMaterials: Material[] = [
     { id: 1, name: "Gravel", costPerTon: "300", costPerCubicMeter: "420" },
     { id: 2, name: "Sand", costPerTon: "250", costPerCubicMeter: "350" }
@@ -311,6 +317,19 @@ export const api = {
     // Master Data
     getVehicleOwners: async (): Promise<VehicleOwner[]> => { await delay(100); return mockVehicleOwners; },
     addVehicleOwner: async(owner: Omit<VehicleOwner, 'id'>) => { await delay(300); mockVehicleOwners.push({ ...owner, id: uuidv4() }); initializeData(); },
+    updateVehicleOwner: async(ownerId: string, ownerData: Omit<VehicleOwner, 'id' | 'rates'>) => {
+        await delay(300);
+        const index = mockVehicleOwners.findIndex(owner => owner.id === ownerId);
+        if (index !== -1) {
+            mockVehicleOwners[index] = { ...mockVehicleOwners[index], ...ownerData };
+            initializeData();
+        }
+    },
+    deleteVehicleOwner: async(ownerId: string) => {
+        await delay(300);
+        mockVehicleOwners = mockVehicleOwners.filter(owner => owner.id !== ownerId);
+        initializeData();
+    },
     addTransportRate: async(transportId: string, rate: Omit<RateEntry, 'id'>) => {
         await delay(300);
         const owner = mockVehicleOwners.find(v => v.id === transportId);
@@ -410,7 +429,39 @@ export const api = {
     },
 
     getCustomerRates: async (): Promise<CustomerRate[]> => { await delay(100); return mockCustomerRates; },
+    getSiteLocations: async (): Promise<SiteLocation[]> => { await delay(100); return mockSiteLocations; },
+    addSiteLocation: async (site: Omit<SiteLocation, 'id'>): Promise<SiteLocation> => {
+        await delay(300);
+        const newSite = { ...site, id: uuidv4() };
+        mockSiteLocations.push(newSite);
+        return newSite;
+    },
+    updateSiteLocation: async (id: string, site: Omit<SiteLocation, 'id'>): Promise<void> => {
+        await delay(300);
+        const index = mockSiteLocations.findIndex(location => location.id === id);
+        if (index > -1) mockSiteLocations[index] = { ...site, id };
+    },
+    deleteSiteLocation: async (id: string): Promise<void> => {
+        await delay(300);
+        mockSiteLocations = mockSiteLocations.filter(location => location.id !== id);
+    },
     getMaterials: async (): Promise<Material[]> => { await delay(100); return mockMaterials; },
+    addMaterial: async (material: Omit<Material, 'id'>): Promise<Material> => {
+        await delay(300);
+        const nextId = mockMaterials.length ? Math.max(...mockMaterials.map(m => m.id)) + 1 : 1;
+        const newMaterial = { ...material, id: nextId };
+        mockMaterials.push(newMaterial);
+        return newMaterial;
+    },
+    updateMaterial: async (id: number, material: Omit<Material, 'id'>): Promise<void> => {
+        await delay(300);
+        const index = mockMaterials.findIndex(m => m.id === id);
+        if (index > -1) mockMaterials[index] = { ...material, id };
+    },
+    deleteMaterial: async (id: number): Promise<void> => {
+        await delay(300);
+        mockMaterials = mockMaterials.filter(material => material.id !== id);
+    },
     getRoyaltyStock: async(): Promise<RoyaltyStock[]> => { await delay(100); return mockRoyaltyStock; },
     addRoyaltyStock: async(stock: Omit<RoyaltyStock, 'id'>): Promise<void> => {
         await delay(300);

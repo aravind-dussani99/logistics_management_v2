@@ -44,3 +44,4 @@ EXPOSE 8080
 
 # Define the command to start the Node.js server when the container starts
 CMD [ "node", "server.js" ]
+

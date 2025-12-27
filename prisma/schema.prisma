@@ -1,0 +1,383 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SiteLocation {
+  id             String @id @default(uuid())
+  name           String
+  type           String
+  address        String
+  pointOfContact String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchants      Merchant[]
+  mineQuarries   MineQuarry[]
+  vendorCustomers VendorCustomer[]
+  royaltyOwners  RoyaltyOwnerProfile[]
+  transportOwners TransportOwnerProfile[]
+  materialRatesPickup MaterialRate[] @relation("PickupLocation")
+  materialRatesDropOff MaterialRate[] @relation("DropOffLocation")
+
+  @@index([name])
+}
+
+model MerchantType {
+  id        String @id @default(uuid())
+  name      String
+  remarks   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchants Merchant[]
+  mineQuarries   MineQuarry[]
+  vendorCustomers VendorCustomer[]
+  royaltyOwners  RoyaltyOwnerProfile[]
+  transportOwners TransportOwnerProfile[]
+
+  @@index([name])
+}
+
+model Merchant {
+  id             String @id @default(uuid())
+  merchantTypeId String
+  name           String
+  contactNumber  String
+  email          String
+  siteLocationId String
+  companyName    String
+  gstOptIn       Boolean @default(false)
+  gstNumber      String
+  gstDetails     String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchantType   MerchantType @relation(fields: [merchantTypeId], references: [id])
+  siteLocation   SiteLocation @relation(fields: [siteLocationId], references: [id])
+  bankAccounts   MerchantBankAccount[]
+
+  @@index([name])
+}
+
+model MerchantBankAccount {
+  id            String @id @default(uuid())
+  merchantId    String
+  accountType   String
+  ratePartyType String
+  ratePartyId   String
+  accountName   String
+  accountNumber String
+  ifscCode      String
+  remarks       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([accountNumber])
+}
+
+model AccountType {
+  id        String @id @default(uuid())
+  name      String
+  remarks   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model VehicleMaster {
+  id            String @id @default(uuid())
+  vehicleNumber String
+  vehicleType   String
+  capacity      Float
+  ownerName     String
+  contactNumber String
+  remarks       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([vehicleNumber])
+}
+
+model MineQuarry {
+  id             String @id @default(uuid())
+  merchantTypeId String
+  name           String
+  contactNumber  String
+  email          String
+  siteLocationId String
+  companyName    String
+  gstOptIn       Boolean @default(false)
+  gstNumber      String
+  gstDetails     String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
+  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+
+  @@index([name])
+}
+
+model VendorCustomer {
+  id             String @id @default(uuid())
+  merchantTypeId String
+  name           String
+  contactNumber  String
+  email          String
+  siteLocationId String
+  companyName    String
+  gstOptIn       Boolean @default(false)
+  gstNumber      String
+  gstDetails     String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
+  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+
+  @@index([name])
+}
+
+model RoyaltyOwnerProfile {
+  id             String @id @default(uuid())
+  merchantTypeId String
+  name           String
+  contactNumber  String
+  email          String
+  siteLocationId String
+  companyName    String
+  gstOptIn       Boolean @default(false)
+  gstNumber      String
+  gstDetails     String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
+  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+
+  @@index([name])
+}
+
+model TransportOwnerProfile {
+  id             String @id @default(uuid())
+  merchantTypeId String
+  name           String
+  contactNumber  String
+  email          String
+  siteLocationId String
+  companyName    String
+  gstOptIn       Boolean @default(false)
+  gstNumber      String
+  gstDetails     String
+  remarks        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
+  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+  vehicleLinks TransportOwnerVehicle[]
+
+  @@index([name])
+}
+
+model TransportOwnerVehicle {
+  id               String @id @default(uuid())
+  transportOwnerId String
+  vehicleNumber    String
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  remarks          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transportOwner TransportOwnerProfile @relation(fields: [transportOwnerId], references: [id])
+
+  @@index([transportOwnerId])
+  @@index([vehicleNumber])
+}
+
+model MaterialTypeDefinition {
+  id        String @id @default(uuid())
+  name      String
+  remarks   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rates MaterialRate[]
+
+  @@index([name])
+}
+
+model MaterialRate {
+  id              String @id @default(uuid())
+  materialTypeId  String
+  ratePartyType   String
+  ratePartyId     String
+  pickupLocationId  String
+  dropOffLocationId String
+  totalKm         Float
+  ratePerKm       Float
+  ratePerTon      Float
+  gstChargeable   Boolean @default(false)
+  gstPercentage   Float
+  gstAmount       Float
+  totalRatePerTon Float
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  status          String
+  remarks         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  materialType MaterialTypeDefinition @relation(fields: [materialTypeId], references: [id])
+  pickupLocation SiteLocation @relation("PickupLocation", fields: [pickupLocationId], references: [id])
+  dropOffLocation SiteLocation @relation("DropOffLocation", fields: [dropOffLocationId], references: [id])
+
+  @@index([ratePartyType, ratePartyId])
+}
+
+model AdvanceRecord {
+  id                    String   @id @default(uuid())
+  date                  DateTime
+  tripId                Int?
+  ratePartyType         String?
+  ratePartyId           String?
+  counterpartyName      String
+  fromAccount           String
+  toAccount             String
+  place                 String
+  invoiceDCNumber       String
+  ownerAndTransporterName String
+  vehicleNumber         String
+  purpose               String
+  amount                Float
+  voucherSlipUpload     String
+  remarks               String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([date])
+  @@index([ratePartyType, ratePartyId])
+}
+
+model DailyExpenseRecord {
+  id               String   @id @default(uuid())
+  date             DateTime
+  from             String
+  to               String
+  via              String
+  ratePartyType    String?
+  ratePartyId      String?
+  counterpartyName String
+  amount           Float
+  category         String
+  subCategory      String
+  remarks          String
+  availableBalance Float
+  closingBalance   Float
+  type             String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([date])
+  @@index([from])
+}
+
+model DailyExpenseOpeningBalance {
+  id             String   @id @default(uuid())
+  supervisorName String   @unique
+  amount         Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TripRecord {
+  id                    Int      @id @default(autoincrement())
+  date                  DateTime
+  place                 String
+  pickupPlace           String
+  dropOffPlace          String
+  vendorName            String
+  customer              String
+  invoiceDCNumber       String
+  quarryName            String
+  royaltyOwnerName      String
+  material              String
+  vehicleNumber         String
+  transporterName       String
+  transportOwnerMobileNumber String
+  emptyWeight           Float
+  grossWeight           Float
+  netWeight             Float
+  royaltyNumber         String
+  royaltyTons           Float
+  royaltyM3             Float
+  deductionPercentage   Float
+  sizeChangePercentage  Float
+  tonnage               Float
+  revenue               Float
+  materialCost          Float
+  transportCost         Float
+  royaltyCost           Float
+  profit                Float
+  paymentStatus         String
+  agent                 String
+  status                String
+  createdBy             String
+  ewayBillUpload        String
+  invoiceDCUpload       String
+  waymentSlipUpload     String
+  royaltyUpload         String
+  taxInvoiceUpload      String
+  receivedDate          DateTime?
+  endEmptyWeight        Float?
+  endGrossWeight        Float?
+  endNetWeight          Float?
+  endWaymentSlipUpload  String?
+  weightDifferenceReason String?
+  pendingRequestType    String?
+  pendingRequestMessage String?
+  pendingRequestBy      String?
+  pendingRequestRole    String?
+  pendingRequestAt      DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([date])
+  @@index([vehicleNumber])
+}
+
+model NotificationRecord {
+  id         String   @id @default(uuid())
+  message    String
+  type       String
+  timestamp  DateTime @default(now())
+  read       Boolean  @default(false)
+  targetRole String?
+  targetUser String?
+  tripId     Int?
+  requestType String?
+  requesterName String?
+  requesterRole String?
+  requestMessage String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([timestamp])
+  @@index([targetRole])
+  @@index([targetUser])
+  @@index([tripId])
+}

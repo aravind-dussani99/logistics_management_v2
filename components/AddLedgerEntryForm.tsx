@@ -12,6 +12,7 @@ const paymentSubTypes = ["ITR", "HAND LOAN NEW", "JAN QUARRY", "ROYALTY BILLS", 
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement> & {label: string, children?: React.ReactNode}> = ({ label, ...props }) => {
     const inputClass = "mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm";
+    const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
     return (
         <div>
             <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
@@ -20,7 +21,7 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
             ) : props.type === 'textarea' ? (
                  <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} rows={2} className={inputClass} />
             ) : (
-                <input {...props as React.InputHTMLAttributes<HTMLInputElement>} className={inputClass} />
+                <input {...props as React.InputHTMLAttributes<HTMLInputElement>} value={inputValue} className={inputClass} />
             )}
         </div>
     );
@@ -55,7 +56,7 @@ const AddLedgerEntryForm: React.FC<AddLedgerEntryFormProps> = ({ onClose, initia
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
-        setFormData({ ...formData, [name]: type === 'number' ? parseFloat(value) || 0 : value });
+        setFormData({ ...formData, [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value });
     };
 
     return (

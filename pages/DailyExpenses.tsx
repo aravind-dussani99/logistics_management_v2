@@ -2,12 +2,21 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
-import { DailyExpense } from '../types';
+import { DailyExpense, Role } from '../types';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
-import { formatCurrency } from '../utils';
+import { formatCurrency, formatDateDisplay } from '../utils';
+import { dailyExpenseApi } from '../services/dailyExpenseApi';
+import AlertDialog from '../components/AlertDialog';
+import ConfirmDeleteDialog from '../components/ConfirmDeleteDialog';
 
 const ITEMS_PER_PAGE = 10;
+const RATE_PARTY_LABELS = [
+    { value: 'mine-quarry', label: 'Mine & Quarry' },
+    { value: 'vendor-customer', label: 'Vendor & Customer' },
+    { value: 'royalty-owner', label: 'Royalty Owner' },
+    { value: 'transport-owner', label: 'Transport & Owner' },
+];
 
 const getMtdRange = () => {
     const today = new Date();
@@ -21,23 +30,33 @@ const getMtdRange = () => {
 
 const DailyExpenses: React.FC = () => {
     const { currentUser } = useAuth();
-    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense } = useData();
+    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts } = useData();
     const { openModal, closeModal } = useUI();
 
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [openingBalance, setOpeningBalance] = useState(0);
-    const [filters, setFilters] = useState<{ dateFrom?: string; dateTo?: string; destination?: string }>(getMtdRange());
+    const [filters, setFilters] = useState<{ dateFrom?: string; dateTo?: string; destination?: string; supervisor?: string }>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [supervisors, setSupervisors] = useState<string[]>([]);
 
     const fetchData = useCallback(() => {
-        if (currentUser) {
+        if (!currentUser) return;
+        if (currentUser.role === Role.ADMIN) {
+            dailyExpenseApi.getAll().then((allExpenses) => {
+                setExpenses(allExpenses);
+                setOpeningBalance(0);
+            });
+            getSupervisorAccounts().then(setSupervisors).catch(error => {
+                console.error('Failed to load supervisors', error);
+            });
+        } else {
             getDailyExpenses(currentUser.name).then(({ expenses, openingBalance }) => {
                 setExpenses(expenses);
                 setOpeningBalance(openingBalance);
             });
         }
-    }, [currentUser, getDailyExpenses]);
+    }, [currentUser, getDailyExpenses, getSupervisorAccounts]);
     
     useEffect(() => {
         fetchData();
@@ -56,46 +75,60 @@ const DailyExpenses: React.FC = () => {
     };
 
     const handleDeleteExpense = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this expense?')) {
-            const confirmation = prompt('This action cannot be undone. Please type "DELETE" to confirm.');
-            if (confirmation === 'DELETE') {
-                await deleteDailyExpense(id);
-                setRefreshKey(k => k + 1);
-            }
-        }
+        openModal('Delete Transaction', (
+            <ConfirmDeleteDialog
+                message="Delete this expense? This action cannot be undone."
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onCancel={closeModal}
+                onConfirm={async () => {
+                    await deleteDailyExpense(id);
+                    setRefreshKey(k => k + 1);
+                    closeModal();
+                }}
+            />
+        ));
     };
 
     const handleSave = async (data: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, id?: string) => {
-        if (id) {
-            await updateDailyExpense(id, data);
-        } else {
-            await addDailyExpense(data);
+        const payload = {
+            ...data,
+            from: currentUser?.name || data.from,
+        };
+        try {
+            if (id) {
+                await updateDailyExpense(id, payload);
+            } else {
+                await addDailyExpense(payload);
+            }
+            setRefreshKey(k => k + 1); // Trigger re-fetch
+            closeModal();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to save transaction.';
+            openModal('Save Failed', (
+                <AlertDialog message={message} onConfirm={closeModal} />
+            ));
         }
-        setRefreshKey(k => k + 1); // Trigger re-fetch
-        closeModal();
     };
 
     const filteredExpenses = useMemo(() => {
-        const openingBalanceEntry = { id: 'opening', date: '---', from: 'System', to: 'Opening Balance', amount: openingBalance, remarks: '', availableBalance: 0, closingBalance: openingBalance, type: 'CREDIT' as const };
+        const openingBalanceEntry = { id: 'opening', date: '---', from: 'System', to: 'Opening Balance', amount: 0, remarks: '', availableBalance: 0, closingBalance: 0, type: 'CREDIT' as const, via: '', category: '', subCategory: '', counterpartyName: '' };
         
         const allEntries = [...expenses].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        const chronologicalEntries = [openingBalanceEntry, ...allEntries];
+        const chronologicalEntries = currentUser?.role === Role.ADMIN ? allEntries : [openingBalanceEntry, ...allEntries];
 
         return chronologicalEntries
             .filter(e => {
-                if(e.id === 'opening') return true;
-                if (filters.dateFrom && e.date < filters.dateFrom) return false;
-                if (filters.dateTo && e.date > filters.dateTo) return false;
-                if (filters.destination && !e.to.toLowerCase().includes(filters.destination.toLowerCase())) return false;
+                if (e.id === 'opening') return true;
+                const entryDate = e.date ? e.date.split('T')[0] : '';
+                if (filters.dateFrom && entryDate < filters.dateFrom) return false;
+                if (filters.dateTo && entryDate > filters.dateTo) return false;
+                if (filters.destination && !(e.to || '').toLowerCase().includes(filters.destination.toLowerCase())) return false;
+                if (currentUser?.role === Role.ADMIN && filters.supervisor && e.from !== filters.supervisor) return false;
                 return true;
-            })
-            .sort((a, b) => {
-                if (a.date === '---') return 1;
-                if (b.date === '---') return -1;
-                return new Date(b.date).getTime() - new Date(a.date).getTime()
             });
-    }, [expenses, filters, openingBalance]);
+    }, [expenses, filters, openingBalance, currentUser]);
 
     const totalPages = Math.ceil(filteredExpenses.length / ITEMS_PER_PAGE);
     const paginatedExpenses = useMemo(() => {
@@ -151,40 +184,83 @@ const DailyExpenses: React.FC = () => {
                                 onChange={e => setFilters(f => ({...f, destination: e.target.value }))}
                                 className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
                             />
+                            {currentUser?.role === Role.ADMIN && (
+                                <select
+                                    value={filters.supervisor || ''}
+                                    onChange={e => setFilters(f => ({ ...f, supervisor: e.target.value || undefined }))}
+                                    className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">All Supervisors</option>
+                                    {supervisors.map(name => (
+                                        <option key={name} value={name}>{name}</option>
+                                    ))}
+                                </select>
+                            )}
                              <button onClick={exportToCsv} className="px-3 py-1 text-xs font-medium text-green-600 border border-green-600 rounded-md hover:bg-green-600 hover:text-white transition">
                                 Export to Excel
                             </button>
                         </div>
                         <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
                     </div>
-                     <div className="overflow-x-auto">
+                    <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    {['Date', 'To', 'Amount', 'Remarks', 'Closing Balance', 'Actions'].map(h => 
+                                    {currentUser?.role === Role.ADMIN
+                                        ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                        : ['S. No.', 'Date', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                    .map(h => (
                                         <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>
-                                    )}
+                                    ))}
                                 </tr>
                             </thead>
                              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {paginatedExpenses.map(expense => (
-                                    <tr key={expense.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.date}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{expense.to}</td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${expense.type === 'DEBIT' ? 'text-red-500' : 'text-green-500'}`}>
-                                            {expense.type === 'DEBIT' ? '-' : '+'} {formatCurrency(expense.amount)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs truncate">{expense.remarks}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">{formatCurrency(expense.closingBalance)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                            {expense.id !== 'opening' && <>
-                                                <button onClick={() => handleViewExpense(expense as DailyExpense)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                                <button onClick={() => handleEditExpense(expense as DailyExpense)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
-                                                <button onClick={() => handleDeleteExpense(expense.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
-                                            </>}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {(() => {
+                                    const rows: React.ReactNode[] = [];
+                                    let lastDate = '';
+                                    const colSpan = currentUser?.role === Role.ADMIN ? 11 : 10;
+                                    paginatedExpenses.forEach((expense, index) => {
+                                        const dateLabel = formatDateDisplay(expense.date);
+                                        if (currentUser?.role === Role.ADMIN && dateLabel !== lastDate) {
+                                            rows.push(
+                                                <tr key={`group-${dateLabel}`} className="bg-gray-50 dark:bg-gray-700">
+                                                    <td colSpan={colSpan} className="px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                                        {dateLabel}
+                                                    </td>
+                                                </tr>
+                                            );
+                                            lastDate = dateLabel;
+                                        }
+                                        rows.push(
+                                            <tr key={expense.id}>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{dateLabel}</td>
+                                                {currentUser?.role === Role.ADMIN && (
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.from || '-'}</td>
+                                                )}
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{formatCurrency(expense.availableBalance || 0)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    {expense.type === 'CREDIT' ? `From: ${expense.to}` : `To: ${expense.to}`}
+                                                </td>
+                                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${expense.type === 'DEBIT' ? 'text-red-500' : 'text-green-500'}`}>
+                                                    {expense.type === 'DEBIT' ? '-' : '+'} {formatCurrency(expense.amount)}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.category || '-'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.subCategory || '-'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs truncate">{expense.remarks}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold">{formatCurrency(expense.closingBalance)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                    {expense.id !== 'opening' && <>
+                                                        <button onClick={() => handleViewExpense(expense as DailyExpense)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                        <button onClick={() => handleEditExpense(expense as DailyExpense)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                                                        <button onClick={() => handleDeleteExpense(expense.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
+                                                    </>}
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
+                                    return rows;
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -196,20 +272,23 @@ const DailyExpenses: React.FC = () => {
 
 // --- Form Component ---
 
-const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> & {label: string, children?: React.ReactNode, isReadOnly?: boolean}> = ({ label, children, isReadOnly, ...props }) => (
-    <div>
-        <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-        {isReadOnly ? (
-             <div className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value}</div>
-        ) : props.type === 'textarea' ? (
-            <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} rows={3} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
-        ) : props.type === 'select' ? (
-            <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{children}</select>
-        ) : (
-            <input {...props} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
-        )}
-    </div>
-);
+const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> & {label: string, children?: React.ReactNode, isReadOnly?: boolean}> = ({ label, children, isReadOnly, ...props }) => {
+    const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+    return (
+        <div>
+            <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            {isReadOnly ? (
+                 <div className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value}</div>
+            ) : props.type === 'textarea' ? (
+                <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} rows={3} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+            ) : props.type === 'select' ? (
+                <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{children}</select>
+            ) : (
+                <input {...props} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+            )}
+        </div>
+    );
+};
 
 interface ExpenseFormProps {
     onSave: (data: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, id?: string) => void;
@@ -222,17 +301,45 @@ interface ExpenseFormProps {
 
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData, expenses, openingBalance, isViewMode = false }) => {
     const { currentUser } = useAuth();
+    const { mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
     const [formData, setFormData] = useState({
         date: initialData?.date || new Date().toISOString().split('T')[0],
         from: currentUser?.name || '',
         to: initialData?.to || '',
+        via: initialData?.via || '',
+        ratePartyType: initialData?.ratePartyType || '',
+        ratePartyId: initialData?.ratePartyId || '',
         amount: initialData?.amount || 0,
+        category: initialData?.category || '',
+        subCategory: initialData?.subCategory || '',
         remarks: initialData?.remarks || '',
         type: initialData?.type || 'DEBIT',
     });
+    const [isBusinessExpense, setIsBusinessExpense] = useState(Boolean(initialData?.ratePartyType || initialData?.ratePartyId));
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
+    const ratePartyOptions = useMemo(() => {
+        switch (formData.ratePartyType) {
+            case 'mine-quarry':
+                return mineQuarries.map(item => ({ id: item.id, name: item.name }));
+            case 'vendor-customer':
+                return vendorCustomers.map(item => ({ id: item.id, name: item.name }));
+            case 'royalty-owner':
+                return royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+            case 'transport-owner':
+                return transportOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+            default:
+                return [];
+        }
+    }, [formData.ratePartyType, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles]);
+
     const allDestinations = useMemo(() => Array.from(new Set(expenses.map(e => e.to))), [expenses]);
+
+    useEffect(() => {
+        if (currentUser?.name && formData.from !== currentUser.name) {
+            setFormData(prev => ({ ...prev, from: currentUser.name }));
+        }
+    }, [currentUser, formData.from]);
 
     const handleToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -244,9 +351,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
         }
     };
 
+    useEffect(() => {
+        if (formData.ratePartyId) {
+            const selected = ratePartyOptions.find(item => item.id === formData.ratePartyId);
+            if (selected) {
+                setFormData(prev => ({
+                    ...prev,
+                    to: selected.name,
+                }));
+            }
+        }
+    }, [formData.ratePartyId, ratePartyOptions]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
+        onSave({ ...formData, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
     };
 
     const getAvailableBalance = () => {
@@ -264,8 +383,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
 
     return (
          <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                 <div className="sm:col-span-2 flex justify-around p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div className="sm:col-span-3 flex justify-around p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                     <div className="text-center">
                         <p className="text-sm text-gray-500 dark:text-gray-400">Available Balance</p>
                         <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(availableBalance)}</p>
@@ -283,20 +402,60 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
                     <option value="CREDIT">Money In / Top Up</option>
                 </InputField>
 
-                <InputField label="Amount" id="amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={e => setFormData(p => ({...p, amount: parseFloat(e.target.value) || 0}))} isReadOnly={isViewMode} required />
-                
-                <div className="relative">
-                    <InputField label={formData.type === 'DEBIT' ? 'To (Destination)' : 'From (Source)'} id="to" name="to" type="text" value={formData.to} onChange={handleToChange} isReadOnly={isViewMode} required autoComplete="off" />
-                     {suggestions.length > 0 && !isViewMode && (
-                        <ul className="absolute z-10 w-full bg-white dark:bg-gray-900 border dark:border-gray-600 rounded-md mt-1 max-h-40 overflow-y-auto">
-                            {suggestions.map(s => (
-                                <li key={s} onClick={() => { setFormData(p => ({...p, to: s})); setSuggestions([]); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">{s}</li>
-                            ))}
-                        </ul>
+                <InputField label="Amount" id="amount" name="amount" type="number" step="0.01" value={formData.amount} onChange={e => setFormData(p => ({...p, amount: e.target.value === '' ? '' : parseFloat(e.target.value)}))} isReadOnly={isViewMode} required />
+
+                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
+                    <div className="rounded-md border border-gray-200 dark:border-gray-700 px-4 py-3">
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <input
+                                type="checkbox"
+                                checked={isBusinessExpense}
+                                onChange={e => {
+                                    const checked = e.target.checked;
+                                    setIsBusinessExpense(checked);
+                                    if (!checked) {
+                                        setFormData(prev => ({ ...prev, ratePartyType: '', ratePartyId: '' }));
+                                    }
+                                }}
+                                disabled={isViewMode}
+                            />
+                            Site Expense
+                        </label>
+                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Check this box to link this transaction to a rate party.</p>
+                    </div>
+                    <InputField label="Via (Optional)" id="via" name="via" type="text" value={formData.via} onChange={e => setFormData(p => ({...p, via: e.target.value }))} isReadOnly={isViewMode} />
+                    <div className="relative">
+                        <InputField label={formData.type === 'DEBIT' ? 'To (Destination)' : 'From (Source)'} id="to" name="to" type="text" value={formData.to} onChange={handleToChange} isReadOnly={isViewMode} required autoComplete="off" />
+                         {suggestions.length > 0 && !isViewMode && (
+                            <ul className="absolute z-10 w-full bg-white dark:bg-gray-900 border dark:border-gray-600 rounded-md mt-1 max-h-40 overflow-y-auto">
+                                {suggestions.map(s => (
+                                    <li key={s} onClick={() => { setFormData(p => ({...p, to: s})); setSuggestions([]); }} className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">{s}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                    {isBusinessExpense && (
+                        <>
+                            <InputField label="Rate Party Type" id="ratePartyType" name="ratePartyType" type="select" value={formData.ratePartyType} onChange={e => setFormData(p => ({...p, ratePartyType: e.target.value, ratePartyId: '' }))} isReadOnly={isViewMode}>
+                                <option value="">Select rate party type...</option>
+                                {RATE_PARTY_LABELS.map(item => (
+                                    <option key={item.value} value={item.value}>{item.label}</option>
+                                ))}
+                            </InputField>
+                            <InputField label="Rate Party" id="ratePartyId" name="ratePartyId" type="select" value={formData.ratePartyId} onChange={e => setFormData(p => ({...p, ratePartyId: e.target.value }))} isReadOnly={isViewMode}>
+                                <option value="">Select rate party...</option>
+                                {ratePartyOptions.map(option => (
+                                    <option key={option.id} value={option.id}>{option.name}</option>
+                                ))}
+                            </InputField>
+                        </>
                     )}
                 </div>
-
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <InputField label="Category" id="category" name="category" type="text" value={formData.category} onChange={e => setFormData(p => ({...p, category: e.target.value }))} isReadOnly={isViewMode} />
+                    <InputField label="Sub-Category" id="subCategory" name="subCategory" type="text" value={formData.subCategory} onChange={e => setFormData(p => ({...p, subCategory: e.target.value }))} isReadOnly={isViewMode} />
+                </div>
+                <div className="sm:col-span-3">
                     <InputField label="Remarks" id="remarks" name="remarks" type="textarea" value={formData.remarks} onChange={e => setFormData(p => ({...p, remarks: e.target.value}))} isReadOnly={isViewMode} />
                 </div>
             </div>

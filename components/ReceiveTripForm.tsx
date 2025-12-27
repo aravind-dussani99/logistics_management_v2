@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Trip } from '../types';
-import { safeToFixed } from '../utils';
+import { formatDateDisplay, safeToFixed } from '../utils';
 
-const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string, isReadOnly?: boolean }> = ({ label, isReadOnly, ...props }) => (
-    <div className="col-span-1">
-        <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-        {isReadOnly ? (
-            <div className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value || '-'}</div>
-        ) : props.type === 'textarea' ? (
-             <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} rows={2} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
-        ) : (
-            <input {...props} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
-        )}
-    </div>
-);
+const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string, isReadOnly?: boolean }> = ({ label, isReadOnly, ...props }) => {
+    const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+    return (
+        <div className="col-span-1">
+            <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            {isReadOnly ? (
+                <div className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value || '-'}</div>
+            ) : props.type === 'textarea' ? (
+                 <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} rows={2} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+            ) : (
+                <input {...props} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+            )}
+        </div>
+    );
+};
 
 const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string; fileName?: string; }> = ({ label, id, fileName, ...props }) => (
      <div className="col-span-1">
@@ -39,8 +42,8 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
     const { updateTrip } = useData();
     const [formData, setFormData] = useState({
         receivedDate: new Date().toISOString().split('T')[0],
-        endEmptyWeight: 0,
-        endGrossWeight: 0,
+        endEmptyWeight: '',
+        endGrossWeight: '',
         endNetWeight: 0,
         weightDifferenceReason: '',
     });
@@ -48,13 +51,15 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        const net = Math.max(0, (formData.endGrossWeight || 0) - (formData.endEmptyWeight || 0));
+        const gross = Number(formData.endGrossWeight || 0);
+        const empty = Number(formData.endEmptyWeight || 0);
+        const net = Math.max(0, gross - empty);
         setFormData(p => ({ ...p, endNetWeight: net }));
     }, [formData.endGrossWeight, formData.endEmptyWeight]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { id, value, type } = e.target;
-        setFormData(p => ({ ...p, [id]: type === 'number' ? parseFloat(value) || 0 : value }));
+        setFormData(p => ({ ...p, [id]: type === 'number' ? value : value }));
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,7 +72,13 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await updateTrip(trip.id, { ...formData, endWaymentSlipUpload: fileName });
+            await updateTrip(trip.id, {
+                ...formData,
+                endEmptyWeight: Number(formData.endEmptyWeight || 0),
+                endGrossWeight: Number(formData.endGrossWeight || 0),
+                endNetWeight: Number(formData.endNetWeight || 0),
+                endWaymentSlipUpload: fileName,
+            });
             onClose();
         } catch (error) {
             console.error("Failed to receive trip", error);
@@ -84,7 +95,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                 <div>
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">Trip Details (In Transit)</h3>
                     <div className="mt-4 grid grid-cols-1 gap-y-4 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-                        <InputField label="Started Date" value={trip.date} isReadOnly />
+                        <InputField label="Started Date" value={formatDateDisplay(trip.date)} isReadOnly />
                         <InputField label="Vehicle Number" value={trip.vehicleNumber} isReadOnly />
                         <InputField label="Invoice/DC Number" value={trip.invoiceDCNumber} isReadOnly />
                         <InputField label="Start Net Weight (T)" value={`${safeToFixed(trip.netWeight)} T`} isReadOnly />

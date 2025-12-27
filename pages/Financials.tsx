@@ -1,32 +1,85 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
-import { DailySummary, FinancialStatus, ChartData, Payment, CustomerRate, QuarryOwner, VehicleOwner } from '../types';
-import { api } from '../services/mockApi';
-import { useAuth } from '../contexts/AuthContext';
+import { DailySummary, FinancialStatus, ChartData, DailyExpense } from '../types';
+import { useData } from '../contexts/DataContext';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import { formatCurrency } from '../utils';
+import { dailyExpenseApi } from '../services/dailyExpenseApi';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Financials: React.FC = () => {
-    const { currentUser } = useAuth();
-    const [summary, setSummary] = useState<DailySummary | null>(null);
-    const [financials, setFinancials] = useState<FinancialStatus | null>(null);
-    const [profitData, setProfitData] = useState<ChartData[]>([]);
-    const [costData, setCostData] = useState<ChartData[]>([]);
+    const { trips, advances } = useData();
     const [filters, setFilters] = useState<Filters>({});
-    const [filterData, setFilterData] = useState<{ vehicles: VehicleOwner[]; customers: CustomerRate[]; quarries: QuarryOwner[]; royaltyOwners: string[] }>({ vehicles: [], customers: [], quarries: [], royaltyOwners: [] });
-
+    const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
 
     useEffect(() => {
-        api.getDailySummary().then(setSummary);
-        api.getFinancialStatus().then(setFinancials);
-        api.getProfitByDay().then(setProfitData);
-        api.getCostBreakdown().then(setCostData);
+        dailyExpenseApi.getAll().then(setAllExpenses).catch(() => setAllExpenses([]));
     }, []);
+
+    const getAdvanceTotalForTrip = (tripId: number, ratePartyType: string) => {
+        return advances
+            .filter(advance => advance.tripId === tripId && advance.ratePartyType === ratePartyType)
+            .reduce((sum, advance) => sum + (advance.amount || 0), 0);
+    };
+
+    const summary = useMemo<DailySummary>(() => {
+        const totalTrips = trips.length;
+        const totalRevenue = trips.reduce((sum, trip) => sum + (trip.revenue || 0), 0);
+        const totalCost = trips.reduce((sum, trip) => sum + (trip.materialCost || 0) + (trip.transportCost || 0) + (trip.royaltyCost || 0), 0);
+        const totalProfit = trips.reduce((sum, trip) => sum + (trip.profit || 0), 0);
+        return { totalTrips, totalRevenue, totalCost, totalProfit };
+    }, [trips]);
+
+    const financials = useMemo<FinancialStatus>(() => {
+        const expenseAdjustments = allExpenses.reduce((acc, item) => {
+            if (!item.ratePartyType) return acc;
+            const amount = item.type === 'DEBIT' ? item.amount : -item.amount;
+            acc[item.ratePartyType] = (acc[item.ratePartyType] || 0) + amount;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const outstandingCustomer = trips.reduce((sum, trip) => {
+            const advancesForCustomer = getAdvanceTotalForTrip(trip.id, 'vendor-customer');
+            return sum + Math.max(0, (trip.revenue || 0) - advancesForCustomer);
+        }, 0);
+        const outstandingTransporter = trips.reduce((sum, trip) => {
+            const advancesForTransporter = getAdvanceTotalForTrip(trip.id, 'transport-owner');
+            return sum + Math.max(0, (trip.transportCost || 0) - advancesForTransporter);
+        }, 0);
+        const outstandingQuarry = trips.reduce((sum, trip) => {
+            const advancesForQuarry = getAdvanceTotalForTrip(trip.id, 'mine-quarry');
+            return sum + Math.max(0, (trip.materialCost || 0) - advancesForQuarry);
+        }, 0);
+        return {
+            outstandingCustomer: Math.max(0, outstandingCustomer - (expenseAdjustments['vendor-customer'] || 0)),
+            outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0)),
+            outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0)),
+        };
+    }, [trips, advances, allExpenses]);
+
+    const profitData = useMemo<ChartData[]>(() => {
+        const byDate: Record<string, number> = {};
+        trips.forEach(trip => {
+            const dateKey = trip.date;
+            byDate[dateKey] = (byDate[dateKey] || 0) + (trip.profit || 0);
+        });
+        return Object.entries(byDate).map(([name, value]) => ({ name, value }));
+    }, [trips]);
+
+    const costData = useMemo<ChartData[]>(() => {
+        const transportCost = trips.reduce((sum, trip) => sum + (trip.transportCost || 0), 0);
+        const materialCost = trips.reduce((sum, trip) => sum + (trip.materialCost || 0), 0);
+        const royaltyCost = trips.reduce((sum, trip) => sum + (trip.royaltyCost || 0), 0);
+        return [
+            { name: 'Transport', value: transportCost },
+            { name: 'Material', value: materialCost },
+            { name: 'Royalty', value: royaltyCost },
+        ];
+    }, [trips]);
 
     return (
         <div className="relative">
@@ -35,7 +88,7 @@ const Financials: React.FC = () => {
                 subtitle="An overview of your company's financial performance."
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={filterData}
+                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
             />
             
