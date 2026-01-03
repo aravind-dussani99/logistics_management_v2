@@ -35,6 +35,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.LOGITRACK_SA_KEY }}
+          service_account: ${{ vars.LOGITRACK_SA }}
       - name: Start Cloud SQL Proxy (dev)
         run: |
           if [ -z "${CLOUDSQL_INSTANCE_CONNECTION}" ]; then
@@ -45,6 +50,18 @@ jobs:
           chmod +x cloud-sql-proxy
           ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
           sleep 3
+      - name: Verify Cloud SQL Proxy (dev)
+        run: |
+          for i in $(seq 1 10); do
+            if (echo > /dev/tcp/127.0.0.1/${DB_PROXY_PORT}) >/dev/null 2>&1; then
+              echo "Cloud SQL Proxy is accepting connections on ${DB_PROXY_PORT}"
+              exit 0
+            fi
+            echo "Waiting for Cloud SQL Proxy..."
+            sleep 2
+          done
+          echo "Cloud SQL Proxy did not become ready" >&2
+          exit 1
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -130,6 +147,9 @@ jobs:
         working-directory: backend
 
       - name: Start Cloud SQL Proxy (prod)
+        env:
+          CLOUDSQL_INSTANCE_CONNECTION: ${{ env.CLOUDSQL_INSTANCE_CONNECTION }}
+          DB_PROXY_PORT: ${{ env.DB_PROXY_PORT }}
         run: |
           if [ -z "${CLOUDSQL_INSTANCE_CONNECTION}" ]; then
             echo "CLOUDSQL_INSTANCE_CONNECTION is required for prod migrations" >&2
@@ -139,6 +159,18 @@ jobs:
           chmod +x cloud-sql-proxy
           ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
           sleep 3
+      - name: Verify Cloud SQL Proxy (prod)
+        run: |
+          for i in $(seq 1 10); do
+            if (echo > /dev/tcp/127.0.0.1/${DB_PROXY_PORT}) >/dev/null 2>&1; then
+              echo "Cloud SQL Proxy is accepting connections on ${DB_PROXY_PORT}"
+              exit 0
+            fi
+            echo "Waiting for Cloud SQL Proxy..."
+            sleep 2
+          done
+          echo "Cloud SQL Proxy did not become ready" >&2
+          exit 1
 
       - name: Run Prisma migrations (prod)
         working-directory: backend
