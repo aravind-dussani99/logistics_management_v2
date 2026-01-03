@@ -177,6 +177,8 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 - `FRONTEND_BUCKET_DEV` (can be same as prod for now)
 - `CORS_ORIGIN_DEV`
 - `CONFIG_BUCKET` (optional, defaults to frontend bucket)
+- `CLOUDSQL_INSTANCE_CONNECTION` (project:region:instance)
+- `DB_PROXY_PORT` (optional, default 5432)
 
 ## 7) Terraform Outline
 
