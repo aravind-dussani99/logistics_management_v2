@@ -36,10 +36,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Start Cloud SQL Proxy (dev)
-        uses: google-github-actions/cloud-sql-proxy@v2
-        with:
-          instances: ${{ env.CLOUDSQL_INSTANCE_CONNECTION }}
-          port: ${{ env.DB_PROXY_PORT }}
+        run: |
+          if [ -z "${CLOUDSQL_INSTANCE_CONNECTION}" ]; then
+            echo "CLOUDSQL_INSTANCE_CONNECTION is required for PR migrations" >&2
+            exit 1
+          fi
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.4/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
+          sleep 3
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -125,10 +130,15 @@ jobs:
         working-directory: backend
 
       - name: Start Cloud SQL Proxy (prod)
-        uses: google-github-actions/cloud-sql-proxy@v2
-        with:
-          instances: ${{ env.CLOUDSQL_INSTANCE_CONNECTION }}
-          port: ${{ env.DB_PROXY_PORT }}
+        run: |
+          if [ -z "${CLOUDSQL_INSTANCE_CONNECTION}" ]; then
+            echo "CLOUDSQL_INSTANCE_CONNECTION is required for prod migrations" >&2
+            exit 1
+          fi
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.4/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
+          sleep 3
 
       - name: Run Prisma migrations (prod)
         working-directory: backend
