@@ -317,10 +317,10 @@ jobs:
 
       - name: Deploy Backend to Cloud Run
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD_CLOUDRUN }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_PROD secret is required for prod deployments" >&2
+            echo "DATABASE_URL_PROD_CLOUDRUN secret is required for prod deployments" >&2
             exit 1
           fi
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
@@ -330,6 +330,7 @@ jobs:
             --platform managed \
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
+            --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
             --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN},CONFIG_BUCKET=${CONFIG_BUCKET},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 
@@ -398,10 +399,10 @@ jobs:
 
       - name: Deploy Backend to Cloud Run (dev)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV_CLOUDRUN }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_DEV secret is required for PR deployments" >&2
+            echo "DATABASE_URL_DEV_CLOUDRUN secret is required for PR deployments" >&2
             exit 1
           fi
           gcloud run deploy "${BACKEND_SERVICE_NAME_DEV}" \
@@ -411,6 +412,7 @@ jobs:
             --platform managed \
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
+            --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
             --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 

@@ -167,6 +167,8 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 - `LOGITRACK_CLOUD_SQL_SA`: JSON key for `logitrack-cloud-sql-sa`
 - `DATABASE_URL_DEV`: dev database connection string
 - `DATABASE_URL_PROD`: prod database connection string
+- `DATABASE_URL_DEV_CLOUDRUN`: dev DB string using Cloud SQL socket
+- `DATABASE_URL_PROD_CLOUDRUN`: prod DB string using Cloud SQL socket
 
 **Variables**
 - `GCP_PROJECT_ID`
