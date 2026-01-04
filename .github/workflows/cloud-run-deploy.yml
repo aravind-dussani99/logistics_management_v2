@@ -483,7 +483,8 @@ jobs:
         working-directory: frontend
 
       - name: Build
-        run: npm run build
+        run: |
+          npm run build || (rm -rf node_modules package-lock.json && npm install --include=optional && npm run build)
         working-directory: frontend
         env:
           VITE_API_BASE_URL: ${{ env.FRONTEND_API_BASE_URL }}
@@ -530,11 +531,12 @@ jobs:
           fi
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --include=optional
         working-directory: frontend
 
       - name: Build
-        run: npm run build
+        run: |
+          npm run build || (rm -rf node_modules package-lock.json && npm install --include=optional && npm run build)
         working-directory: frontend
         env:
           VITE_API_BASE_URL: ${{ needs.build-push-deploy-backend-dev.outputs.backend_url }}
