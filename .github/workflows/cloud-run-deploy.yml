@@ -312,6 +312,10 @@ jobs:
       - name: Detect backend changes (prod)
         id: backend-changes-prod
         run: |
+          BASE_SHA="${{ github.event.before }}"
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --prune --depth=200 origin "${BASE_SHA}"
+          fi
           CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -E '^backend/|^backend\\.Dockerfile|^backend/Dockerfile' || true)
           if [ -n "${CHANGED}" ]; then
             echo "backend_changed=true" >> $GITHUB_OUTPUT
@@ -442,6 +446,10 @@ jobs:
       - name: Detect backend changes (dev)
         id: backend-changes-dev
         run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --prune --depth=200 origin "${BASE_SHA}"
+          fi
           CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -E '^backend/|^backend\\.Dockerfile|^backend/Dockerfile' || true)
           if [ -n "${CHANGED}" ]; then
             echo "backend_changed=true" >> $GITHUB_OUTPUT
@@ -548,6 +556,10 @@ jobs:
       - name: Detect frontend changes (prod)
         id: frontend-changes-prod
         run: |
+          BASE_SHA="${{ github.event.before }}"
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --prune --depth=200 origin "${BASE_SHA}"
+          fi
           CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -E '^frontend/' || true)
           if [ -n "${CHANGED}" ]; then
             echo "frontend_changed=true" >> $GITHUB_OUTPUT
@@ -617,6 +629,10 @@ jobs:
       - name: Detect frontend changes (dev)
         id: frontend-changes-dev
         run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --prune --depth=200 origin "${BASE_SHA}"
+          fi
           CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -E '^frontend/' || true)
           if [ -n "${CHANGED}" ]; then
             echo "frontend_changed=true" >> $GITHUB_OUTPUT
