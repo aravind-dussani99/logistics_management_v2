@@ -159,7 +159,8 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 ### Step 8: GitHub Actions Secrets/Vars
 
 **Secrets**
-- `LOGITRACK_SA_KEY`: JSON key for `logitrack-ci`
+- `LOGITRACK_SA_KEY`: JSON key for `logitrack-sa` (Cloud Run/GAR)
+- `LOGITRACK_CLOUD_SQL_SA`: JSON key for `logitrack-cloud-sql-sa`
 - `DATABASE_URL_DEV`: dev database connection string
 - `DATABASE_URL_PROD`: prod database connection string
 
@@ -170,6 +171,7 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 - `CLOUD_RUN_SERVICE` (backend)
 - `IMAGE_NAME_BACKEND`
 - `LOGITRACK_SA` (runtime service account email)
+- `LOGITRACK_CLOUD_SQL_SA_SA` (Cloud SQL service account email)
 - `FRONTEND_API_BASE_URL` (e.g. backend URL)
 - `CORS_ORIGIN` (frontend URL)
 - `FRONTEND_BUCKET`
