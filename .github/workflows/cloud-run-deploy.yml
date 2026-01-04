@@ -316,7 +316,13 @@ jobs:
           docker push "${IMAGE_URI}"
 
       - name: Deploy Backend to Cloud Run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
         run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "DATABASE_URL_PROD secret is required for prod deployments" >&2
+            exit 1
+          fi
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
             --image "${IMAGE_URI}" \
             --region "${REGION}" \
@@ -324,7 +330,7 @@ jobs:
             --platform managed \
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN},CONFIG_BUCKET=${CONFIG_BUCKET}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN},CONFIG_BUCKET=${CONFIG_BUCKET},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 
   build-push-deploy-backend-dev:
@@ -391,7 +397,13 @@ jobs:
           docker push "${IMAGE_URI}"
 
       - name: Deploy Backend to Cloud Run (dev)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
         run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "DATABASE_URL_DEV secret is required for PR deployments" >&2
+            exit 1
+          fi
           gcloud run deploy "${BACKEND_SERVICE_NAME_DEV}" \
             --image "${IMAGE_URI}" \
             --region "${REGION}" \
@@ -399,7 +411,7 @@ jobs:
             --platform managed \
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 
       - name: Capture Backend URL (dev)

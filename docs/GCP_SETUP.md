@@ -41,6 +41,10 @@ To enable CDN for a static site on GCS you need a Global HTTP(S) Load Balancer:
 
 Costs: load balancer + CDN egress + request charges (small but non-zero).
 
+**SPA route handling (required for React Router)**:
+- Configure the load balancer to serve `/index.html` for all unknown paths.
+- This ensures deep links like `/reports` or `/material-rates` render correctly.
+
 ## 1.3) Runtime Config (no rebuild URL changes)
 
 The frontend loads `/config.json` at runtime and uses `apiBaseUrl`.
