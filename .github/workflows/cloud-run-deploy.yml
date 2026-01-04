@@ -48,7 +48,7 @@ jobs:
           fi
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.4/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
-          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
+          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" > proxy-dev.log 2>&1 &
           sleep 3
       - name: Verify Cloud SQL Proxy (dev)
         run: |
@@ -60,6 +60,10 @@ jobs:
             echo "Waiting for Cloud SQL Proxy..."
             sleep 2
           done
+          if [ -f proxy-dev.log ]; then
+            echo "--- Cloud SQL Proxy (dev) log ---"
+            cat proxy-dev.log
+          fi
           echo "Cloud SQL Proxy did not become ready" >&2
           exit 1
       - name: Check DB connectivity (dev)
@@ -70,9 +74,35 @@ jobs:
             echo "DATABASE_URL_DEV secret is required for PR migrations" >&2
             exit 1
           fi
+          python3 - <<'PY'
+          import os
+          import sys
+          import urllib.parse
+          url = os.environ.get("DATABASE_URL", "")
+          if url.count("@") > 1:
+            print("DATABASE_URL appears to contain an unencoded '@' in the password. URL-encode it.")
+            sys.exit(1)
+          parsed = urllib.parse.urlparse(url)
+          userinfo = parsed.netloc.split("@")[0] if "@" in parsed.netloc else ""
+          user, _, password = userinfo.partition(":")
+          allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~%")
+          def bad(value):
+            return any(ch not in allowed for ch in value)
+          if bad(user) or bad(password):
+            print("DATABASE_URL contains unencoded special characters. URL-encode username/password.")
+            sys.exit(1)
+          PY
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client
           DB_URL_NO_SCHEMA="${DATABASE_URL%\?schema=public}"
+          for i in $(seq 1 5); do
+            if psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;" >/dev/null 2>&1; then
+              echo "Database connection successful."
+              exit 0
+            fi
+            echo "Waiting for database connection..."
+            sleep 2
+          done
           psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -169,7 +199,7 @@ jobs:
           fi
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.4/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
-          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" &
+          ./cloud-sql-proxy "${CLOUDSQL_INSTANCE_CONNECTION}" --port "${DB_PROXY_PORT}" > proxy-prod.log 2>&1 &
           sleep 3
       - name: Verify Cloud SQL Proxy (prod)
         run: |
@@ -181,6 +211,10 @@ jobs:
             echo "Waiting for Cloud SQL Proxy..."
             sleep 2
           done
+          if [ -f proxy-prod.log ]; then
+            echo "--- Cloud SQL Proxy (prod) log ---"
+            cat proxy-prod.log
+          fi
           echo "Cloud SQL Proxy did not become ready" >&2
           exit 1
       - name: Check DB connectivity (prod)
@@ -191,9 +225,35 @@ jobs:
             echo "DATABASE_URL_PROD secret is required for prod migrations" >&2
             exit 1
           fi
+          python3 - <<'PY'
+          import os
+          import sys
+          import urllib.parse
+          url = os.environ.get("DATABASE_URL", "")
+          if url.count("@") > 1:
+            print("DATABASE_URL appears to contain an unencoded '@' in the password. URL-encode it.")
+            sys.exit(1)
+          parsed = urllib.parse.urlparse(url)
+          userinfo = parsed.netloc.split("@")[0] if "@" in parsed.netloc else ""
+          user, _, password = userinfo.partition(":")
+          allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~%")
+          def bad(value):
+            return any(ch not in allowed for ch in value)
+          if bad(user) or bad(password):
+            print("DATABASE_URL contains unencoded special characters. URL-encode username/password.")
+            sys.exit(1)
+          PY
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client
           DB_URL_NO_SCHEMA="${DATABASE_URL%\?schema=public}"
+          for i in $(seq 1 5); do
+            if psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;" >/dev/null 2>&1; then
+              echo "Database connection successful."
+              exit 0
+            fi
+            echo "Waiting for database connection..."
+            sleep 2
+          done
           psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
 
       - name: Run Prisma migrations (prod)
