@@ -311,6 +311,17 @@ jobs:
             echo "backend_changed=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check existing backend image (prod)
+        id: backend-image-prod
+        run: |
+          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
+          if [ -n "${IMAGE_URI}" ]; then
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "latest_image=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ensure GAR repository
         run: |
           if ! gcloud artifacts repositories describe "${GAR_REPOSITORY}" --location "${REGION}" >/dev/null 2>&1; then
@@ -321,7 +332,7 @@ jobs:
           fi
 
       - name: Build and Push Backend Image (prod)
-        if: steps.backend-changes-prod.outputs.backend_changed == 'true'
+        if: steps.backend-changes-prod.outputs.backend_changed == 'true' || steps.backend-image-prod.outputs.image_exists != 'true'
         run: |
           IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}:${GITHUB_SHA}"
           echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
@@ -329,14 +340,9 @@ jobs:
           docker push "${IMAGE_URI}"
 
       - name: Use Latest Backend Image (prod)
-        if: steps.backend-changes-prod.outputs.backend_changed != 'true'
+        if: steps.backend-changes-prod.outputs.backend_changed != 'true' && steps.backend-image-prod.outputs.image_exists == 'true'
         run: |
-          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
-          if [ -z "${IMAGE_URI}" ]; then
-            echo "No existing image found in GAR. Please push once." >&2
-            exit 1
-          fi
-          echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
+          echo "IMAGE_URI=${{ steps.backend-image-prod.outputs.latest_image }}" >> $GITHUB_ENV
 
       - name: Deploy Backend to Cloud Run
         env:
@@ -433,6 +439,17 @@ jobs:
             echo "backend_changed=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Check existing backend image (dev)
+        id: backend-image-dev
+        run: |
+          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND_PR}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
+          if [ -n "${IMAGE_URI}" ]; then
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "latest_image=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ensure GAR repository
         run: |
           if ! gcloud artifacts repositories describe "${GAR_REPOSITORY}" --location "${REGION}" >/dev/null 2>&1; then
@@ -443,7 +460,7 @@ jobs:
           fi
 
       - name: Build and Push Backend Image (dev)
-        if: steps.backend-changes-dev.outputs.backend_changed == 'true'
+        if: steps.backend-changes-dev.outputs.backend_changed == 'true' || steps.backend-image-dev.outputs.image_exists != 'true'
         run: |
           IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND_PR}:${GITHUB_SHA}"
           echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
@@ -451,14 +468,9 @@ jobs:
           docker push "${IMAGE_URI}"
 
       - name: Use Latest Backend Image (dev)
-        if: steps.backend-changes-dev.outputs.backend_changed != 'true'
+        if: steps.backend-changes-dev.outputs.backend_changed != 'true' && steps.backend-image-dev.outputs.image_exists == 'true'
         run: |
-          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND_PR}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
-          if [ -z "${IMAGE_URI}" ]; then
-            echo "No existing image found in GAR. Please push once." >&2
-            exit 1
-          fi
-          echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
+          echo "IMAGE_URI=${{ steps.backend-image-dev.outputs.latest_image }}" >> $GITHUB_ENV
 
       - name: Deploy Backend to Cloud Run (dev)
         env:
