@@ -31,6 +31,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.get('/', (_req, res) => {
+  res.status(200).json({ status: 'ok', message: 'LogiTrack API is running' });
+});
+
 app.get('/api/admin/config', async (_req, res) => {
   if (!CONFIG_BUCKET) {
     res.status(400).json({ error: 'CONFIG_BUCKET is not configured' });

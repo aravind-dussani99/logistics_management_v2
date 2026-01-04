@@ -142,7 +142,7 @@ jobs:
           node-version: 18
           cache: npm
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --include=optional
         working-directory: frontend
       - name: Lint
         run: npm run lint --if-present
@@ -479,7 +479,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --include=optional
         working-directory: frontend
 
       - name: Build

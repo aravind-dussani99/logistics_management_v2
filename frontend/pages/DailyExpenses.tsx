@@ -172,9 +172,9 @@ const DailyExpenses: React.FC = () => {
     }, [analyticsExpenses]);
 
     const totalSpent = useMemo(() => analyticsExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0), [analyticsExpenses]);
+    const totalReceived = useMemo(() => analyticsExpenses.filter(e => e.type === 'CREDIT').reduce((sum, e) => sum + Number(e.amount || 0), 0), [analyticsExpenses]);
+    const totalSpentOnly = useMemo(() => analyticsExpenses.filter(e => e.type === 'DEBIT').reduce((sum, e) => sum + Number(e.amount || 0), 0), [analyticsExpenses]);
     const topCategory = useMemo(() => categoryTotals.slice().sort((a, b) => b.value - a.value)[0], [categoryTotals]);
-    const topSubCategory = useMemo(() => subCategoryTotals.slice().sort((a, b) => b.value - a.value)[0], [subCategoryTotals]);
-    const avgPerDay = useMemo(() => (dailyTotals.length ? totalSpent / dailyTotals.length : 0), [dailyTotals.length, totalSpent]);
 
     const totalPages = Math.ceil(filteredExpenses.length / ITEMS_PER_PAGE);
     const paginatedExpenses = useMemo(() => {
@@ -379,22 +379,21 @@ const DailyExpenses: React.FC = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Total Spend</p>
-                                <p className="text-2xl font-semibold">{formatCurrency(totalSpent)}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Total Received</p>
+                                <p className="text-2xl font-semibold">{formatCurrency(totalReceived)}</p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Avg / Day</p>
-                                <p className="text-2xl font-semibold">{formatCurrency(avgPerDay)}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Total Spend</p>
+                                <p className="text-2xl font-semibold">{formatCurrency(totalSpentOnly)}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Available Balance</p>
+                                <p className="text-2xl font-semibold">{formatCurrency(currentBalance)}</p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                                 <p className="text-xs text-gray-500 dark:text-gray-400">Top Category</p>
                                 <p className="text-lg font-semibold">{topCategory?.name || '-'}</p>
                                 <p className="text-sm text-gray-500">{topCategory ? formatCurrency(topCategory.value) : ''}</p>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Top Sub-Category</p>
-                                <p className="text-lg font-semibold">{topSubCategory?.name || '-'}</p>
-                                <p className="text-sm text-gray-500">{topSubCategory ? formatCurrency(topSubCategory.value) : ''}</p>
                             </div>
                         </div>
 
@@ -442,13 +441,13 @@ const DailyExpenses: React.FC = () => {
 
                         <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
                             <div className="p-4 border-b dark:border-gray-700">
-                                <h3 className="text-sm font-semibold">Category Totals</h3>
+                                <h3 className="text-sm font-semibold">Category Details</h3>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                     <thead className="bg-gray-50 dark:bg-gray-700">
                                         <tr>
-                                            {['Category', 'Amount'].map(header => (
+                                            {['Date', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks'].map(header => (
                                                 <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                                                     {header}
                                                 </th>
@@ -456,15 +455,21 @@ const DailyExpenses: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {categoryTotals.map(row => (
-                                            <tr key={row.name}>
-                                                <td className="px-6 py-3 text-sm">{row.name}</td>
-                                                <td className="px-6 py-3 text-sm font-semibold">{formatCurrency(row.value)}</td>
+                                        {analyticsExpenses.map(row => (
+                                            <tr key={row.id}>
+                                                <td className="px-6 py-3 text-sm">{formatDateDisplay(row.date)}</td>
+                                                <td className="px-6 py-3 text-sm">{row.type === 'CREDIT' ? `From: ${row.to}` : `To: ${row.to}`}</td>
+                                                <td className={`px-6 py-3 text-sm font-semibold ${row.type === 'DEBIT' ? 'text-red-500' : 'text-green-500'}`}>
+                                                    {row.type === 'DEBIT' ? '-' : '+'} {formatCurrency(row.amount)}
+                                                </td>
+                                                <td className="px-6 py-3 text-sm">{row.category || '-'}</td>
+                                                <td className="px-6 py-3 text-sm">{row.subCategory || '-'}</td>
+                                                <td className="px-6 py-3 text-sm max-w-xs truncate">{row.remarks || '-'}</td>
                                             </tr>
                                         ))}
-                                        {categoryTotals.length === 0 && (
+                                        {analyticsExpenses.length === 0 && (
                                             <tr>
-                                                <td colSpan={2} className="px-6 py-6 text-center text-sm text-gray-500">
+                                                <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500">
                                                     No data for selected filters.
                                                 </td>
                                             </tr>
