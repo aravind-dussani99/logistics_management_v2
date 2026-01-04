@@ -176,6 +176,7 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 - `GAR_REPOSITORY`
 - `CLOUD_RUN_SERVICE` (backend)
 - `IMAGE_NAME_BACKEND`
+- `IMAGE_NAME_BACKEND_PR` (optional, default: logitrack-api-pr)
 - `LOGITRACK_SA` (runtime service account email)
 - `LOGITRACK_CLOUD_SQL_SA_SA` (Cloud SQL service account email)
 - `FRONTEND_API_BASE_URL` (e.g. backend URL)

@@ -26,6 +26,7 @@ env:
   CONFIG_BUCKET: ${{ vars.CONFIG_BUCKET || vars.FRONTEND_BUCKET }}
   CONFIG_BUCKET_DEV: ${{ vars.CONFIG_BUCKET_DEV || vars.FRONTEND_BUCKET_DEV }}
   IMAGE_NAME_BACKEND: ${{ vars.IMAGE_NAME_BACKEND || 'logitrack-api' }}
+  IMAGE_NAME_BACKEND_PR: ${{ vars.IMAGE_NAME_BACKEND_PR || 'logitrack-api-pr' }}
   CLOUDSQL_INSTANCE_CONNECTION: ${{ vars.CLOUDSQL_INSTANCE_CONNECTION }}
   DB_PROXY_PORT: ${{ vars.DB_PROXY_PORT || '5432' }}
 
@@ -300,6 +301,16 @@ jobs:
       - name: Configure Docker auth for GAR
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      - name: Detect backend changes (prod)
+        id: backend-changes-prod
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -E '^backend/|^backend\\.Dockerfile|^backend/Dockerfile' || true)
+          if [ -n "${CHANGED}" ]; then
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ensure GAR repository
         run: |
           if ! gcloud artifacts repositories describe "${GAR_REPOSITORY}" --location "${REGION}" >/dev/null 2>&1; then
@@ -309,12 +320,23 @@ jobs:
               --description "Docker repository for LogiTrack"
           fi
 
-      - name: Build and Push Backend Image
+      - name: Build and Push Backend Image (prod)
+        if: steps.backend-changes-prod.outputs.backend_changed == 'true'
         run: |
           IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}:${GITHUB_SHA}"
           echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
           docker build -t "${IMAGE_URI}" ./backend
           docker push "${IMAGE_URI}"
+
+      - name: Use Latest Backend Image (prod)
+        if: steps.backend-changes-prod.outputs.backend_changed != 'true'
+        run: |
+          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
+          if [ -z "${IMAGE_URI}" ]; then
+            echo "No existing image found in GAR. Please push once." >&2
+            exit 1
+          fi
+          echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
 
       - name: Deploy Backend to Cloud Run
         env:
@@ -401,6 +423,16 @@ jobs:
       - name: Configure Docker auth for GAR
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      - name: Detect backend changes (dev)
+        id: backend-changes-dev
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -E '^backend/|^backend\\.Dockerfile|^backend/Dockerfile' || true)
+          if [ -n "${CHANGED}" ]; then
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ensure GAR repository
         run: |
           if ! gcloud artifacts repositories describe "${GAR_REPOSITORY}" --location "${REGION}" >/dev/null 2>&1; then
@@ -410,12 +442,23 @@ jobs:
               --description "Docker repository for LogiTrack"
           fi
 
-      - name: Build and Push Backend Image
+      - name: Build and Push Backend Image (dev)
+        if: steps.backend-changes-dev.outputs.backend_changed == 'true'
         run: |
-          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}:${GITHUB_SHA}"
+          IMAGE_URI="${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND_PR}:${GITHUB_SHA}"
           echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
           docker build -t "${IMAGE_URI}" ./backend
           docker push "${IMAGE_URI}"
+
+      - name: Use Latest Backend Image (dev)
+        if: steps.backend-changes-dev.outputs.backend_changed != 'true'
+        run: |
+          IMAGE_URI=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND_PR}" --format="value(IMAGE)" --limit=1 --sort-by=~UPDATE_TIME)
+          if [ -z "${IMAGE_URI}" ]; then
+            echo "No existing image found in GAR. Please push once." >&2
+            exit 1
+          fi
+          echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
 
       - name: Deploy Backend to Cloud Run (dev)
         env:
@@ -478,11 +521,28 @@ jobs:
           node-version: 18
           cache: npm
 
+      - name: Detect frontend changes (prod)
+        id: frontend-changes-prod
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -E '^frontend/' || true)
+          if [ -n "${CHANGED}" ]; then
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install Dependencies
+        if: steps.frontend-changes-prod.outputs.frontend_changed == 'true'
         run: npm ci --include=optional
         working-directory: frontend
 
+      - name: Ensure Rollup Linux Binary (prod)
+        if: steps.frontend-changes-prod.outputs.frontend_changed == 'true'
+        run: npm install @rollup/rollup-linux-x64-gnu@4.54.0 --no-save
+        working-directory: frontend
+
       - name: Build
+        if: steps.frontend-changes-prod.outputs.frontend_changed == 'true'
         run: |
           npm run build || (rm -rf node_modules package-lock.json && npm install --include=optional && npm run build)
         working-directory: frontend
@@ -499,7 +559,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Upload Frontend to GCS
-        if: env.FRONTEND_BUCKET != ''
+        if: env.FRONTEND_BUCKET != '' && steps.frontend-changes-prod.outputs.frontend_changed == 'true'
         run: |
           gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET}"
           gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET}/assets/**" || true
@@ -530,11 +590,28 @@ jobs:
             exit 1
           fi
 
+      - name: Detect frontend changes (dev)
+        id: frontend-changes-dev
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -E '^frontend/' || true)
+          if [ -n "${CHANGED}" ]; then
+            echo "frontend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install Dependencies
+        if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
         run: npm ci --include=optional
         working-directory: frontend
 
+      - name: Ensure Rollup Linux Binary (dev)
+        if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
+        run: npm install @rollup/rollup-linux-x64-gnu@4.54.0 --no-save
+        working-directory: frontend
+
       - name: Build
+        if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
         run: |
           npm run build || (rm -rf node_modules package-lock.json && npm install --include=optional && npm run build)
         working-directory: frontend
@@ -551,6 +628,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Upload Frontend to GCS (dev)
+        if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
         run: |
           gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET_DEV}"
           gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET_DEV}/assets/**" || true
