@@ -195,6 +195,35 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   useEffect(() => {
+    if (!currentUser) {
+        setTrips([]);
+        setAdvances([]);
+        setLedgerEntries([]);
+        setVehicles([]);
+        setQuarries([]);
+        setRoyaltyOwners([]);
+        setCustomers([]);
+        setCustomerRates([]);
+        setSiteLocations([]);
+        setMerchantTypes([]);
+        setMerchants([]);
+        setMerchantBankAccounts([]);
+        setAccountTypes([]);
+        setVehicleMasters([]);
+        setMineQuarries([]);
+        setVendorCustomers([]);
+        setRoyaltyOwnerProfiles([]);
+        setTransportOwnerProfiles([]);
+        setTransportOwnerVehicles([]);
+        setMaterialTypeDefinitions([]);
+        setMaterialRates([]);
+        setMaterials([]);
+        setRoyaltyStock([]);
+        setAccounts([]);
+        setAccountCategories([]);
+        setLoading(false);
+        return;
+    }
     const fetchData = async () => {
         setLoading(true);
         const [
@@ -278,7 +307,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLoading(false);
     }
     fetchData();
-  }, [refreshKey]);
+  }, [refreshKey, currentUser]);
 
   const addTrip = async (trip: Omit<NewTripData, 'createdBy'>) => {
     if (!currentUser) throw new Error("User not authenticated");

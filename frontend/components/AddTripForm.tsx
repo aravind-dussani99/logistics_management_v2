@@ -15,6 +15,9 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement | HTMLSe
 }
 
 const InputField: React.FC<InputProps> = ({ label, error, type, children, ...props }) => {
+    const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
+    const inputId = props.id || props.name || toId(label);
+    const inputName = props.name || inputId;
     const baseClasses = "mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm";
     const errorClasses = "border-red-500 focus:ring-red-500 focus:border-red-500";
     const finalClasses = `${baseClasses} ${error ? errorClasses : ''} ${type === 'date' ? 'pr-8' : ''}`;
@@ -22,14 +25,14 @@ const InputField: React.FC<InputProps> = ({ label, error, type, children, ...pro
 
     const renderInput = () => {
         if (type === 'select') {
-            return <select {...props} className={finalClasses}>{children}</select>
+            return <select {...props} id={inputId} name={inputName} className={finalClasses}>{children}</select>
         }
-        return <input type={type} {...props} value={inputValue} className={finalClasses} />
+        return <input type={type} {...props} id={inputId} name={inputName} value={inputValue} className={finalClasses} />
     }
 
     return (
         <div className="col-span-1">
-            <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
             <div className="relative">
                 {renderInput()}
                 {type === 'date' && (
@@ -52,9 +55,9 @@ const FileInputField: React.FC<FileInputProps> = ({ label, id, fileName, ...prop
      <div className="col-span-1">
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
         <div className="mt-1 flex items-center">
-            <label htmlFor={id} className="cursor-pointer bg-white dark:bg-gray-700 py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600">
+            <label htmlFor={id || label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'} className="cursor-pointer bg-white dark:bg-gray-700 py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm leading-4 font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600">
                 <span>Choose File</span>
-                <input {...props} id={id} name={id} type="file" className="sr-only" />
+                <input {...props} id={id || label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'} name={id || label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file'} type="file" className="sr-only" />
             </label>
             <span className="ml-3 text-sm text-gray-500 dark:text-gray-400 truncate">{fileName || "No file chosen"}</span>
         </div>
