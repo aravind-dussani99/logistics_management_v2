@@ -103,6 +103,10 @@ jobs:
             echo "Waiting for database connection..."
             sleep 2
           done
+          if [ -f proxy-dev.log ]; then
+            echo "--- Cloud SQL Proxy (dev) log ---"
+            cat proxy-dev.log
+          fi
           psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -254,6 +258,10 @@ jobs:
             echo "Waiting for database connection..."
             sleep 2
           done
+          if [ -f proxy-prod.log ]; then
+            echo "--- Cloud SQL Proxy (prod) log ---"
+            cat proxy-prod.log
+          fi
           psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
 
       - name: Run Prisma migrations (prod)
