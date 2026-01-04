@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
@@ -39,6 +40,8 @@ const DailyExpenses: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [refreshKey, setRefreshKey] = useState(0);
     const [supervisors, setSupervisors] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<'transactions' | 'insights'>('transactions');
+    const [insightFilters, setInsightFilters] = useState<{ category?: string; subCategory?: string; type?: string }>({});
 
     const fetchData = useCallback(() => {
         if (!currentUser) return;
@@ -130,6 +133,49 @@ const DailyExpenses: React.FC = () => {
             });
     }, [expenses, filters, openingBalance, currentUser]);
 
+    const analyticsExpenses = useMemo(() => {
+        return filteredExpenses.filter(expense => expense.id !== 'opening').filter(expense => {
+            if (insightFilters.type && expense.type !== insightFilters.type) return false;
+            if (insightFilters.category && (expense.category || '').toLowerCase() !== insightFilters.category.toLowerCase()) return false;
+            if (insightFilters.subCategory && (expense.subCategory || '').toLowerCase() !== insightFilters.subCategory.toLowerCase()) return false;
+            return true;
+        });
+    }, [filteredExpenses, insightFilters]);
+
+    const categoryTotals = useMemo(() => {
+        const totals = new Map<string, number>();
+        analyticsExpenses.forEach(expense => {
+            const key = expense.category || 'Uncategorized';
+            totals.set(key, (totals.get(key) || 0) + Number(expense.amount || 0));
+        });
+        return Array.from(totals.entries()).map(([name, value]) => ({ name, value }));
+    }, [analyticsExpenses]);
+
+    const subCategoryTotals = useMemo(() => {
+        const totals = new Map<string, number>();
+        analyticsExpenses.forEach(expense => {
+            const key = expense.subCategory || 'Uncategorized';
+            totals.set(key, (totals.get(key) || 0) + Number(expense.amount || 0));
+        });
+        return Array.from(totals.entries()).map(([name, value]) => ({ name, value }));
+    }, [analyticsExpenses]);
+
+    const dailyTotals = useMemo(() => {
+        const totals = new Map<string, number>();
+        analyticsExpenses.forEach(expense => {
+            const dateKey = expense.date ? expense.date.split('T')[0] : '';
+            totals.set(dateKey, (totals.get(dateKey) || 0) + Number(expense.amount || 0));
+        });
+        return Array.from(totals.entries())
+            .map(([date, value]) => ({ date, value }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+    }, [analyticsExpenses]);
+
+    const totalSpent = useMemo(() => analyticsExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0), [analyticsExpenses]);
+    const topCategory = useMemo(() => categoryTotals.slice().sort((a, b) => b.value - a.value)[0], [categoryTotals]);
+    const topSubCategory = useMemo(() => subCategoryTotals.slice().sort((a, b) => b.value - a.value)[0], [subCategoryTotals]);
+    const avgPerDay = useMemo(() => (dailyTotals.length ? totalSpent / dailyTotals.length : 0), [dailyTotals.length, totalSpent]);
+
     const totalPages = Math.ceil(filteredExpenses.length / ITEMS_PER_PAGE);
     const paginatedExpenses = useMemo(() => {
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -174,6 +220,25 @@ const DailyExpenses: React.FC = () => {
 
             <main className="pt-6">
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+                    <div className="px-4 pt-4 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('transactions')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md ${activeTab === 'transactions' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}
+                        >
+                            Transactions
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('insights')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md ${activeTab === 'insights' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}
+                        >
+                            Insights
+                        </button>
+                    </div>
+                </div>
+                {activeTab === 'transactions' && (
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden mt-4">
                      <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-wrap gap-4">
                         <div className="flex items-center gap-4">
                             <h2 className="text-xl font-semibold">Transaction History</h2>
@@ -265,6 +330,151 @@ const DailyExpenses: React.FC = () => {
                         </table>
                     </div>
                 </div>
+                )}
+                {activeTab === 'insights' && (
+                    <div className="mt-4 space-y-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-4 items-end">
+                            <div className="min-w-[220px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Category</label>
+                                <select
+                                    value={insightFilters.category || ''}
+                                    onChange={e => setInsightFilters(f => ({ ...f, category: e.target.value || undefined }))}
+                                    className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">All Categories</option>
+                                    {categoryTotals.map(item => (
+                                        <option key={item.name} value={item.name}>{item.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="min-w-[220px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Sub-Category</label>
+                                <select
+                                    value={insightFilters.subCategory || ''}
+                                    onChange={e => setInsightFilters(f => ({ ...f, subCategory: e.target.value || undefined }))}
+                                    className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">All Sub-Categories</option>
+                                    {subCategoryTotals.map(item => (
+                                        <option key={item.name} value={item.name}>{item.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="min-w-[180px]">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Type</label>
+                                <select
+                                    value={insightFilters.type || ''}
+                                    onChange={e => setInsightFilters(f => ({ ...f, type: e.target.value || undefined }))}
+                                    className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">All</option>
+                                    <option value="DEBIT">Expense</option>
+                                    <option value="CREDIT">Money In</option>
+                                </select>
+                            </div>
+                            <button onClick={exportToCsv} className="px-3 py-2 text-xs font-medium text-green-600 border border-green-600 rounded-md hover:bg-green-600 hover:text-white transition">
+                                Export to Excel
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Total Spend</p>
+                                <p className="text-2xl font-semibold">{formatCurrency(totalSpent)}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Avg / Day</p>
+                                <p className="text-2xl font-semibold">{formatCurrency(avgPerDay)}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Top Category</p>
+                                <p className="text-lg font-semibold">{topCategory?.name || '-'}</p>
+                                <p className="text-sm text-gray-500">{topCategory ? formatCurrency(topCategory.value) : ''}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Top Sub-Category</p>
+                                <p className="text-lg font-semibold">{topSubCategory?.name || '-'}</p>
+                                <p className="text-sm text-gray-500">{topSubCategory ? formatCurrency(topSubCategory.value) : ''}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 h-80">
+                                <h3 className="text-sm font-semibold mb-2">Spend by Category</h3>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={categoryTotals}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                                        <Legend />
+                                        <Bar dataKey="value" name="Amount" fill="#2563eb" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 h-80">
+                                <h3 className="text-sm font-semibold mb-2">Spend by Sub-Category</h3>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                                        <Pie data={subCategoryTotals} dataKey="value" nameKey="name" outerRadius={100} label>
+                                            {subCategoryTotals.map((_, idx) => (
+                                                <Cell key={idx} fill={['#0ea5e9', '#22c55e', '#f97316', '#e11d48', '#8b5cf6'][idx % 5]} />
+                                            ))}
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 h-80">
+                            <h3 className="text-sm font-semibold mb-2">Daily Spend Trend</h3>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={dailyTotals}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis />
+                                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                                    <Line type="monotone" dataKey="value" name="Amount" stroke="#16a34a" strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                            <div className="p-4 border-b dark:border-gray-700">
+                                <h3 className="text-sm font-semibold">Category Totals</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-700">
+                                        <tr>
+                                            {['Category', 'Amount'].map(header => (
+                                                <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                                    {header}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                        {categoryTotals.map(row => (
+                                            <tr key={row.name}>
+                                                <td className="px-6 py-3 text-sm">{row.name}</td>
+                                                <td className="px-6 py-3 text-sm font-semibold">{formatCurrency(row.value)}</td>
+                                            </tr>
+                                        ))}
+                                        {categoryTotals.length === 0 && (
+                                            <tr>
+                                                <td colSpan={2} className="px-6 py-6 text-center text-sm text-gray-500">
+                                                    No data for selected filters.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );
