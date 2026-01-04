@@ -323,6 +323,25 @@ jobs:
             echo "DATABASE_URL_PROD_CLOUDRUN secret is required for prod deployments" >&2
             exit 1
           fi
+          if [ -z "${LOGITRACK_SA}" ]; then
+            echo "LOGITRACK_SA is required to set the Cloud Run runtime service account" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlparse, parse_qs
+
+          url = os.environ.get("DATABASE_URL", "")
+          parsed = urlparse(url)
+          if not parsed.hostname:
+            print("DATABASE_URL_PROD_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
+            sys.exit(1)
+          qs = parse_qs(parsed.query)
+          if "host" not in qs:
+            print("DATABASE_URL_PROD_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
+            sys.exit(1)
+          PY
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
             --image "${IMAGE_URI}" \
             --region "${REGION}" \
@@ -405,6 +424,25 @@ jobs:
             echo "DATABASE_URL_DEV_CLOUDRUN secret is required for PR deployments" >&2
             exit 1
           fi
+          if [ -z "${LOGITRACK_SA}" ]; then
+            echo "LOGITRACK_SA is required to set the Cloud Run runtime service account" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlparse, parse_qs
+
+          url = os.environ.get("DATABASE_URL", "")
+          parsed = urlparse(url)
+          if not parsed.hostname:
+            print("DATABASE_URL_DEV_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
+            sys.exit(1)
+          qs = parse_qs(parsed.query)
+          if "host" not in qs:
+            print("DATABASE_URL_DEV_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
+            sys.exit(1)
+          PY
           gcloud run deploy "${BACKEND_SERVICE_NAME_DEV}" \
             --image "${IMAGE_URI}" \
             --region "${REGION}" \
