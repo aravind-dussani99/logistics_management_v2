@@ -72,7 +72,8 @@ jobs:
           fi
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client
-          psql "${DATABASE_URL}" -c "SELECT 1;"
+          DB_URL_NO_SCHEMA="${DATABASE_URL%\?schema=public}"
+          psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -192,7 +193,8 @@ jobs:
           fi
           sudo apt-get update -y
           sudo apt-get install -y postgresql-client
-          psql "${DATABASE_URL}" -c "SELECT 1;"
+          DB_URL_NO_SCHEMA="${DATABASE_URL%\?schema=public}"
+          psql "${DB_URL_NO_SCHEMA}" -c "SELECT 1;"
 
       - name: Run Prisma migrations (prod)
         working-directory: backend
