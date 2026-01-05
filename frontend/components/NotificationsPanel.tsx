@@ -11,32 +11,28 @@ const NotificationsPanel: React.FC = () => {
   const navigate = useNavigate();
   
   useEffect(() => {
-    if (!currentUser?.role) return;
-    const fetchNotifications = currentUser?.name
-      ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
-      : notificationApi.getAll(currentUser.role);
+    if (!currentUser?.role || !currentUser?.name) return;
+    const fetchNotifications = notificationApi.getAllForUser(currentUser.role, currentUser.name);
     fetchNotifications.then(setNotifications).catch(error => {
       console.error('Failed to load notifications', error);
     });
     const intervalId = setInterval(() => {
-      const refresh = currentUser?.name
-        ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
-        : notificationApi.getAll(currentUser.role);
-      refresh.then(setNotifications).catch(error => {
-        console.error('Failed to refresh notifications', error);
-      });
+      notificationApi.getAllForUser(currentUser.role, currentUser.name)
+        .then(setNotifications)
+        .catch(error => {
+          console.error('Failed to refresh notifications', error);
+        });
     }, 15000);
     return () => clearInterval(intervalId);
   }, [currentUser?.role, currentUser?.name]);
 
   useEffect(() => {
-    if (!isOpen || !currentUser?.role) return;
-    const fetchNotifications = currentUser?.name
-      ? notificationApi.getAllForUser(currentUser.role, currentUser.name)
-      : notificationApi.getAll(currentUser.role);
-    fetchNotifications.then(setNotifications).catch(error => {
-      console.error('Failed to refresh notifications', error);
-    });
+    if (!isOpen || !currentUser?.role || !currentUser?.name) return;
+    notificationApi.getAllForUser(currentUser.role, currentUser.name)
+      .then(setNotifications)
+      .catch(error => {
+        console.error('Failed to refresh notifications', error);
+      });
   }, [isOpen, currentUser?.role, currentUser?.name]);
 
   const unreadCount = notifications.filter(n => !n.read).length;

@@ -7,16 +7,21 @@ interface UserFormProps {
     onClose: () => void;
 }
 
-const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSelectElement> & {label: string, children?: React.ReactNode, isReadOnly?: boolean}> = ({ label, isReadOnly, children, ...props }) => (
-    <div>
-        <label htmlFor={props.id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
-        {props.type === 'select' ? (
-             <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{children}</select>
-        ) : (
-             <input {...props as React.InputHTMLAttributes<HTMLInputElement>} readOnly={isReadOnly} className={`mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700' : ''}`} />
-        )}
-    </div>
-);
+const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSelectElement> & {label: string, children?: React.ReactNode, isReadOnly?: boolean}> = ({ label, isReadOnly, children, ...props }) => {
+    const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
+    const inputId = props.id || props.name || toId(label);
+    const inputName = props.name || inputId;
+    return (
+        <div>
+            <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            {props.type === 'select' ? (
+                 <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} id={inputId} name={inputName} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{children}</select>
+            ) : (
+                 <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} readOnly={isReadOnly} className={`mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm ${isReadOnly ? 'bg-gray-100 dark:bg-gray-700' : ''}`} />
+            )}
+        </div>
+    );
+};
 
 const UserForm: React.FC<UserFormProps> = ({ user, onSave, onClose }) => {
     const [role, setRole] = useState<Role>(user.role);
