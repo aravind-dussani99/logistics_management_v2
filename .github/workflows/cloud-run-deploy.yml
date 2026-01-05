@@ -21,9 +21,9 @@ env:
   FRONTEND_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
   CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
   CORS_ORIGIN_DEV: ${{ vars.CORS_ORIGIN_DEV }}
-  FRONTEND_BUCKET: ${{ vars.FRONTEND_BUCKET }}
+  FRONTEND_BUCKET_PROD: ${{ vars.FRONTEND_BUCKET_PROD }}
   FRONTEND_BUCKET_DEV: ${{ vars.FRONTEND_BUCKET_DEV }}
-  CONFIG_BUCKET: ${{ vars.CONFIG_BUCKET || vars.FRONTEND_BUCKET }}
+  CONFIG_BUCKET: ${{ vars.CONFIG_BUCKET || vars.FRONTEND_BUCKET_PROD }}
   CONFIG_BUCKET_DEV: ${{ vars.CONFIG_BUCKET_DEV || vars.FRONTEND_BUCKET_DEV }}
   IMAGE_NAME_BACKEND: ${{ vars.IMAGE_NAME_BACKEND || 'logitrack-api' }}
   IMAGE_NAME_BACKEND_PR: ${{ vars.IMAGE_NAME_BACKEND_PR || 'logitrack-api-pr' }}
@@ -595,11 +595,11 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Upload Frontend to GCS
-        if: env.FRONTEND_BUCKET != '' && steps.frontend-changes-prod.outputs.frontend_changed == 'true'
+        if: env.FRONTEND_BUCKET_PROD != '' && steps.frontend-changes-prod.outputs.frontend_changed == 'true'
         run: |
-          gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET}"
-          gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET}/assets/**" || true
-          gsutil -m setmeta -h "Cache-Control:no-cache, max-age=0" "gs://${FRONTEND_BUCKET}/index.html" "gs://${FRONTEND_BUCKET}/config.json" || true
+          gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET_PROD}"
+          gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET_PROD}/assets/**" || true
+          gsutil -m setmeta -h "Cache-Control:no-cache, max-age=0" "gs://${FRONTEND_BUCKET_PROD}/index.html" "gs://${FRONTEND_BUCKET_PROD}/config.json" || true
 
   build-deploy-frontend-dev:
     runs-on: ubuntu-latest
