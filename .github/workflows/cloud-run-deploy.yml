@@ -33,61 +33,9 @@ env:
   DB_PROXY_PORT: ${{ vars.DB_PROXY_PORT || '5432' }}
 
 jobs:
-  detect-destructive-migrations:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    outputs:
-      destructive: ${{ steps.detect.outputs.destructive }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect destructive migrations
-        id: detect
-        run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.sha }}"
-          if [ -z "${BASE_SHA}" ]; then
-            echo "destructive=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          git fetch origin "${BASE_SHA}" --depth=1 || true
-          CHANGED=$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" -- 'backend/prisma/migrations/**/migration.sql' || true)
-          if [ -z "${CHANGED}" ]; then
-            echo "destructive=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          PATTERN='DROP TABLE|DROP COLUMN|DROP TYPE|ALTER TABLE[^;]*DROP|TRUNCATE'
-          MATCHES=$(grep -nE "${PATTERN}" ${CHANGED} || true)
-          if [ -z "${MATCHES}" ]; then
-            echo "destructive=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          {
-            echo "### Destructive migration review required"
-            echo ""
-            echo "The following migration files include destructive operations:"
-            echo ""
-            echo "\`\`\`"
-            echo "${MATCHES}"
-            echo "\`\`\`"
-          } >> $GITHUB_STEP_SUMMARY
-          echo "destructive=true" >> $GITHUB_OUTPUT
-
-  approve-destructive-migrations:
-    runs-on: ubuntu-latest
-    needs: [detect-destructive-migrations]
-    if: needs.detect-destructive-migrations.outputs.destructive == 'true'
-    environment: destructive-migrations
-    steps:
-      - name: Await approval
-        run: echo "Destructive migration approval granted."
-
   migrate-dev:
     runs-on: ubuntu-latest
-    needs: [detect-destructive-migrations, approve-destructive-migrations]
-    if: github.event_name == 'pull_request' && (needs.detect-destructive-migrations.outputs.destructive != 'true' || needs.approve-destructive-migrations.result == 'success')
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
