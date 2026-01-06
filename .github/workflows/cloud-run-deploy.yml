@@ -19,12 +19,14 @@ env:
   BACKEND_SERVICE_NAME_DEV: ${{ vars.CLOUD_RUN_SERVICE_DEV }}
   LOGITRACK_SA: ${{ vars.LOGITRACK_SA }}
   FRONTEND_API_BASE_URL: ${{ vars.FRONTEND_API_BASE_URL }}
-  CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+  CORS_ORIGIN_PROD: ${{ vars.CORS_ORIGIN_PROD }}
   CORS_ORIGIN_DEV: ${{ vars.CORS_ORIGIN_DEV }}
   FRONTEND_BUCKET_PROD: ${{ vars.FRONTEND_BUCKET_PROD }}
   FRONTEND_BUCKET_DEV: ${{ vars.FRONTEND_BUCKET_DEV }}
   CONFIG_BUCKET_PROD: ${{ vars.CONFIG_BUCKET_PROD || vars.FRONTEND_BUCKET_PROD }}
   CONFIG_BUCKET_DEV: ${{ vars.CONFIG_BUCKET_DEV || vars.FRONTEND_BUCKET_DEV }}
+  ATTACHMENTS_BUCKET_PROD: ${{ vars.ATTACHMENTS_BUCKET_PROD }}
+  ATTACHMENTS_BUCKET_DEV: ${{ vars.ATTACHMENTS_BUCKET_DEV }}
   IMAGE_NAME_BACKEND: ${{ vars.IMAGE_NAME_BACKEND || 'logitrack-api' }}
   IMAGE_NAME_BACKEND_PR: ${{ vars.IMAGE_NAME_BACKEND_PR || 'logitrack-api-pr' }}
   CLOUDSQL_INSTANCE_CONNECTION: ${{ vars.CLOUDSQL_INSTANCE_CONNECTION }}
@@ -391,7 +393,7 @@ jobs:
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
             --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN},CONFIG_BUCKET=${CONFIG_BUCKET_PROD},DATABASE_URL=${DATABASE_URL}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_PROD},CONFIG_BUCKET=${CONFIG_BUCKET_PROD},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_PROD},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 
   build-push-deploy-backend-dev:
@@ -525,7 +527,7 @@ jobs:
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
             --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},DATABASE_URL=${DATABASE_URL}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_DEV},DATABASE_URL=${DATABASE_URL}" \
             --allow-unauthenticated
 
       - name: Capture Backend URL (dev)

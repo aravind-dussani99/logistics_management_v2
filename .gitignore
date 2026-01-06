@@ -13,6 +13,7 @@ dist-ssr
 *.local
 dev.db
 backups/
+uploads/
 
 # Editor directories and files
 .vscode/*

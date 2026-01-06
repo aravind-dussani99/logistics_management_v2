@@ -11,9 +11,19 @@ const prisma = new PrismaClient();
 const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const storage = new Storage();
 const CONFIG_BUCKET = process.env.CONFIG_BUCKET || '';
+const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET || '';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
+const UPLOADS_ROOT = path.resolve(__dirname, '..', 'uploads');
+const UPLOAD_FIELDS = new Set([
+  'ewayBillUpload',
+  'invoiceDCUpload',
+  'waymentSlipUpload',
+  'royaltyUpload',
+  'taxInvoiceUpload',
+  'endWaymentSlipUpload',
+]);
 
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
@@ -30,6 +40,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+if (!ATTACHMENTS_BUCKET) {
+  app.use('/uploads', express.static(UPLOADS_ROOT));
+}
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
@@ -57,6 +70,108 @@ app.get('/api/admin/config', async (_req, res) => {
     res.status(500).json({ error: 'Failed to load config.json' });
   }
 });
+
+const slugify = (value = '') =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'unknown';
+
+const formatDateFolder = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.valueOf())) return 'unknown-date';
+  return date.toISOString().slice(0, 10);
+};
+
+const parseUploadList = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item) => item && typeof item.name === 'string');
+    }
+  } catch (error) {
+    console.warn('Failed to parse upload payload', error);
+  }
+  return [{ name: String(value), url: '' }];
+};
+
+const parseDataUrl = (value) => {
+  if (typeof value !== 'string' || !value.startsWith('data:')) return null;
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };
+};
+
+const extensionFromMime = (mime = '') => {
+  if (mime.includes('pdf')) return '.pdf';
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('jpeg')) return '.jpg';
+  if (mime.includes('jpg')) return '.jpg';
+  if (mime.includes('gif')) return '.gif';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('bmp')) return '.bmp';
+  if (mime.includes('svg')) return '.svg';
+  return '';
+};
+
+const storeAttachment = async ({ buffer, mime, originalName, trip, req, sequence }) => {
+  const dateFolder = formatDateFolder(trip.date);
+  const transporter = slugify(trip.transporterName);
+  const quarry = slugify(trip.quarryName);
+  const royalty = slugify(trip.royaltyOwnerName);
+  const ext = path.extname(originalName) || extensionFromMime(mime);
+  const baseName = slugify(path.basename(originalName, path.extname(originalName))) || 'attachment';
+  const suffix = sequence ? `_${sequence}` : '';
+  const fileName = `${dateFolder}_${transporter}_${quarry}_${royalty}_${baseName}${suffix}${ext}`;
+  const objectPath = path.posix.join(dateFolder, fileName);
+
+  if (!ATTACHMENTS_BUCKET) {
+    const targetPath = path.join(UPLOADS_ROOT, objectPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, buffer);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return `${baseUrl}/uploads/${objectPath}`;
+  }
+
+  const file = storage.bucket(ATTACHMENTS_BUCKET).file(objectPath);
+  await file.save(buffer, {
+    contentType: mime || undefined,
+    resumable: false,
+    metadata: {
+      cacheControl: 'public, max-age=31536000',
+    },
+  });
+  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${encodeURI(objectPath)}`;
+};
+
+const normalizeUploadField = async ({ fieldValue, trip, req }) => {
+  const list = parseUploadList(fieldValue);
+  if (list.length === 0) return '';
+
+  const updated = [];
+  let sequence = 0;
+  for (const item of list) {
+    const parsed = parseDataUrl(item.url);
+    if (!parsed) {
+      updated.push({ name: item.name, url: item.url || '' });
+      continue;
+    }
+    sequence += 1;
+    const storedUrl = await storeAttachment({
+      buffer: parsed.buffer,
+      mime: parsed.mime,
+      originalName: item.name,
+      trip,
+      req,
+      sequence,
+    });
+    updated.push({ name: item.name, url: storedUrl });
+  }
+
+  return JSON.stringify(updated);
+};
 
 app.put('/api/admin/config', async (req, res) => {
   if (!CONFIG_BUCKET) {
@@ -1341,6 +1456,26 @@ app.put('/api/trips/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body || {};
   try {
+    const existingTrip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!existingTrip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+    const tripForUploads = {
+      ...existingTrip,
+      ...data,
+      date: data.date ? new Date(data.date) : existingTrip.date,
+    };
+    const uploadUpdates = {};
+    for (const field of UPLOAD_FIELDS) {
+      if (data[field] !== undefined) {
+        uploadUpdates[field] = await normalizeUploadField({
+          fieldValue: data[field],
+          trip: tripForUploads,
+          req,
+        });
+      }
+    }
     const trip = await prisma.tripRecord.update({
       where: { id: Number(id) },
       data: {
@@ -1375,16 +1510,12 @@ app.put('/api/trips/:id', async (req, res) => {
         agent: data.agent,
         status: data.status,
         createdBy: data.createdBy,
-        ewayBillUpload: data.ewayBillUpload,
-        invoiceDCUpload: data.invoiceDCUpload,
-        waymentSlipUpload: data.waymentSlipUpload,
-        royaltyUpload: data.royaltyUpload,
-        taxInvoiceUpload: data.taxInvoiceUpload,
+        ...uploadUpdates,
         receivedDate: data.receivedDate ? new Date(data.receivedDate) : data.receivedDate,
         endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : undefined,
         endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : undefined,
         endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : undefined,
-        endWaymentSlipUpload: data.endWaymentSlipUpload,
+        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? data.endWaymentSlipUpload,
         weightDifferenceReason: data.weightDifferenceReason,
         pendingRequestType: data.pendingRequestType,
         pendingRequestMessage: data.pendingRequestMessage,
