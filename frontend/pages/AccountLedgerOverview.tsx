@@ -1,0 +1,296 @@
+import React, { useMemo, useState, useEffect } from 'react';
+import PageHeader from '../components/PageHeader';
+import { useData } from '../contexts/DataContext';
+import { dailyExpenseApi } from '../services/dailyExpenseApi';
+import { Advance, DailyExpense, RatePartyType, Trip } from '../types';
+
+type RatePartySummary = {
+  key: string;
+  type: RatePartyType;
+  name: string;
+  trips: Trip[];
+  totalTons: number;
+  grossAmount: number;
+  paidAmount: number;
+  balance: number;
+};
+
+const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
+  'vendor-customer': 'Vendor & Customer',
+  'mine-quarry': 'Mine & Quarry',
+  'royalty-owner': 'Royalty Owner',
+  'transport-owner': 'Transport & Owner',
+};
+
+const AccountLedgerOverview: React.FC = () => {
+  const { trips, advances, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+  const [expenses, setExpenses] = useState<DailyExpense[]>([]);
+  const [selectedType, setSelectedType] = useState<RatePartyType | 'all'>('all');
+  const [selectedParty, setSelectedParty] = useState<string>('all');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    dailyExpenseApi.getAll()
+      .then(setExpenses)
+      .catch((error) => {
+        console.warn('Failed to load daily expenses for ledger', error);
+        setExpenses([]);
+      });
+  }, []);
+
+  const partyIdLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    vendorCustomers.forEach(item => map.set(`vendor-customer:${item.name}`, item.id));
+    mineQuarries.forEach(item => map.set(`mine-quarry:${item.name}`, item.id));
+    royaltyOwnerProfiles.forEach(item => map.set(`royalty-owner:${item.name}`, item.id));
+    transportOwnerProfiles.forEach(item => map.set(`transport-owner:${item.name}`, item.id));
+    return map;
+  }, [vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles]);
+
+  const summaries = useMemo<RatePartySummary[]>(() => {
+    const bucket = new Map<string, RatePartySummary>();
+    const addSummary = (type: RatePartyType, name: string, trip: Trip) => {
+      const key = `${type}:${name}`;
+      if (!bucket.has(key)) {
+        bucket.set(key, {
+          key,
+          type,
+          name,
+          trips: [],
+          totalTons: 0,
+          grossAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        });
+      }
+      const summary = bucket.get(key)!;
+      summary.trips.push(trip);
+      summary.totalTons += Number(trip.netWeight || 0);
+      if (type === 'vendor-customer') summary.grossAmount += Number(trip.revenue || 0);
+      if (type === 'mine-quarry') summary.grossAmount += Number(trip.materialCost || 0);
+      if (type === 'transport-owner') summary.grossAmount += Number(trip.transportCost || 0);
+      if (type === 'royalty-owner') summary.grossAmount += Number(trip.royaltyCost || 0);
+    };
+
+    trips.forEach(trip => {
+      if (trip.customer) addSummary('vendor-customer', trip.customer, trip);
+      if (trip.quarryName) addSummary('mine-quarry', trip.quarryName, trip);
+      if (trip.transporterName) addSummary('transport-owner', trip.transporterName, trip);
+      if (trip.royaltyOwnerName) addSummary('royalty-owner', trip.royaltyOwnerName, trip);
+    });
+
+    const addPayment = (type: RatePartyType | undefined, name: string | undefined, amount: number) => {
+      if (!type || !name) return;
+      const key = `${type}:${name}`;
+      if (!bucket.has(key)) {
+        bucket.set(key, {
+          key,
+          type,
+          name,
+          trips: [],
+          totalTons: 0,
+          grossAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        });
+      }
+      bucket.get(key)!.paidAmount += Number(amount || 0);
+    };
+
+    advances.forEach(advance => {
+      if (!advance.ratePartyType || !advance.ratePartyId) return;
+      const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${advance.ratePartyType}:`) && id === advance.ratePartyId);
+      if (match) {
+        const name = match[0].split(':').slice(1).join(':');
+        addPayment(advance.ratePartyType, name, advance.amount);
+      }
+    });
+
+    expenses.forEach(expense => {
+      if (!expense.ratePartyType || !expense.ratePartyId) return;
+      const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${expense.ratePartyType}:`) && id === expense.ratePartyId);
+      if (match) {
+        const name = match[0].split(':').slice(1).join(':');
+        addPayment(expense.ratePartyType, name, expense.amount);
+      }
+    });
+
+    bucket.forEach(summary => {
+      summary.balance = summary.grossAmount - summary.paidAmount;
+    });
+
+    return Array.from(bucket.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [trips, advances, expenses, partyIdLookup]);
+
+  const filteredSummaries = useMemo(() => {
+    return summaries.filter(summary => {
+      if (selectedType !== 'all' && summary.type !== selectedType) return false;
+      if (selectedParty !== 'all' && summary.key !== selectedParty) return false;
+      return true;
+    });
+  }, [summaries, selectedType, selectedParty]);
+
+  const selectedSummary = filteredSummaries.find(item => item.key === selectedKey) || null;
+
+  const exportCsv = () => {
+    const header = ['Rate Party Type', 'Rate Party', 'Trips', 'Net Tons', 'Total', 'Paid', 'Balance'];
+    const rows = filteredSummaries.map(item => [
+      RATE_PARTY_LABELS[item.type],
+      item.name,
+      item.trips.length,
+      item.totalTons.toFixed(2),
+      item.grossAmount.toFixed(2),
+      item.paidAmount.toFixed(2),
+      item.balance.toFixed(2),
+    ]);
+    const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'account_ledger_overview.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Account Ledger Overview"
+        subtitle="Rate party balances, trips, and payments summary"
+        filters={[]}
+        onFilterChange={() => {}}
+        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        pageAction={{ label: 'Export CSV', action: exportCsv }}
+      />
+      <main className="pt-6 space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Rate Party Type</label>
+            <select
+              value={selectedType}
+              onChange={(event) => {
+                setSelectedType(event.target.value as RatePartyType | 'all');
+                setSelectedParty('all');
+                setSelectedKey(null);
+              }}
+              className="mt-2 px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-sm"
+            >
+              <option value="all">All</option>
+              {Object.entries(RATE_PARTY_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Rate Party</label>
+            <select
+              value={selectedParty}
+              onChange={(event) => {
+                setSelectedParty(event.target.value);
+                setSelectedKey(event.target.value === 'all' ? null : event.target.value);
+              }}
+              className="mt-2 px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-sm"
+            >
+              <option value="all">All</option>
+              {summaries
+                .filter(item => selectedType === 'all' || item.type === selectedType)
+                .map(item => (
+                  <option key={item.key} value={item.key}>{item.name}</option>
+                ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {['Rate Party', 'Type', 'Trips', 'Net Tons', 'Total', 'Paid', 'Balance'].map(header => (
+                    <th key={header} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {filteredSummaries.map(item => (
+                  <tr
+                    key={item.key}
+                    onClick={() => setSelectedKey(item.key)}
+                    className={`cursor-pointer ${selectedKey === item.key ? 'bg-blue-50 dark:bg-gray-700/60' : 'bg-white dark:bg-gray-800'}`}
+                  >
+                    <td className="px-6 py-3 text-sm font-medium text-gray-800 dark:text-gray-200">{item.name}</td>
+                    <td className="px-6 py-3 text-sm text-gray-500 dark:text-gray-300">{RATE_PARTY_LABELS[item.type]}</td>
+                    <td className="px-6 py-3 text-sm">{item.trips.length}</td>
+                    <td className="px-6 py-3 text-sm">{item.totalTons.toFixed(2)}</td>
+                    <td className="px-6 py-3 text-sm">{item.grossAmount.toFixed(2)}</td>
+                    <td className="px-6 py-3 text-sm text-green-500">{item.paidAmount.toFixed(2)}</td>
+                    <td className={`px-6 py-3 text-sm font-semibold ${item.balance >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      {item.balance.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+                {filteredSummaries.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-6 text-center text-sm text-gray-500">
+                      No rate party data yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {selectedSummary && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{selectedSummary.name}</h3>
+                <p className="text-sm text-gray-500">{RATE_PARTY_LABELS[selectedSummary.type]}</p>
+              </div>
+              <div className="text-right text-sm text-gray-500">
+                Trips: {selectedSummary.trips.length} · Net Tons: {selectedSummary.totalTons.toFixed(2)}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    {['Date', 'Vehicle', 'Material', 'Net Tons', 'Status'].map(header => (
+                      <th key={header} className="px-4 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {selectedSummary.trips.map(trip => (
+                    <tr key={trip.id}>
+                      <td className="px-4 py-2 text-sm">{trip.date?.split('T')[0]}</td>
+                      <td className="px-4 py-2 text-sm">{trip.vehicleNumber}</td>
+                      <td className="px-4 py-2 text-sm">{trip.material}</td>
+                      <td className="px-4 py-2 text-sm">{Number(trip.netWeight || 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-sm capitalize">{trip.status}</td>
+                    </tr>
+                  ))}
+                  {selectedSummary.trips.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
+                        No trips recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default AccountLedgerOverview;

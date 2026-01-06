@@ -28,6 +28,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       title: 'Financial Operations',
       items: [
         { to: '/financials', icon: 'analytics-outline', name: 'Financials', roles: [Role.ADMIN, Role.MANAGER] },
+        { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Account Ledger', roles: [Role.ADMIN, Role.MANAGER] },
         { to: '/accounting', icon: 'calculator-outline', name: 'Accounting', roles: [Role.ADMIN, Role.MANAGER] },
         { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },

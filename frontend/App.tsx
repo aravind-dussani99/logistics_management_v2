@@ -14,6 +14,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Role } from './types';
 import Financials from './pages/Financials';
+import AccountLedgerOverview from './pages/AccountLedgerOverview';
 import { DataProvider } from './contexts/DataContext';
 import { UIProvider } from './contexts/UIContext';
 import Ledger from './pages/Ledger';
@@ -58,6 +59,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/financials" element={<Financials />} />
+      <Route path="/account-ledger" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><AccountLedgerOverview /></ProtectedRoute>} />
       <Route path="/trips" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.DRIVER]}>
             <DailyTrips />
