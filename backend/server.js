@@ -24,6 +24,14 @@ const UPLOAD_FIELDS = new Set([
   'taxInvoiceUpload',
   'endWaymentSlipUpload',
 ]);
+const UPLOAD_FIELD_LABELS = {
+  ewayBillUpload: 'eway_bill',
+  invoiceDCUpload: 'invoice_dc',
+  waymentSlipUpload: 'wayment_slip',
+  royaltyUpload: 'royalty_slip',
+  taxInvoiceUpload: 'tax_invoice',
+  endWaymentSlipUpload: 'end_wayment_slip',
+};
 
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
@@ -116,15 +124,15 @@ const extensionFromMime = (mime = '') => {
   return '';
 };
 
-const storeAttachment = async ({ buffer, mime, originalName, trip, req, sequence }) => {
+const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) => {
   const dateFolder = formatDateFolder(trip.date);
   const transporter = slugify(trip.transporterName);
   const quarry = slugify(trip.quarryName);
   const royalty = slugify(trip.royaltyOwnerName);
-  const ext = path.extname(originalName) || extensionFromMime(mime);
-  const baseName = slugify(path.basename(originalName, path.extname(originalName))) || 'attachment';
+  const ext = extensionFromMime(mime) || '.bin';
+  const label = UPLOAD_FIELD_LABELS[fieldKey] || slugify(fieldKey);
   const suffix = sequence ? `_${sequence}` : '';
-  const fileName = `${dateFolder}_${transporter}_${quarry}_${royalty}_${baseName}${suffix}${ext}`;
+  const fileName = `${dateFolder}_${transporter}_${quarry}_${royalty}_${label}${suffix}${ext}`;
   const objectPath = path.posix.join(dateFolder, fileName);
 
   if (!ATTACHMENTS_BUCKET) {
@@ -143,10 +151,10 @@ const storeAttachment = async ({ buffer, mime, originalName, trip, req, sequence
       cacheControl: 'public, max-age=31536000',
     },
   });
-  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${encodeURI(objectPath)}`;
+  return `gs://${ATTACHMENTS_BUCKET}/${objectPath}`;
 };
 
-const normalizeUploadField = async ({ fieldValue, trip, req }) => {
+const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
   const list = parseUploadList(fieldValue);
   if (list.length === 0) return '';
 
@@ -162,15 +170,66 @@ const normalizeUploadField = async ({ fieldValue, trip, req }) => {
     const storedUrl = await storeAttachment({
       buffer: parsed.buffer,
       mime: parsed.mime,
-      originalName: item.name,
       trip,
       req,
       sequence,
+      fieldKey,
     });
     updated.push({ name: item.name, url: storedUrl });
   }
 
   return JSON.stringify(updated);
+};
+
+const isGsUrl = (value) => typeof value === 'string' && value.startsWith('gs://');
+const extractGsPath = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  if (value.startsWith('gs://')) {
+    const trimmed = value.replace('gs://', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  if (value.startsWith('https://storage.googleapis.com/')) {
+    const trimmed = value.replace('https://storage.googleapis.com/', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  if (value.startsWith('https://storage.cloud.google.com/')) {
+    const trimmed = value.replace('https://storage.cloud.google.com/', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  return null;
+};
+
+const signGsUrl = async (value) => {
+  const extracted = extractGsPath(value);
+  if (!extracted) return value;
+  const { bucket: bucketName, object: objectPath } = extracted;
+  try {
+    const [signedUrl] = await storage.bucket(bucketName).file(objectPath).getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+    return signedUrl;
+  } catch (error) {
+    console.warn('Failed to sign attachment URL', error);
+    return value;
+  }
+};
+
+const resolveUploadList = async (value) => {
+  const list = parseUploadList(value);
+  if (list.length === 0) return list;
+  const resolved = [];
+  for (const item of list) {
+    const nextUrl = await signGsUrl(item.url || '');
+    resolved.push({ name: item.name, url: nextUrl });
+  }
+  return resolved;
 };
 
 app.put('/api/admin/config', async (req, res) => {
@@ -1299,7 +1358,16 @@ app.get('/api/daily-expenses/export', async (req, res) => {
 app.get('/api/trips', async (req, res) => {
   try {
     const trips = await prisma.tripRecord.findMany({ orderBy: { date: 'desc' } });
-    res.json(trips);
+    const hydrated = await Promise.all(trips.map(async (trip) => {
+      const updated = { ...trip };
+      for (const field of UPLOAD_FIELDS) {
+        if (trip[field]) {
+          updated[field] = await resolveUploadList(trip[field]);
+        }
+      }
+      return updated;
+    }));
+    res.json(hydrated);
   } catch (error) {
     console.error('Failed to list trips', error);
     res.status(500).json({ error: 'Failed to list trips' });
@@ -1468,6 +1536,7 @@ app.put('/api/trips/:id', async (req, res) => {
           fieldValue: data[field],
           trip: tripForUploads,
           req,
+          fieldKey: field,
         });
       }
     }
