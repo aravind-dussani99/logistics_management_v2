@@ -199,12 +199,7 @@ app.put('/api/admin/config', async (req, res) => {
   }
 });
 
-const seedSiteLocations = [
-  { name: "Rock Quarry", type: "pickup", address: "Quarry Road", pointOfContact: "Ravi", remarks: "" },
-  { name: "Riverbed Mining", type: "pickup", address: "River Bank", pointOfContact: "Suresh", remarks: "" },
-  { name: "Site A", type: "drop-off", address: "Construction Site A", pointOfContact: "Anita", remarks: "" },
-  { name: "Site B", type: "drop-off", address: "Infra Project B", pointOfContact: "Deepak", remarks: "" },
-];
+const seedSiteLocations = [];
 
 const seedAccountTypes = [
   { name: "Savings", remarks: "" },
@@ -564,7 +559,7 @@ const ensureSeedData = async () => {
   await ensureSiteLocationTable();
   await ensureMerchantTables();
   const count = await prisma.siteLocation.count();
-  if (count === 0) {
+  if (count === 0 && seedSiteLocations.length > 0) {
     await prisma.siteLocation.createMany({ data: seedSiteLocations });
   }
   const accountTypeCount = await prisma.accountType.count();
