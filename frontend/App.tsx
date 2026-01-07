@@ -10,6 +10,7 @@ import Quarries from './pages/Quarries';
 import Transport from './pages/Transport';
 import Login from './pages/Login';
 import Users from './pages/Users';
+import Profile from './pages/Profile';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Role } from './types';
@@ -87,6 +88,7 @@ const AppRoutes: React.FC = () => (
           <Payments />
         </ProtectedRoute>
       } />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/capital" element={<Capital />} />
       <Route path="/royalty" element={<Royalty />} />
       <Route path="/royalty-stock" element={<RoyaltyStock />} />

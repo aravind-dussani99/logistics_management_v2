@@ -23,6 +23,13 @@ model User {
   passwordHash     String
   role             UserRole
   avatarUrl        String?
+  mobileNumber     String    @default("")
+  email            String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  postalCode       String?
   pickupLocationId String?
   dropOffLocationId String?
   createdAt        DateTime  @default(now())

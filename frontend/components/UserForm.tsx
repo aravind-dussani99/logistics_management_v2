@@ -30,6 +30,13 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
     const [username, setUsername] = useState(user.username || '');
     const [name, setName] = useState(user.name || '');
     const [password, setPassword] = useState('');
+    const [mobileNumber, setMobileNumber] = useState(user.mobileNumber || '');
+    const [email, setEmail] = useState(user.email || '');
+    const [addressLine1, setAddressLine1] = useState(user.addressLine1 || '');
+    const [addressLine2, setAddressLine2] = useState(user.addressLine2 || '');
+    const [city, setCity] = useState(user.city || '');
+    const [state, setState] = useState(user.state || '');
+    const [postalCode, setPostalCode] = useState(user.postalCode || '');
     const [pickupLocationId, setPickupLocationId] = useState(user.pickupLocationId || '');
     const [dropOffLocationId, setDropOffLocationId] = useState(user.dropOffLocationId || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,7 +44,18 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        const updatedData: Partial<User> & { password?: string } = { role, name, username };
+        const updatedData: Partial<User> & { password?: string } = {
+            role,
+            name,
+            username,
+            mobileNumber,
+            email,
+            addressLine1,
+            addressLine2,
+            city,
+            state,
+            postalCode,
+        };
         if (password) {
             updatedData.password = password;
         }
@@ -59,6 +77,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <InputField label="Username" id="username" name="username" type="text" value={username} onChange={e => setUsername(e.target.value)} isReadOnly={!isNew} required />
                 <InputField label="Name" id="name" name="name" type="text" value={name} onChange={e => setName(e.target.value)} required />
+                <InputField label="Mobile Number" id="mobileNumber" name="mobileNumber" type="tel" value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} required />
+                <InputField label="Email (optional)" id="email" name="email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
                 
                 <InputField label="Role" id="role" name="role" type="select" value={role} onChange={e => setRole(e.target.value as Role)} required>
                     {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
@@ -94,6 +114,16 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
                         required={isNew}
                     />
                 </div>
+
+                <div className="sm:col-span-2">
+                    <InputField label="Address Line 1" id="addressLine1" name="addressLine1" type="text" value={addressLine1} onChange={e => setAddressLine1(e.target.value)} />
+                </div>
+                <div className="sm:col-span-2">
+                    <InputField label="Address Line 2" id="addressLine2" name="addressLine2" type="text" value={addressLine2} onChange={e => setAddressLine2(e.target.value)} />
+                </div>
+                <InputField label="City" id="city" name="city" type="text" value={city} onChange={e => setCity(e.target.value)} />
+                <InputField label="State" id="state" name="state" type="text" value={state} onChange={e => setState(e.target.value)} />
+                <InputField label="Postal Code" id="postalCode" name="postalCode" type="text" value={postalCode} onChange={e => setPostalCode(e.target.value)} />
             </div>
             <div className="pt-8 flex justify-end space-x-3">
                 <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">

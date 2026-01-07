@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useUI } from '../contexts/UIContext';
 import NotificationsPanel from './NotificationsPanel';
-import EditProfileForm from './EditProfileForm';
 import HelpGuide from './HelpGuide';
 
 
@@ -14,13 +14,12 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ setSidebarOpen }) => {
   const { currentUser } = useAuth();
   const { openModal, closeModal } = useUI();
+  const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const handleEditProfile = () => {
+  const handleProfilePage = () => {
     setProfileOpen(false);
-    if(currentUser) {
-      openModal('Edit Profile', <EditProfileForm user={currentUser} onClose={closeModal} />);
-    }
+    navigate('/profile');
   };
 
   const handleShowHelp = () => {
@@ -51,8 +50,8 @@ const Header: React.FC<HeaderProps> = ({ setSidebarOpen }) => {
               <div onMouseLeave={() => setProfileOpen(false)} className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-md overflow-hidden shadow-xl z-10">
                   <ul>
                     <li>
-                      <button onClick={handleEditProfile} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
-                        Edit Profile
+                      <button onClick={handleProfilePage} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">
+                        My Profile
                       </button>
                     </li>
                     <li>

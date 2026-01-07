@@ -48,6 +48,13 @@ const sanitizeUser = (user) => {
     name: user.name,
     role: user.role,
     avatarUrl: user.avatarUrl || '',
+    mobileNumber: user.mobileNumber || '',
+    email: user.email || '',
+    addressLine1: user.addressLine1 || '',
+    addressLine2: user.addressLine2 || '',
+    city: user.city || '',
+    state: user.state || '',
+    postalCode: user.postalCode || '',
     pickupLocationId: user.pickupLocationId,
     dropOffLocationId: user.dropOffLocationId,
     pickupLocationName: user.pickupLocation?.name || null,
@@ -439,11 +446,18 @@ app.post('/api/users', async (req, res) => {
     password,
     role,
     avatarUrl = '',
+    mobileNumber = '',
+    email = '',
+    addressLine1 = '',
+    addressLine2 = '',
+    city = '',
+    state = '',
+    postalCode = '',
     pickupLocationId = null,
     dropOffLocationId = null,
   } = req.body || {};
-  if (!username || !name || !password || !role) {
-    res.status(400).json({ error: 'username, name, password, role are required' });
+  if (!username || !name || !password || !role || !mobileNumber) {
+    res.status(400).json({ error: 'username, name, password, role, mobileNumber are required' });
     return;
   }
   if (!USER_ROLES.includes(String(role))) {
@@ -467,6 +481,13 @@ app.post('/api/users', async (req, res) => {
         passwordHash,
         role: String(role),
         avatarUrl: String(avatarUrl || ''),
+        mobileNumber: String(mobileNumber || ''),
+        email: email ? String(email) : null,
+        addressLine1: addressLine1 ? String(addressLine1) : null,
+        addressLine2: addressLine2 ? String(addressLine2) : null,
+        city: city ? String(city) : null,
+        state: state ? String(state) : null,
+        postalCode: postalCode ? String(postalCode) : null,
         pickupLocationId: pickupLocationId || null,
         dropOffLocationId: dropOffLocationId || null,
       },
@@ -480,7 +501,8 @@ app.post('/api/users', async (req, res) => {
 });
 
 app.put('/api/users/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN'])) {
+  const isSelf = req.user && req.user.id === req.params.id;
+  if (!hasRole(req.user, ['ADMIN']) && !isSelf) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -490,6 +512,13 @@ app.put('/api/users/:id', async (req, res) => {
     password,
     role,
     avatarUrl,
+    mobileNumber,
+    email,
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    postalCode,
     pickupLocationId,
     dropOffLocationId,
   } = req.body || {};
@@ -500,25 +529,41 @@ app.put('/api/users/:id', async (req, res) => {
     }
     const data = {
       ...(name ? { name: String(name) } : {}),
-      ...(role ? { role: String(role) } : {}),
       ...(avatarUrl !== undefined ? { avatarUrl: String(avatarUrl || '') } : {}),
-      ...(pickupLocationId !== undefined ? { pickupLocationId: pickupLocationId || null } : {}),
-      ...(dropOffLocationId !== undefined ? { dropOffLocationId: dropOffLocationId || null } : {}),
+      ...(mobileNumber !== undefined ? { mobileNumber: String(mobileNumber || '') } : {}),
+      ...(email !== undefined ? { email: email ? String(email) : null } : {}),
+      ...(addressLine1 !== undefined ? { addressLine1: addressLine1 ? String(addressLine1) : null } : {}),
+      ...(addressLine2 !== undefined ? { addressLine2: addressLine2 ? String(addressLine2) : null } : {}),
+      ...(city !== undefined ? { city: city ? String(city) : null } : {}),
+      ...(state !== undefined ? { state: state ? String(state) : null } : {}),
+      ...(postalCode !== undefined ? { postalCode: postalCode ? String(postalCode) : null } : {}),
     };
-    if (role && !isSupervisorRole(String(role))) {
-      data.pickupLocationId = null;
-      data.dropOffLocationId = null;
-    }
-    if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
-      res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
-      return;
-    }
-    if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
-      res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
-      return;
-    }
-    if (password) {
-      data.passwordHash = await bcrypt.hash(String(password), 10);
+
+    if (!isSelf) {
+      if (role) {
+        data.role = String(role);
+      }
+      if (pickupLocationId !== undefined) {
+        data.pickupLocationId = pickupLocationId || null;
+      }
+      if (dropOffLocationId !== undefined) {
+        data.dropOffLocationId = dropOffLocationId || null;
+      }
+      if (role && !isSupervisorRole(String(role))) {
+        data.pickupLocationId = null;
+        data.dropOffLocationId = null;
+      }
+      if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
+        res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
+        return;
+      }
+      if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
+        res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
+        return;
+      }
+      if (password) {
+        data.passwordHash = await bcrypt.hash(String(password), 10);
+      }
     }
     const user = await prisma.user.update({
       where: { id },
@@ -908,6 +953,7 @@ const ensureAdminUser = async () => {
   const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
   const name = process.env.DEFAULT_ADMIN_NAME || 'Admin User';
   const password = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+  const mobileNumber = process.env.DEFAULT_ADMIN_MOBILE || '0000000000';
   const passwordHash = await bcrypt.hash(password, 10);
   await prisma.user.create({
     data: {
@@ -916,6 +962,7 @@ const ensureAdminUser = async () => {
       passwordHash,
       role: 'ADMIN',
       avatarUrl: '',
+      mobileNumber,
     },
   });
   console.log(`Created default admin user: ${username}`);

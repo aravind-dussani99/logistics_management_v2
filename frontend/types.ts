@@ -147,6 +147,13 @@ export interface User {
     role: Role;
     avatarUrl?: string;
     password?: string;
+    mobileNumber?: string;
+    email?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
     pickupLocationId?: string | null;
     dropOffLocationId?: string | null;
     pickupLocationName?: string | null;
