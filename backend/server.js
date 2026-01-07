@@ -36,7 +36,7 @@ const UPLOAD_FIELD_LABELS = {
   endWaymentSlipUpload: 'end_wayment_slip',
 };
 
-const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login']);
+const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login', '/api/auth/reset-admin-password']);
 
 const signToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
 
@@ -155,6 +155,41 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Failed to login', error);
     res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+app.post('/api/auth/reset-admin-password', async (req, res) => {
+  const { username, resetToken, newPassword } = req.body || {};
+  const adminUsername = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+  const resetSecret = process.env.ADMIN_RESET_TOKEN || '';
+
+  if (!resetSecret) {
+    res.status(400).json({ error: 'Admin reset is not configured' });
+    return;
+  }
+  if (!username || !resetToken || !newPassword) {
+    res.status(400).json({ error: 'username, resetToken, newPassword are required' });
+    return;
+  }
+  if (String(username) !== adminUsername || String(resetToken) !== resetSecret) {
+    res.status(403).json({ error: 'Invalid reset credentials' });
+    return;
+  }
+  try {
+    const adminUser = await prisma.user.findUnique({ where: { username: adminUsername } });
+    if (!adminUser || adminUser.role !== 'ADMIN') {
+      res.status(404).json({ error: 'Admin user not found' });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(String(newPassword), 10);
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { passwordHash },
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Failed to reset admin password', error);
+    res.status(500).json({ error: 'Failed to reset admin password' });
   }
 });
 
