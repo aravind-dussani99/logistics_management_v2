@@ -658,6 +658,21 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Write config.json (prod)
+        if: steps.frontend-changes-prod.outputs.frontend_changed == 'true'
+        run: |
+          if [ -z "${FRONTEND_API_BASE_URL}" ]; then
+            FRONTEND_API_BASE_URL=$(gcloud run services describe "${BACKEND_SERVICE_NAME}" \
+              --region "${REGION}" \
+              --project "${PROJECT_ID}" \
+              --format='value(status.url)')
+          fi
+          if [ -z "${FRONTEND_API_BASE_URL}" ]; then
+            echo "FRONTEND_API_BASE_URL could not be determined." >&2
+            exit 1
+          fi
+          printf '{\n  "apiBaseUrl": "%s"\n}\n' "${FRONTEND_API_BASE_URL}" > frontend/dist/config.json
+
       - name: Upload Frontend to GCS
         if: env.FRONTEND_BUCKET_PROD != '' && steps.frontend-changes-prod.outputs.frontend_changed == 'true'
         run: |
@@ -730,6 +745,16 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Write config.json (dev)
+        if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
+        run: |
+          BACKEND_URL="${{ needs.build-push-deploy-backend-dev.outputs.backend_url }}"
+          if [ -z "${BACKEND_URL}" ]; then
+            echo "Backend URL is required for config.json" >&2
+            exit 1
+          fi
+          printf '{\n  "apiBaseUrl": "%s"\n}\n' "${BACKEND_URL}" > frontend/dist/config.json
 
       - name: Upload Frontend to GCS (dev)
         if: steps.frontend-changes-dev.outputs.frontend_changed == 'true'
