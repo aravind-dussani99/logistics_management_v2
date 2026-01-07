@@ -9,7 +9,7 @@ import { formatCurrency } from '../utils';
 const CAPITAL_CATEGORIES = ['Bank Account', 'Capital & Loans', 'Investment', 'Personal Funds'];
 
 const Capital: React.FC = () => {
-    const { trips, ledgerEntries, accounts, customers, quarries, vehicles, royaltyOwners } = useData();
+    const { trips, ledgerEntries, accounts, customers, quarries, vehicles, royaltyOwners, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles } = useData();
 
     const accountSummaries = useMemo(() => {
         const summaryMap: Map<string, AccountSummary> = new Map();
@@ -42,9 +42,17 @@ const Capital: React.FC = () => {
             }
         });
 
+        payments.forEach(payment => {
+            if (!payment.method) return;
+            const account = accounts.find(a => a.name === payment.method);
+            if (!account || !summaryMap.has(account.id)) return;
+            const summary = summaryMap.get(account.id)!;
+            summary.balance += payment.type === 'RECEIPT' ? payment.amount : -payment.amount;
+        });
+
         return Array.from(summaryMap.values());
 
-    }, [ledgerEntries, accounts]);
+    }, [ledgerEntries, payments, accounts]);
 
     const { totalBankBalance, totalLoansPayable, totalInvestments } = useMemo(() => {
         let bank = 0;
@@ -82,8 +90,9 @@ const Capital: React.FC = () => {
                             data={accountSummaries} 
                             allTrips={trips} 
                             allLedgerEntries={ledgerEntries} 
+                            payments={payments}
                             type="other" 
-                            masterData={{customers, quarries, vehicles, royaltyOwners, accounts}}
+                            masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}
                         />
                     </div>
                 </div>
