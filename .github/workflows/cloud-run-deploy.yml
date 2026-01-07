@@ -413,9 +413,14 @@ jobs:
       - name: Deploy Backend to Cloud Run
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD_CLOUDRUN }}
+          ADMIN_RESET_TOKEN: ${{ secrets.ADMIN_RESET_TOKEN_PROD }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
             echo "DATABASE_URL_PROD_CLOUDRUN secret is required for prod deployments" >&2
+            exit 1
+          fi
+          if [ -z "${ADMIN_RESET_TOKEN}" ]; then
+            echo "ADMIN_RESET_TOKEN_PROD secret is required for prod deployments" >&2
             exit 1
           fi
           if [ -z "${LOGITRACK_SA}" ]; then
@@ -445,7 +450,7 @@ jobs:
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
             --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_PROD},CONFIG_BUCKET=${CONFIG_BUCKET_PROD},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_PROD},DATABASE_URL=${DATABASE_URL}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_PROD},CONFIG_BUCKET=${CONFIG_BUCKET_PROD},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_PROD},DATABASE_URL=${DATABASE_URL},ADMIN_RESET_TOKEN=${ADMIN_RESET_TOKEN}" \
             --allow-unauthenticated
 
   build-push-deploy-backend-dev:
@@ -547,9 +552,14 @@ jobs:
       - name: Deploy Backend to Cloud Run (dev)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DEV_CLOUDRUN }}
+          ADMIN_RESET_TOKEN: ${{ secrets.ADMIN_RESET_TOKEN_DEV }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
             echo "DATABASE_URL_DEV_CLOUDRUN secret is required for PR deployments" >&2
+            exit 1
+          fi
+          if [ -z "${ADMIN_RESET_TOKEN}" ]; then
+            echo "ADMIN_RESET_TOKEN_DEV secret is required for PR deployments" >&2
             exit 1
           fi
           if [ -z "${LOGITRACK_SA}" ]; then
@@ -579,7 +589,7 @@ jobs:
             --service-account "${LOGITRACK_SA}" \
             --port 8080 \
             --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_DEV},DATABASE_URL=${DATABASE_URL}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_DEV},DATABASE_URL=${DATABASE_URL},ADMIN_RESET_TOKEN=${ADMIN_RESET_TOKEN}" \
             --allow-unauthenticated
 
       - name: Capture Backend URL (dev)
