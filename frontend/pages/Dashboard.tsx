@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import { Trip, Role, QuarryOwner, VehicleOwner, Customer, CustomerRate } from '../types';
 import { api } from '../services/mockApi';
@@ -36,7 +36,10 @@ const getMtdRange = () => {
 const Dashboard: React.FC = () => {
     const { currentUser } = useAuth();
     
-    if (currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR) {
+    if (currentUser?.role === Role.DROPOFF_SUPERVISOR) {
+        return <Navigate to="/received" replace />;
+    }
+    if (currentUser?.role === Role.PICKUP_SUPERVISOR) {
         return <SupervisorTripReport />;
     }
     
