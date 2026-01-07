@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
-import { DailySummary, FinancialStatus, ChartData, DailyExpense } from '../types';
+import { DailySummary, FinancialStatus, ChartData, DailyExpense, PaymentType } from '../types';
 import { useData } from '../contexts/DataContext';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
@@ -12,7 +12,7 @@ import { dailyExpenseApi } from '../services/dailyExpenseApi';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Financials: React.FC = () => {
-    const { trips, advances } = useData();
+    const { trips, advances, payments } = useData();
     const [filters, setFilters] = useState<Filters>({});
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
 
@@ -42,6 +42,16 @@ const Financials: React.FC = () => {
             return acc;
         }, {} as Record<string, number>);
 
+        const paymentAdjustments = payments.reduce((acc, item) => {
+            if (!item.ratePartyType) return acc;
+            const isCustomer = item.ratePartyType === 'vendor-customer';
+            const amount = item.type === PaymentType.RECEIPT
+                ? (isCustomer ? item.amount : -item.amount)
+                : (isCustomer ? -item.amount : item.amount);
+            acc[item.ratePartyType] = (acc[item.ratePartyType] || 0) + amount;
+            return acc;
+        }, {} as Record<string, number>);
+
         const outstandingCustomer = trips.reduce((sum, trip) => {
             const advancesForCustomer = getAdvanceTotalForTrip(trip.id, 'vendor-customer');
             return sum + Math.max(0, (trip.revenue || 0) - advancesForCustomer);
@@ -55,11 +65,11 @@ const Financials: React.FC = () => {
             return sum + Math.max(0, (trip.materialCost || 0) - advancesForQuarry);
         }, 0);
         return {
-            outstandingCustomer: Math.max(0, outstandingCustomer - (expenseAdjustments['vendor-customer'] || 0)),
-            outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0)),
-            outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0)),
+            outstandingCustomer: Math.max(0, outstandingCustomer - (expenseAdjustments['vendor-customer'] || 0) - (paymentAdjustments['vendor-customer'] || 0)),
+            outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0) - (paymentAdjustments['transport-owner'] || 0)),
+            outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0) - (paymentAdjustments['mine-quarry'] || 0)),
         };
-    }, [trips, advances, allExpenses]);
+    }, [trips, advances, allExpenses, payments]);
 
     const profitData = useMemo<ChartData[]>(() => {
         const byDate: Record<string, number> = {};

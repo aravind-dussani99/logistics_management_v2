@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { api } from '../services/mockApi';
+import { usersApi } from '../services/usersApi';
 import { siteLocationApi } from '../services/siteLocationApi';
 import { merchantTypeApi } from '../services/merchantTypeApi';
 import { merchantApi } from '../services/merchantApi';
@@ -16,7 +17,8 @@ import { vehicleMasterApi } from '../services/vehicleMasterApi';
 import { advanceApi } from '../services/advanceApi';
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
 import { tripApi } from '../services/tripApi';
-import { Trip, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, SiteLocation, MerchantType, Merchant, MerchantBankAccount, AccountType, MineQuarryData, VendorCustomerData, RoyaltyOwnerData, TransportOwnerData, TransportOwnerVehicle, MaterialTypeDefinition, MaterialRate, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance, VehicleMaster } from '../types';
+import { paymentApi } from '../services/paymentApi';
+import { Trip, LedgerEntry, VehicleOwner, QuarryOwner, RoyaltyOwner, Customer, RateEntry, CustomerRate, SiteLocation, MerchantType, Merchant, MerchantBankAccount, AccountType, MineQuarryData, VendorCustomerData, RoyaltyOwnerData, TransportOwnerData, TransportOwnerVehicle, MaterialTypeDefinition, MaterialRate, Material, RoyaltyStock, Account, AccountCategory, DailyExpense, Advance, VehicleMaster, Payment, Role } from '../types';
 import { useAuth } from './AuthContext';
 
 // Define the type for a new trip from the form
@@ -25,6 +27,7 @@ type NewTripData = Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost
 interface DataContextType {
   trips: Trip[];
   advances: Advance[];
+  payments: Payment[];
   ledgerEntries: LedgerEntry[];
   vehicles: VehicleOwner[];
   quarries: QuarryOwner[];
@@ -57,6 +60,10 @@ interface DataContextType {
   addAdvance: (advance: Omit<Advance, 'id'>) => Promise<void>;
   updateAdvance: (id: string, data: Omit<Advance, 'id'>) => Promise<void>;
   deleteAdvance: (id: string) => Promise<void>;
+
+  addPayment: (payment: Omit<Payment, 'id'>) => Promise<void>;
+  updatePayment: (id: string, data: Omit<Payment, 'id'>) => Promise<void>;
+  deletePayment: (id: string) => Promise<void>;
   
   addLedgerEntry: (entry: Omit<LedgerEntry, 'id'>) => Promise<void>;
   updateLedgerEntry: (id: string, entry: Omit<LedgerEntry, 'id'>) => Promise<void>;
@@ -165,6 +172,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOwner[]>([]);
   const [quarries, setQuarries] = useState<QuarryOwner[]>([]);
@@ -198,6 +206,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!currentUser) {
         setTrips([]);
         setAdvances([]);
+        setPayments([]);
         setLedgerEntries([]);
         setVehicles([]);
         setQuarries([]);
@@ -226,9 +235,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     const fetchData = async () => {
         setLoading(true);
+        const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role);
+        const paymentsPromise = canReadPayments ? paymentApi.getAll() : Promise.resolve([] as Payment[]);
         const [
             tripsData,
             advancesData,
+            paymentsData,
             ledgerData,
             vehiclesData,
             quarriesData,
@@ -255,6 +267,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ] = await Promise.all([
             tripApi.getAll(),
             advanceApi.getAll(),
+            paymentsPromise,
             api.getLedgerEntries(),
             api.getVehicleOwners(),
             api.getQuarryOwners(),
@@ -281,6 +294,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ]);
         setTrips(tripsData);
         setAdvances(advancesData);
+        setPayments(paymentsData);
         setLedgerEntries(ledgerData);
         setVehicles(vehiclesData);
         setQuarries(quarriesData);
@@ -406,6 +420,21 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshData();
   };
 
+  const addPayment = async (payment: Omit<Payment, 'id'>) => {
+    await paymentApi.create(payment);
+    refreshData();
+  };
+
+  const updatePayment = async (id: string, data: Omit<Payment, 'id'>) => {
+    await paymentApi.update(id, data);
+    refreshData();
+  };
+
+  const deletePayment = async (id: string) => {
+    await paymentApi.remove(id);
+    refreshData();
+  };
+
   const addLedgerEntry = async (entry: Omit<LedgerEntry, 'id'>) => {
     await api.addLedgerEntry(entry);
     refreshData();
@@ -456,7 +485,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteDailyExpense = async (id: string) => {
     await dailyExpenseApi.remove(id);
   };
-  const getSupervisorAccounts = useCallback(async () => api.getSupervisorAccounts(), []);
+  const getSupervisorAccounts = useCallback(async () => {
+    const users = await usersApi.listUsers();
+    return users
+      .filter((user) => user.role === Role.PICKUP_SUPERVISOR || user.role === Role.DROPOFF_SUPERVISOR)
+      .map((user) => user.name);
+  }, []);
 
   const addVehicleOwner = async (vehicleOwner: Omit<VehicleOwner, 'id'>) => { await api.addVehicleOwner(vehicleOwner); refreshData(); };
   const updateVehicleOwner = async (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => { await api.updateVehicleOwner(id, vehicleOwner); refreshData(); };
@@ -646,6 +680,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = {
     trips,
     advances,
+    payments,
     ledgerEntries,
     vehicles,
     quarries,
@@ -676,6 +711,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addAdvance,
     updateAdvance,
     deleteAdvance,
+    addPayment,
+    updatePayment,
+    deletePayment,
     addLedgerEntry,
     updateLedgerEntry,
     deleteLedgerEntry,

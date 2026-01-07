@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
 import { Storage } from '@google-cloud/storage';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -12,6 +14,7 @@ const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const storage = new Storage();
 const CONFIG_BUCKET = process.env.CONFIG_BUCKET || '';
 const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET || '';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
@@ -33,6 +36,38 @@ const UPLOAD_FIELD_LABELS = {
   endWaymentSlipUpload: 'end_wayment_slip',
 };
 
+const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login']);
+
+const signToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
+
+const sanitizeUser = (user) => {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    avatarUrl: user.avatarUrl || '',
+    pickupLocationId: user.pickupLocationId,
+    dropOffLocationId: user.dropOffLocationId,
+    pickupLocationName: user.pickupLocation?.name || null,
+    dropOffLocationName: user.dropOffLocation?.name || null,
+  };
+};
+
+const loadUserForRequest = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { pickupLocation: true, dropOffLocation: true },
+  });
+  return sanitizeUser(user);
+};
+
+const hasRole = (user, roles) => Boolean(user && roles.includes(user.role));
+const getUserDisplayName = (user) => user?.name || user?.username || '';
+const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
+const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
+
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
   const allowedOriginRaw = process.env.CORS_ORIGIN || '*';
@@ -48,6 +83,41 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.use(async (req, res, next) => {
+  if (PUBLIC_PATHS.has(req.path)) {
+    next();
+    return;
+  }
+  if (!req.path.startsWith('/api')) {
+    next();
+    return;
+  }
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await loadUserForRequest(payload.id);
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') && req.user?.role === 'GUEST' && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  next();
+});
 if (!ATTACHMENTS_BUCKET) {
   app.use('/uploads', express.static(UPLOADS_ROOT));
 }
@@ -59,7 +129,48 @@ app.get('/', (_req, res) => {
   res.status(200).json({ status: 'ok', message: 'LogiTrack API is running' });
 });
 
-app.get('/api/admin/config', async (_req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password are required' });
+    return;
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: String(username) },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    if (!user) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+    const ok = await bcrypt.compare(String(password), user.passwordHash);
+    if (!ok) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+    const safeUser = sanitizeUser(user);
+    const token = signToken({ id: user.id, role: user.role });
+    res.json({ token, user: safeUser });
+  } catch (error) {
+    console.error('Failed to login', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  res.json({ user: req.user });
+});
+
+app.get('/api/admin/config', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
   if (!CONFIG_BUCKET) {
     res.status(400).json({ error: 'CONFIG_BUCKET is not configured' });
     return;
@@ -233,6 +344,10 @@ const resolveUploadList = async (value) => {
 };
 
 app.put('/api/admin/config', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
   if (!CONFIG_BUCKET) {
     res.status(400).json({ error: 'CONFIG_BUCKET is not configured' });
     return;
@@ -255,6 +370,130 @@ app.put('/api/admin/config', async (req, res) => {
   } catch (error) {
     console.error('Failed to update config.json', error);
     res.status(500).json({ error: 'Failed to update config.json' });
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  try {
+    const { role } = req.query;
+    const where = role ? { role: String(role) } : {};
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.json(users.map(sanitizeUser));
+  } catch (error) {
+    console.error('Failed to list users', error);
+    res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const {
+    username,
+    name,
+    password,
+    role,
+    avatarUrl = '',
+    pickupLocationId = null,
+    dropOffLocationId = null,
+  } = req.body || {};
+  if (!username || !name || !password || !role) {
+    res.status(400).json({ error: 'username, name, password, role are required' });
+    return;
+  }
+  if (!USER_ROLES.includes(String(role))) {
+    res.status(400).json({ error: 'Invalid role.' });
+    return;
+  }
+  if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
+    res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
+    return;
+  }
+  if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
+    res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
+    return;
+  }
+  try {
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const user = await prisma.user.create({
+      data: {
+        username: String(username),
+        name: String(name),
+        passwordHash,
+        role: String(role),
+        avatarUrl: String(avatarUrl || ''),
+        pickupLocationId: pickupLocationId || null,
+        dropOffLocationId: dropOffLocationId || null,
+      },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.status(201).json(sanitizeUser(user));
+  } catch (error) {
+    console.error('Failed to create user', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const { id } = req.params;
+  const {
+    name,
+    password,
+    role,
+    avatarUrl,
+    pickupLocationId,
+    dropOffLocationId,
+  } = req.body || {};
+  try {
+    if (role && !USER_ROLES.includes(String(role))) {
+      res.status(400).json({ error: 'Invalid role.' });
+      return;
+    }
+    const data = {
+      ...(name ? { name: String(name) } : {}),
+      ...(role ? { role: String(role) } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl: String(avatarUrl || '') } : {}),
+      ...(pickupLocationId !== undefined ? { pickupLocationId: pickupLocationId || null } : {}),
+      ...(dropOffLocationId !== undefined ? { dropOffLocationId: dropOffLocationId || null } : {}),
+    };
+    if (role && !isSupervisorRole(String(role))) {
+      data.pickupLocationId = null;
+      data.dropOffLocationId = null;
+    }
+    if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
+      res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
+      return;
+    }
+    if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
+      res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
+      return;
+    }
+    if (password) {
+      data.passwordHash = await bcrypt.hash(String(password), 10);
+    }
+    const user = await prisma.user.update({
+      where: { id },
+      data,
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.json(sanitizeUser(user));
+  } catch (error) {
+    console.error('Failed to update user', error);
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
@@ -625,6 +864,26 @@ const ensureSeedData = async () => {
   if (accountTypeCount === 0) {
     await prisma.accountType.createMany({ data: seedAccountTypes });
   }
+  await ensureAdminUser();
+};
+
+const ensureAdminUser = async () => {
+  const userCount = await prisma.user.count();
+  if (userCount > 0) return;
+  const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+  const name = process.env.DEFAULT_ADMIN_NAME || 'Admin User';
+  const password = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({
+    data: {
+      username,
+      name,
+      passwordHash,
+      role: 'ADMIN',
+      avatarUrl: '',
+    },
+  });
+  console.log(`Created default admin user: ${username}`);
 };
 
 const getDatabasePath = () => {
@@ -1036,6 +1295,9 @@ app.get('/api/advances', async (req, res) => {
 });
 
 app.post('/api/advances', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const {
     date,
     tripId = null,
@@ -1085,6 +1347,9 @@ app.post('/api/advances', async (req, res) => {
 });
 
 app.put('/api/advances/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   const {
     date,
@@ -1136,6 +1401,9 @@ app.put('/api/advances/:id', async (req, res) => {
 });
 
 app.delete('/api/advances/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
     await prisma.advanceRecord.delete({ where: { id } });
@@ -1147,6 +1415,9 @@ app.delete('/api/advances/:id', async (req, res) => {
 });
 
 app.get('/api/advances/export', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
     const advances = await prisma.advanceRecord.findMany({ orderBy: { date: 'desc' } });
     const header = ['Date', 'From', 'To', 'Purpose', 'Amount', 'Trip Id', 'Rate Party Type', 'Rate Party Id', 'Counterparty', 'Remarks'];
@@ -1172,8 +1443,127 @@ app.get('/api/advances/export', async (req, res) => {
   }
 });
 
+app.get('/api/payments', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { ratePartyType, ratePartyId, tripId } = req.query;
+  try {
+    const where = {
+      ...(ratePartyType ? { ratePartyType: String(ratePartyType) } : {}),
+      ...(ratePartyId ? { ratePartyId: String(ratePartyId) } : {}),
+      ...(tripId ? { tripId: Number(tripId) } : {}),
+    };
+    const payments = await prisma.paymentRecord.findMany({
+      where,
+      orderBy: { date: 'desc' },
+    });
+    res.json(payments);
+  } catch (error) {
+    console.error('Failed to list payments', error);
+    res.status(500).json({ error: 'Failed to list payments' });
+  }
+});
+
+app.post('/api/payments', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const {
+    date,
+    ratePartyType,
+    ratePartyId,
+    counterpartyName = '',
+    amount = 0,
+    type = 'PAYMENT',
+    method = '',
+    remarks = '',
+    tripId = null,
+  } = req.body || {};
+  if (!date || !ratePartyType || !ratePartyId) {
+    return res.status(400).json({ error: 'Date, rate party type, and rate party are required.' });
+  }
+  try {
+    const payment = await prisma.paymentRecord.create({
+      data: {
+        date: new Date(date),
+        ratePartyType,
+        ratePartyId,
+        counterpartyName,
+        amount: Number(amount) || 0,
+        type,
+        method,
+        remarks,
+        createdBy: getUserDisplayName(req.user),
+        tripId: tripId ? Number(tripId) : null,
+      },
+    });
+    res.status(201).json(payment);
+  } catch (error) {
+    console.error('Failed to create payment', error);
+    res.status(500).json({ error: 'Failed to create payment' });
+  }
+});
+
+app.put('/api/payments/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const {
+    date,
+    ratePartyType,
+    ratePartyId,
+    counterpartyName = '',
+    amount = 0,
+    type = 'PAYMENT',
+    method = '',
+    remarks = '',
+    tripId = null,
+  } = req.body || {};
+  if (!date || !ratePartyType || !ratePartyId) {
+    return res.status(400).json({ error: 'Date, rate party type, and rate party are required.' });
+  }
+  try {
+    const payment = await prisma.paymentRecord.update({
+      where: { id },
+      data: {
+        date: new Date(date),
+        ratePartyType,
+        ratePartyId,
+        counterpartyName,
+        amount: Number(amount) || 0,
+        type,
+        method,
+        remarks,
+        tripId: tripId ? Number(tripId) : null,
+      },
+    });
+    res.json(payment);
+  } catch (error) {
+    console.error('Failed to update payment', error);
+    res.status(500).json({ error: 'Failed to update payment' });
+  }
+});
+
+app.delete('/api/payments/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  try {
+    await prisma.paymentRecord.delete({ where: { id } });
+    res.status(204).end();
+  } catch (error) {
+    console.error('Failed to delete payment', error);
+    res.status(500).json({ error: 'Failed to delete payment' });
+  }
+});
+
 app.get('/api/daily-expenses', async (req, res) => {
-  const supervisorName = req.query.supervisor;
+  const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   if (!supervisorName) {
     return res.status(400).json({ error: 'Supervisor name is required.' });
   }
@@ -1192,6 +1582,9 @@ app.get('/api/daily-expenses', async (req, res) => {
 });
 
 app.get('/api/daily-expenses/all', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
     const expenses = await prisma.dailyExpenseRecord.findMany({
       orderBy: { date: 'desc' },
@@ -1204,6 +1597,9 @@ app.get('/api/daily-expenses/all', async (req, res) => {
 });
 
 app.post('/api/daily-expenses', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const {
     date,
     from,
@@ -1261,6 +1657,9 @@ app.post('/api/daily-expenses', async (req, res) => {
 });
 
 app.put('/api/daily-expenses/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   const {
     date,
@@ -1308,6 +1707,9 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
 });
 
 app.delete('/api/daily-expenses/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
     const expense = await prisma.dailyExpenseRecord.findUnique({ where: { id } });
@@ -1322,7 +1724,9 @@ app.delete('/api/daily-expenses/:id', async (req, res) => {
 });
 
 app.get('/api/daily-expenses/export', async (req, res) => {
-  const supervisorName = req.query.supervisor;
+  const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   try {
     const where = supervisorName ? { from: supervisorName } : {};
     const expenses = await prisma.dailyExpenseRecord.findMany({
@@ -1357,7 +1761,20 @@ app.get('/api/daily-expenses/export', async (req, res) => {
 
 app.get('/api/trips', async (req, res) => {
   try {
-    const trips = await prisma.tripRecord.findMany({ orderBy: { date: 'desc' } });
+    const where = {};
+    if (req.user?.role === 'PICKUP_SUPERVISOR') {
+      if (!req.user.pickupLocationName) {
+        return res.json([]);
+      }
+      where.pickupPlace = req.user.pickupLocationName;
+    }
+    if (req.user?.role === 'DROPOFF_SUPERVISOR') {
+      if (!req.user.dropOffLocationName) {
+        return res.json([]);
+      }
+      where.dropOffPlace = req.user.dropOffLocationName;
+    }
+    const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
     const hydrated = await Promise.all(trips.map(async (trip) => {
       const updated = { ...trip };
       for (const field of UPLOAD_FIELDS) {
@@ -1377,9 +1794,16 @@ app.get('/api/trips', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
+    const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER']);
+    const effectiveRole = isAdmin ? role : (req.user?.role || role);
+    const effectiveUser = isAdmin ? user : (getUserDisplayName(req.user) || user);
     const where = {
-      ...(role ? { targetRole: String(role) } : {}),
-      ...(user ? { OR: [{ targetUser: null }, { targetUser: String(user) }] } : {}),
+      ...(effectiveRole
+        ? {
+          targetRole: effectiveRole === 'ADMIN' ? { in: ['ADMIN', 'Admin'] } : String(effectiveRole),
+        }
+        : {}),
+      ...(effectiveUser ? { OR: [{ targetUser: null }, { targetUser: String(effectiveUser) }] } : {}),
     };
     const notifications = await prisma.notificationRecord.findMany({
       where,
@@ -1458,6 +1882,14 @@ app.get('/api/notifications/:id', async (req, res) => {
 
 app.post('/api/trips', async (req, res) => {
   const data = req.body || {};
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName) {
+    if (data.pickupPlace && data.pickupPlace !== req.user.pickupLocationName) {
+      return res.status(403).json({ error: 'Pickup location mismatch.' });
+    }
+  }
   if (!data.date || !data.customer || !data.vehicleNumber) {
     return res.status(400).json({ error: 'Date, customer, and vehicle number are required.' });
   }
@@ -1466,7 +1898,9 @@ app.post('/api/trips', async (req, res) => {
       data: {
         date: new Date(data.date),
         place: data.place || '',
-        pickupPlace: data.pickupPlace || '',
+        pickupPlace: req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName
+          ? req.user.pickupLocationName
+          : (data.pickupPlace || ''),
         dropOffPlace: data.dropOffPlace || '',
         vendorName: data.vendorName || '',
         customer: data.customer || '',
@@ -1494,7 +1928,7 @@ app.post('/api/trips', async (req, res) => {
         paymentStatus: data.paymentStatus || 'unpaid',
         agent: data.agent || '',
         status: data.status || 'pending upload',
-        createdBy: data.createdBy || '',
+        createdBy: data.createdBy || getUserDisplayName(req.user),
         ewayBillUpload: data.ewayBillUpload || '',
         invoiceDCUpload: data.invoiceDCUpload || '',
         waymentSlipUpload: data.waymentSlipUpload || '',
@@ -1523,6 +1957,15 @@ app.put('/api/trips/:id', async (req, res) => {
     if (!existingTrip) {
       res.status(404).json({ error: 'Trip not found' });
       return;
+    }
+    if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName && existingTrip.pickupPlace !== req.user.pickupLocationName) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (req.user?.role === 'DROPOFF_SUPERVISOR' && req.user.dropOffLocationName && existingTrip.dropOffPlace !== req.user.dropOffLocationName) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
     const tripForUploads = {
       ...existingTrip,
@@ -1608,7 +2051,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         type: 'alert',
         timestamp: new Date(),
         read: false,
-        targetRole: 'Admin',
+        targetRole: 'ADMIN',
         targetUser: null,
         tripId: trip.id,
         requestType: 'delete',
@@ -1647,7 +2090,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         type: 'alert',
         timestamp: new Date(),
         read: false,
-        targetRole: 'Admin',
+        targetRole: 'ADMIN',
         targetUser: null,
         tripId: trip.id,
         requestType: 'update',
@@ -1674,6 +2117,9 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
 });
 
 app.delete('/api/trips/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
     await prisma.tripRecord.delete({ where: { id: Number(id) } });

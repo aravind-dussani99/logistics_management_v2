@@ -23,7 +23,7 @@ const EditProfileForm: React.FC<EditProfileFormProps> = ({ user, onClose }) => {
     return (
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div className="flex items-center space-x-4">
-                <img className="h-16 w-16 rounded-full object-cover" src={user.avatar} alt="Current avatar" />
+                <img className="h-16 w-16 rounded-full object-cover" src={user.avatarUrl || 'https://i.pravatar.cc/150?u=default'} alt="Current avatar" />
                 <div>
                     <h3 className="text-lg font-medium">{user.name}</h3>
                     <p className="text-sm text-gray-500">{user.role}</p>

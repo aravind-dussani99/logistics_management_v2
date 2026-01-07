@@ -53,7 +53,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
     const [isFilterPopoverOpen, setFilterPopoverOpen] = useState(false);
     const [isAddMenuOpen, setAddMenuOpen] = useState(false);
 
-    const isSupervisor = currentUser?.role === Role.SUPERVISOR;
+    const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const addActions = isSupervisor ? supervisorActions : adminActions;
 
     useEffect(() => {

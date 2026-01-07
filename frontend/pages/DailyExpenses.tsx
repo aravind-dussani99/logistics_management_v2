@@ -42,10 +42,11 @@ const DailyExpenses: React.FC = () => {
     const [supervisors, setSupervisors] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'transactions' | 'insights'>('transactions');
     const [insightFilters, setInsightFilters] = useState<{ category?: string; subCategory?: string; type?: string }>({});
+    const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
 
     const fetchData = useCallback(() => {
         if (!currentUser) return;
-        if (currentUser.role === Role.ADMIN) {
+        if (canViewAll) {
             dailyExpenseApi.getAll().then((allExpenses) => {
                 setExpenses(allExpenses);
                 setOpeningBalance(0);
@@ -59,7 +60,7 @@ const DailyExpenses: React.FC = () => {
                 setOpeningBalance(openingBalance);
             });
         }
-    }, [currentUser, getDailyExpenses, getSupervisorAccounts]);
+    }, [currentUser, getDailyExpenses, getSupervisorAccounts, canViewAll]);
     
     useEffect(() => {
         fetchData();
@@ -119,7 +120,7 @@ const DailyExpenses: React.FC = () => {
         
         const allEntries = [...expenses].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        const chronologicalEntries = currentUser?.role === Role.ADMIN ? allEntries : [openingBalanceEntry, ...allEntries];
+        const chronologicalEntries = canViewAll ? allEntries : [openingBalanceEntry, ...allEntries];
 
         return chronologicalEntries
             .filter(e => {
@@ -128,7 +129,7 @@ const DailyExpenses: React.FC = () => {
                 if (filters.dateFrom && entryDate < filters.dateFrom) return false;
                 if (filters.dateTo && entryDate > filters.dateTo) return false;
                 if (filters.destination && !(e.to || '').toLowerCase().includes(filters.destination.toLowerCase())) return false;
-                if (currentUser?.role === Role.ADMIN && filters.supervisor && e.from !== filters.supervisor) return false;
+                if (canViewAll && filters.supervisor && e.from !== filters.supervisor) return false;
                 return true;
             });
     }, [expenses, filters, openingBalance, currentUser]);
@@ -249,7 +250,7 @@ const DailyExpenses: React.FC = () => {
                                 onChange={e => setFilters(f => ({...f, destination: e.target.value }))}
                                 className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
                             />
-                            {currentUser?.role === Role.ADMIN && (
+                            {canViewAll && (
                                 <select
                                     value={filters.supervisor || ''}
                                     onChange={e => setFilters(f => ({ ...f, supervisor: e.target.value || undefined }))}
@@ -271,7 +272,7 @@ const DailyExpenses: React.FC = () => {
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    {(currentUser?.role === Role.ADMIN
+                                    {(canViewAll
                                         ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
                                         : ['S. No.', 'Date', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
                                     ).map(h => (
@@ -283,10 +284,10 @@ const DailyExpenses: React.FC = () => {
                                 {(() => {
                                     const rows: React.ReactNode[] = [];
                                     let lastDate = '';
-                                    const colSpan = currentUser?.role === Role.ADMIN ? 11 : 10;
+                                    const colSpan = canViewAll ? 11 : 10;
                                     paginatedExpenses.forEach((expense, index) => {
                                         const dateLabel = formatDateDisplay(expense.date);
-                                        if (currentUser?.role === Role.ADMIN && dateLabel !== lastDate) {
+                                        if (canViewAll && dateLabel !== lastDate) {
                                             rows.push(
                                                 <tr key={`group-${dateLabel}`} className="bg-gray-50 dark:bg-gray-700">
                                                     <td colSpan={colSpan} className="px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -300,7 +301,7 @@ const DailyExpenses: React.FC = () => {
                                             <tr key={expense.id}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{dateLabel}</td>
-                                                {currentUser?.role === Role.ADMIN && (
+                                                {canViewAll && (
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.from || '-'}</td>
                                                 )}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{formatCurrency(expense.availableBalance || 0)}</td>

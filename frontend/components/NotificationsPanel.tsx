@@ -45,7 +45,9 @@ const NotificationsPanel: React.FC = () => {
     });
 
     if (notification.tripId) {
-      const destination = currentUser?.role === 'Supervisor' ? '/dashboard' : '/daily-trips';
+      const isPickup = currentUser?.role === 'PICKUP_SUPERVISOR';
+      const isDropoff = currentUser?.role === 'DROPOFF_SUPERVISOR';
+      const destination = isPickup ? '/dashboard' : (isDropoff ? '/received' : '/daily-trips');
       navigate(`${destination}?notificationId=${notification.id}&tripId=${notification.tripId}&requestType=${notification.requestType || ''}`);
       setIsOpen(false);
     }

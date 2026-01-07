@@ -113,31 +113,43 @@ export interface Advance {
 }
 
 export interface Payment {
-    id: number;
-    tripId: number;
+    id: string;
+    tripId?: number | null;
     amount: number;
     date: string;
     type: PaymentType;
+    ratePartyType?: string;
+    ratePartyId?: string;
+    counterpartyName?: string;
+    method?: string;
+    remarks?: string;
+    createdBy?: string;
 }
 
 export enum PaymentType {
-    INCOME = 'income',
-    EXPENSE = 'expense',
+    PAYMENT = 'PAYMENT',
+    RECEIPT = 'RECEIPT',
 }
 
 export enum Role {
-    ADMIN = 'Admin',
-    MANAGER = 'Manager',
-    DRIVER = 'Driver',
-    SUPERVISOR = 'Supervisor',
+    ADMIN = 'ADMIN',
+    MANAGER = 'MANAGER',
+    ACCOUNTANT = 'ACCOUNTANT',
+    PICKUP_SUPERVISOR = 'PICKUP_SUPERVISOR',
+    DROPOFF_SUPERVISOR = 'DROPOFF_SUPERVISOR',
+    GUEST = 'GUEST',
 }
 
 export interface User {
-    id: number;
+    id: string;
+    username?: string;
     name: string;
     role: Role;
-    avatar: string;
+    avatarUrl?: string;
     password?: string;
+    pickupLocationId?: string | null;
+    dropOffLocationId?: string | null;
+    pickupLocationName?: string | null;
     dropOffLocationName?: string;
 }
 

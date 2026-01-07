@@ -40,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ setSidebarOpen }) => {
         <NotificationsPanel />
         <div className="relative">
           <button onClick={() => setProfileOpen(!profileOpen)} className="relative flex items-center space-x-2 focus:outline-none">
-            <img className="h-8 w-8 rounded-full object-cover" src={currentUser?.avatar} alt="Your avatar" />
+            <img className="h-8 w-8 rounded-full object-cover" src={currentUser?.avatarUrl || 'https://i.pravatar.cc/150?u=default'} alt="Your avatar" />
             <div className="hidden md:block text-left">
               <div className="font-semibold text-sm text-gray-800 dark:text-white">{currentUser?.name}</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">{currentUser?.role}</div>

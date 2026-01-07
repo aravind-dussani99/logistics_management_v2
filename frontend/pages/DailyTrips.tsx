@@ -176,12 +176,12 @@ const DailyTrips: React.FC = () => {
                                                     await notificationApi.create({
                                                         message: `Trip #${trip.id} deleted by Admin.`,
                                                         type: 'info',
-                                                        targetRole: 'Supervisor',
+                                                        targetRole: Role.PICKUP_SUPERVISOR,
                                                         targetUser: trip.createdBy || null,
                                                         tripId: trip.id,
                                                         requestType: 'delete',
                                                         requesterName: currentUser?.name || 'Admin',
-                                                        requesterRole: currentUser?.role || 'Admin',
+                                                        requesterRole: currentUser?.role || Role.ADMIN,
                                                     });
                                                     await deleteTrip(trip.id);
                                                     closeModal();
@@ -213,12 +213,12 @@ const DailyTrips: React.FC = () => {
                                                     await notificationApi.create({
                                                         message: `Trip #${trip.id} sent back to Enter Trips. ${message || ''}`.trim(),
                                                         type: 'info',
-                                                        targetRole: 'Supervisor',
+                                                        targetRole: Role.PICKUP_SUPERVISOR,
                                                         targetUser: trip.createdBy || null,
                                                         tripId: trip.id,
                                                         requestType: 'sent-back',
                                                         requesterName: currentUser?.name || 'Admin',
-                                                        requesterRole: currentUser?.role || 'Admin',
+                                                        requesterRole: currentUser?.role || Role.ADMIN,
                                                         requestMessage: message || '',
                                                     });
                                                     closeModal();

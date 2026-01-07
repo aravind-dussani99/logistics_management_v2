@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useData } from '../contexts/DataContext';
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
-import { Advance, DailyExpense, RatePartyType, Trip } from '../types';
+import { DailyExpense, Payment, PaymentType, RatePartyType, Trip } from '../types';
 
 type RatePartySummary = {
   key: string;
@@ -23,7 +23,7 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
 };
 
 const AccountLedgerOverview: React.FC = () => {
-  const { trips, advances, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+  const { trips, advances, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [selectedType, setSelectedType] = useState<RatePartyType | 'all'>('all');
   const [selectedParty, setSelectedParty] = useState<string>('all');
@@ -94,7 +94,16 @@ const AccountLedgerOverview: React.FC = () => {
           balance: 0,
         });
       }
-      bucket.get(key)!.paidAmount += Number(amount || 0);
+    bucket.get(key)!.paidAmount += Number(amount || 0);
+    };
+
+    const addPaymentRecord = (payment: Payment, partyName: string) => {
+      if (!payment.ratePartyType) return;
+      const isCustomer = payment.ratePartyType === 'vendor-customer';
+      const signedAmount = payment.type === PaymentType.RECEIPT
+        ? (isCustomer ? payment.amount : -payment.amount)
+        : (isCustomer ? -payment.amount : payment.amount);
+      addPayment(payment.ratePartyType as RatePartyType, partyName, signedAmount);
     };
 
     advances.forEach(advance => {
@@ -115,12 +124,21 @@ const AccountLedgerOverview: React.FC = () => {
       }
     });
 
+    payments.forEach(payment => {
+      if (!payment.ratePartyType || !payment.ratePartyId) return;
+      const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${payment.ratePartyType}:`) && id === payment.ratePartyId);
+      if (match) {
+        const name = match[0].split(':').slice(1).join(':');
+        addPaymentRecord(payment, name);
+      }
+    });
+
     bucket.forEach(summary => {
       summary.balance = summary.grossAmount - summary.paidAmount;
     });
 
     return Array.from(bucket.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [trips, advances, expenses, partyIdLookup]);
+  }, [trips, advances, expenses, payments, partyIdLookup]);
 
   const filteredSummaries = useMemo(() => {
     return summaries.filter(summary => {

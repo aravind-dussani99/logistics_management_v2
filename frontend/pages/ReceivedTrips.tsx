@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trip } from '../types';
+import { Trip, Role } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useUI } from '../contexts/UIContext';
@@ -20,6 +20,7 @@ const ReceivedTrips: React.FC = () => {
     const { trips, refreshKey, updateTrip, deleteTrip } = useData();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
+    const canManageTrips = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [inTransitTrips, setInTransitTrips] = useState<Trip[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
 
@@ -116,7 +117,7 @@ const ReceivedTrips: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                     <button onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                    {currentUser?.role === 'Supervisor' && (trip.status || '').toLowerCase() === 'in transit' && (
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() === 'in transit' && (
                                         <>
                                             <button onClick={() => handleReceive(trip)} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
                                             <button
@@ -140,7 +141,7 @@ const ReceivedTrips: React.FC = () => {
                                             </button>
                                         </>
                                     )}
-                                    {currentUser?.role === 'Admin' && (
+                                    {canManageTrips && (
                                         <>
                                             <button onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                             <button
@@ -155,12 +156,12 @@ const ReceivedTrips: React.FC = () => {
                                                                 await notificationApi.create({
                                                                     message: `Trip #${trip.id} deleted by Admin.`,
                                                                     type: 'info',
-                                                                    targetRole: 'Supervisor',
+                                                                    targetRole: Role.PICKUP_SUPERVISOR,
                                                                     targetUser: trip.createdBy || null,
                                                                     tripId: trip.id,
                                                                     requestType: 'delete',
                                                                     requesterName: currentUser?.name || 'Admin',
-                                                                    requesterRole: currentUser?.role || 'Admin',
+                                                                    requesterRole: currentUser?.role || Role.ADMIN,
                                                                 });
                                                                 await deleteTrip(trip.id);
                                                                 closeModal();
@@ -192,12 +193,12 @@ const ReceivedTrips: React.FC = () => {
                                                                 await notificationApi.create({
                                                                     message: `Trip #${trip.id} sent back to Enter Trips. ${message || ''}`.trim(),
                                                                     type: 'info',
-                                                                    targetRole: 'Supervisor',
+                                                                    targetRole: Role.PICKUP_SUPERVISOR,
                                                                     targetUser: trip.createdBy || null,
                                                                     tripId: trip.id,
                                                                     requestType: 'sent-back',
                                                                     requesterName: currentUser?.name || 'Admin',
-                                                                    requesterRole: currentUser?.role || 'Admin',
+                                                                    requesterRole: currentUser?.role || Role.ADMIN,
                                                                     requestMessage: message || '',
                                                                 });
                                                                 closeModal();

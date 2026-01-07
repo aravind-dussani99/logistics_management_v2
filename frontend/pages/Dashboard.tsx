@@ -36,7 +36,7 @@ const getMtdRange = () => {
 const Dashboard: React.FC = () => {
     const { currentUser } = useAuth();
     
-    if (currentUser?.role === Role.SUPERVISOR) {
+    if (currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR) {
         return <SupervisorTripReport />;
     }
     
@@ -187,7 +187,7 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => { setCurrentPage(1); }, [filters]);
     
-    if (currentUser?.role === Role.DRIVER) return <div>Driver Dashboard Coming Soon...</div>;
+    if (currentUser?.role === Role.GUEST) return <div>Guest Dashboard Coming Soon...</div>;
 
     return (
         <div className="relative">

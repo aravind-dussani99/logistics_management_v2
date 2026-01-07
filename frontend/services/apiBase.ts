@@ -23,3 +23,23 @@ export const apiUrl = (path: string) => {
   }
   return `${normalizeBase(base)}/${path}`;
 };
+
+export const getAuthToken = () => {
+  try {
+    return localStorage.getItem('authToken') || '';
+  } catch {
+    return '';
+  }
+};
+
+export const authFetch = async (path: string, options: RequestInit = {}) => {
+  const token = getAuthToken();
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return fetch(apiUrl(path), { ...options, headers });
+};

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { User, Role } from '../types';
+import { SiteLocation, User, Role } from '../types';
 
 interface UserFormProps {
     user: User;
-    onSave: (userId: number, userData: Partial<User>) => void;
+    siteLocations: SiteLocation[];
+    onSave: (userData: Partial<User> & { password?: string }) => Promise<void>;
     onClose: () => void;
+    isNew?: boolean;
 }
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSelectElement> & {label: string, children?: React.ReactNode, isReadOnly?: boolean}> = ({ label, isReadOnly, children, ...props }) => {
@@ -23,39 +25,73 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
     );
 };
 
-const UserForm: React.FC<UserFormProps> = ({ user, onSave, onClose }) => {
+const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClose, isNew = false }) => {
     const [role, setRole] = useState<Role>(user.role);
+    const [username, setUsername] = useState(user.username || '');
+    const [name, setName] = useState(user.name || '');
     const [password, setPassword] = useState('');
+    const [pickupLocationId, setPickupLocationId] = useState(user.pickupLocationId || '');
+    const [dropOffLocationId, setDropOffLocationId] = useState(user.dropOffLocationId || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        const updatedData: Partial<User> = { role };
+        const updatedData: Partial<User> & { password?: string } = { role, name, username };
         if (password) {
             updatedData.password = password;
         }
-        onSave(user.id, updatedData);
+        if (role === Role.PICKUP_SUPERVISOR) {
+            updatedData.pickupLocationId = pickupLocationId || null;
+            updatedData.dropOffLocationId = null;
+        } else if (role === Role.DROPOFF_SUPERVISOR) {
+            updatedData.dropOffLocationId = dropOffLocationId || null;
+            updatedData.pickupLocationId = null;
+        } else {
+            updatedData.pickupLocationId = null;
+            updatedData.dropOffLocationId = null;
+        }
+        await onSave(updatedData);
     };
 
     return (
          <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <InputField label="Username" id="username" name="username" type="text" value={user.name} isReadOnly />
+                <InputField label="Username" id="username" name="username" type="text" value={username} onChange={e => setUsername(e.target.value)} isReadOnly={!isNew} required />
+                <InputField label="Name" id="name" name="name" type="text" value={name} onChange={e => setName(e.target.value)} required />
                 
                 <InputField label="Role" id="role" name="role" type="select" value={role} onChange={e => setRole(e.target.value as Role)} required>
                     {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
                 </InputField>
 
+                {role === Role.PICKUP_SUPERVISOR && (
+                    <InputField label="Pickup Location" id="pickupLocationId" name="pickupLocationId" type="select" value={pickupLocationId} onChange={e => setPickupLocationId(e.target.value)} required>
+                        <option value="">Select pickup location</option>
+                        {siteLocations.map(location => (
+                            <option key={location.id} value={location.id}>{location.name}</option>
+                        ))}
+                    </InputField>
+                )}
+
+                {role === Role.DROPOFF_SUPERVISOR && (
+                    <InputField label="Drop-off Location" id="dropOffLocationId" name="dropOffLocationId" type="select" value={dropOffLocationId} onChange={e => setDropOffLocationId(e.target.value)} required>
+                        <option value="">Select drop-off location</option>
+                        {siteLocations.map(location => (
+                            <option key={location.id} value={location.id}>{location.name}</option>
+                        ))}
+                    </InputField>
+                )}
+
                 <div className="sm:col-span-2">
                     <InputField 
-                        label="New Password (optional)" 
+                        label={isNew ? "Password" : "New Password (optional)"} 
                         id="password" 
                         name="password" 
                         type="password" 
                         value={password} 
                         onChange={e => setPassword(e.target.value)} 
-                        placeholder="Leave blank to keep current password"
+                        placeholder={isNew ? "Set initial password" : "Leave blank to keep current password"}
+                        required={isNew}
                     />
                 </div>
             </div>
