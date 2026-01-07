@@ -74,13 +74,20 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     },
   ];
 
-  const supervisorItems = [
-    { to: '/dashboard', icon: 'enter-outline', name: 'Enter Trips' },
-    { to: '/received', icon: 'checkbox-outline', name: 'Received Trips' },
-    { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
-    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
-    { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
-  ];
+  const isDropOffSupervisor = Boolean(currentUser?.dropOffLocationName);
+  const supervisorItems = isDropOffSupervisor
+    ? [
+        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips' },
+        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+      ]
+    : [
+        { to: '/dashboard', icon: 'enter-outline', name: 'Enter Trips' },
+        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+      ];
 
   const NavItem: React.FC<{ to: string; icon: string; name: string; }> = ({ to, icon, name }) => {
     return (

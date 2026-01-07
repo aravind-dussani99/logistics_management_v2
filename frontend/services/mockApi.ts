@@ -8,6 +8,8 @@ const mockUsers: User[] = [
     { id: 2, name: 'Manager User', role: Role.MANAGER, avatar: 'https://i.pravatar.cc/150?u=manager', password: 'password' },
     { id: 3, name: 'Driver User', role: Role.DRIVER, avatar: 'https://i.pravatar.cc/150?u=driver', password: 'password' },
     { id: 4, name: 'Malli', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=malli', password: 'password', dropOffLocationName: 'Site A' },
+    { id: 5, name: 'Pickup Supervisor', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=pickup', password: 'pickup123' },
+    { id: 6, name: 'Dropoff Supervisor', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=dropoff', password: 'dropoff123', dropOffLocationName: 'Site A' },
 ];
 
 const mockNotifications: Notification[] = [

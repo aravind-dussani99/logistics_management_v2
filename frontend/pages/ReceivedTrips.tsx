@@ -25,7 +25,8 @@ const ReceivedTrips: React.FC = () => {
 
     useEffect(() => {
         const filtered = trips.filter(t => {
-            if (t.status !== 'in transit') return false;
+            const status = (t.status || '').toLowerCase();
+            if (!['in transit', 'pending validation', 'completed'].includes(status)) return false;
             if (!currentUser?.dropOffLocationName) return true;
             const tripLocation = t.dropOffPlace || t.place;
             return tripLocation === currentUser.dropOffLocationName;
@@ -66,7 +67,7 @@ const ReceivedTrips: React.FC = () => {
         <div className="relative">
             <PageHeader
                 title="Trips In Transit"
-                subtitle={`${inTransitTrips.length} trips are in transit. ${delayedTripsCount > 0 ? `⚠️ ${delayedTripsCount} are delayed (>48h).` : ''}`}
+                subtitle={`${inTransitTrips.length} trips available. ${delayedTripsCount > 0 ? `⚠️ ${delayedTripsCount} are delayed (>48h).` : ''}`}
                 filters={{}}
                 onFilterChange={() => {}}
                 filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
@@ -75,7 +76,7 @@ const ReceivedTrips: React.FC = () => {
             <main className="pt-6">
                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
                      <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-                        <h2 className="text-xl font-semibold">Trips to be Received</h2>
+                        <h2 className="text-xl font-semibold">Received Trips</h2>
                         <Pagination 
                             currentPage={currentPage}
                             totalPages={totalPages}
@@ -102,11 +103,20 @@ const ReceivedTrips: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.pickupPlace || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.dropOffPlace || trip.place || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">In Transit</span>
+                                    {(() => {
+                                        const status = (trip.status || '').toLowerCase();
+                                        if (status === 'completed') {
+                                            return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
+                                        }
+                                        if (status === 'pending validation') {
+                                            return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">Pending Validation</span>;
+                                        }
+                                        return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">In Transit</span>;
+                                    })()}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                     <button onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                    {currentUser?.role === 'Supervisor' && (
+                                    {currentUser?.role === 'Supervisor' && (trip.status || '').toLowerCase() === 'in transit' && (
                                         <>
                                             <button onClick={() => handleReceive(trip)} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
                                             <button
