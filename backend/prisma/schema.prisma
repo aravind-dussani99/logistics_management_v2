@@ -379,11 +379,16 @@ model TripRecord {
   royaltyUpload         String
   taxInvoiceUpload      String
   receivedDate          DateTime?
+  receivedBy            String?
+  receivedByRole        String?
   endEmptyWeight        Float?
   endGrossWeight        Float?
   endNetWeight          Float?
   endWaymentSlipUpload  String?
   weightDifferenceReason String?
+  validatedBy           String?
+  validatedAt           DateTime?
+  validationComments    String?
   pendingRequestType    String?
   pendingRequestMessage String?
   pendingRequestBy      String?
@@ -394,6 +399,19 @@ model TripRecord {
 
   @@index([date])
   @@index([vehicleNumber])
+}
+
+model TripActivityRecord {
+  id        String   @id @default(uuid())
+  tripId    Int
+  action    String
+  message   String
+  actorName String
+  actorRole String
+  createdAt DateTime @default(now())
+
+  @@index([tripId])
+  @@index([createdAt])
 }
 
 model PaymentRecord {

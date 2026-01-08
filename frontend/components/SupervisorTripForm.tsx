@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Trip, Trip as TripType, TripUploadFile } from '../types';
+import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role } from '../types';
 import { safeToFixed } from '../utils';
+import { useAuth } from '../contexts/AuthContext';
+import { tripApi } from '../services/tripApi';
 
 interface SupervisorTripFormProps {
     mode: 'enter' | 'upload' | 'edit' | 'view';
@@ -9,7 +11,7 @@ interface SupervisorTripFormProps {
     onClose: () => void;
 }
 
-const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSelectElement> & { label: string, isReadOnly?: boolean, children?: React.ReactNode }> = ({ label, isReadOnly, ...props }) => {
+const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, isReadOnly?: boolean, children?: React.ReactNode }> = ({ label, isReadOnly, ...props }) => {
     const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
     const inputId = props.id || props.name || toId(label);
     const inputName = props.name || inputId;
@@ -21,6 +23,8 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
                 <div id={inputId} role="textbox" aria-readonly="true" className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value || '-'}</div>
             ) : props.type === 'select' ? (
                  <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} id={inputId} name={inputName} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{props.children}</select>
+            ) : props.type === 'textarea' ? (
+                 <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} id={inputId} name={inputName} rows={2} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
             ) : (
                  <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
             )}
@@ -47,6 +51,7 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
 
 const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onClose }) => {
     const { addTrip, updateTrip, vehicles, materialTypeDefinitions, siteLocations, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+    const { currentUser } = useAuth();
     const [formData, setFormData] = useState<Partial<TripType>>({
         date: new Date().toISOString().split('T')[0],
         emptyWeight: 0,
@@ -55,15 +60,18 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         royaltyTons: 0,
         royaltyM3: 0,
     });
-    const [files, setFiles] = useState<Record<'ewayBillUpload' | 'invoiceDCUpload' | 'waymentSlipUpload' | 'royaltyUpload' | 'taxInvoiceUpload', TripUploadFile[]>>({
+    const [files, setFiles] = useState<Record<'ewayBillUpload' | 'invoiceDCUpload' | 'waymentSlipUpload' | 'royaltyUpload' | 'taxInvoiceUpload' | 'endWaymentSlipUpload', TripUploadFile[]>>({
         ewayBillUpload: [],
         invoiceDCUpload: [],
         waymentSlipUpload: [],
         royaltyUpload: [],
         taxInvoiceUpload: [],
+        endWaymentSlipUpload: [],
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewFile, setPreviewFile] = useState<TripUploadFile | null>(null);
+    const [activityLog, setActivityLog] = useState<TripActivity[]>([]);
+    const [activityError, setActivityError] = useState('');
     const pickupSites = siteLocations.filter(site => site.type === 'pickup' || site.type === 'both');
     const dropOffSites = siteLocations.filter(site => site.type === 'drop-off' || site.type === 'both');
 
@@ -107,10 +115,22 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 invoiceDCUpload: parseUploadValue(trip.invoiceDCUpload),
                 waymentSlipUpload: parseUploadValue(trip.waymentSlipUpload),
                 royaltyUpload: parseUploadValue(trip.royaltyUpload),
-                taxInvoiceUpload: parseUploadValue(trip.taxInvoiceUpload)
+                taxInvoiceUpload: parseUploadValue(trip.taxInvoiceUpload),
+                endWaymentSlipUpload: parseUploadValue(trip.endWaymentSlipUpload),
             });
         }
     }, [trip]);
+
+    useEffect(() => {
+        if (mode !== 'view' || !trip?.id) return;
+        if (!currentUser || ![Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role)) return;
+        tripApi.getActivity(trip.id)
+            .then(setActivityLog)
+            .catch((error) => {
+                console.error('Failed to load trip activity', error);
+                setActivityError('Failed to load trip history.');
+            });
+    }, [mode, trip?.id, currentUser]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value, type } = e.target;
@@ -120,6 +140,12 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
             const gross = id === 'grossWeight' ? parseFloat(value) : newFormData.grossWeight;
             const empty = id === 'emptyWeight' ? parseFloat(value) : newFormData.emptyWeight;
             newFormData.netWeight = Math.max(0, (gross || 0) - (empty || 0));
+        }
+
+        if (id === 'endGrossWeight' || id === 'endEmptyWeight') {
+            const endGross = id === 'endGrossWeight' ? parseFloat(value) : newFormData.endGrossWeight;
+            const endEmpty = id === 'endEmptyWeight' ? parseFloat(value) : newFormData.endEmptyWeight;
+            newFormData.endNetWeight = Math.max(0, (endGross || 0) - (endEmpty || 0));
         }
         
         if (id === 'dropOffPlace') {
@@ -175,7 +201,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     invoiceDCUpload: serializeUploadValue(files.invoiceDCUpload),
                     waymentSlipUpload: serializeUploadValue(files.waymentSlipUpload),
                     royaltyUpload: serializeUploadValue(files.royaltyUpload),
-                    taxInvoiceUpload: serializeUploadValue(files.taxInvoiceUpload)
+                    taxInvoiceUpload: serializeUploadValue(files.taxInvoiceUpload),
+                    endWaymentSlipUpload: serializeUploadValue(files.endWaymentSlipUpload),
                 }
                 const nextStatus = mode === 'upload' ? 'in transit' : formData.status;
                 await updateTrip(trip!.id, { ...formData, ...uploadData, status: nextStatus });
@@ -381,6 +408,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             <FileInputField label="Wayment Slip" id="waymentSlipUpload" onChange={handleFileChange} files={files.waymentSlipUpload} isReadOnly={isReadOnly} multiple />
                             <FileInputField label="Royalty Slip" id="royaltyUpload" onChange={handleFileChange} files={files.royaltyUpload} isReadOnly={isReadOnly} multiple />
                             <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} isReadOnly={isReadOnly} multiple />
+                            <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={isReadOnly} multiple />
                         </div>
                         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {renderUploadList('E-Way Bill', files.ewayBillUpload)}
@@ -388,7 +416,59 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             {renderUploadList('Wayment Slip', files.waymentSlipUpload)}
                             {renderUploadList('Royalty Slip', files.royaltyUpload)}
                             {renderUploadList('Tax Invoice', files.taxInvoiceUpload)}
+                            {renderUploadList('Wayment Slip (End Location)', files.endWaymentSlipUpload)}
                         </div>
+                        <div className="mt-8">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Received Details</h4>
+                            <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+                                <InputField label="Received Date" id="receivedDate" type="date" value={formData.receivedDate ? String(formData.receivedDate).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                                <InputField label="End Empty Weight (T)" id="endEmptyWeight" type="number" step="0.01" value={formData.endEmptyWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                                <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                                <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly={true} />
+                                <div className="lg:col-span-4">
+                                    <InputField label="Reason for Difference" id="weightDifferenceReason" type="textarea" value={formData.weightDifferenceReason || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-8">
+                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Validation Details</h4>
+                            <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+                                <InputField label="Validated By" id="validatedBy" type="text" value={formData.validatedBy || ''} onChange={handleInputChange} isReadOnly={true} />
+                                <InputField label="Validated At" id="validatedAt" type="date" value={formData.validatedAt ? String(formData.validatedAt).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={true} />
+                                <div className="lg:col-span-4">
+                                    <InputField label="Validation Comments" id="validationComments" type="textarea" value={formData.validationComments || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                                </div>
+                            </div>
+                        </div>
+                        {mode === 'view' && currentUser && [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) && (
+                            <div className="mt-8">
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Trip History</h4>
+                                <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-4">
+                                    {activityError && (
+                                        <div className="text-sm text-red-500">{activityError}</div>
+                                    )}
+                                    {!activityError && activityLog.length === 0 && (
+                                        <div className="text-sm text-gray-500 dark:text-gray-400">No activity logged yet.</div>
+                                    )}
+                                    {!activityError && activityLog.length > 0 && (
+                                        <ul className="space-y-3 text-sm">
+                                            {activityLog.map(entry => (
+                                                <li key={entry.id} className="border-b border-gray-200 dark:border-gray-700 pb-3 last:border-none last:pb-0">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="font-semibold text-gray-800 dark:text-gray-100 capitalize">{entry.action.replace(/_/g, ' ')}</div>
+                                                        <div className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString()}</div>
+                                                    </div>
+                                                    <div className="mt-1 text-gray-600 dark:text-gray-300">{entry.message || '-'}</div>
+                                                    <div className="mt-1 text-xs text-gray-500">
+                                                        {entry.actorName} ({entry.actorRole})
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -2,8 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Link, Navigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
-import { Trip, Role, QuarryOwner, VehicleOwner, Customer, CustomerRate } from '../types';
-import { api } from '../services/mockApi';
+import { Trip, Role, QuarryOwner, VehicleOwner, CustomerRate } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { Filters } from '../components/FilterPanel';
@@ -76,8 +75,8 @@ const Dashboard: React.FC = () => {
 
     const calculateStatsForPeriod = (trips: Trip[]): Stats => {
          return trips.reduce((acc, trip) => {
-            acc.totalTonnage += trip.tonnage;
-            acc.totalRoyaltyUsed += trip.royaltyTons;
+            acc.totalTonnage += Number(trip.netWeight || 0);
+            acc.totalRoyaltyUsed += Number(trip.royaltyM3 || trip.royaltyTons || 0);
             acc.totalReduction += (trip.grossWeight - trip.netWeight);
             return acc;
         }, { totalTrips: trips.length, totalTonnage: 0, totalRoyaltyUsed: 0, totalReduction: 0 });
@@ -88,9 +87,12 @@ const Dashboard: React.FC = () => {
             return { filteredTrips: [], previousPeriodTrips: [], dateRangeSubtitle: 'Loading...' };
         }
 
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
         const currentPeriodTrips = allTrips.filter(trip => {
-            if (filters.dateFrom && trip.date < filters.dateFrom) return false;
-            if (filters.dateTo && trip.date > filters.dateTo) return false;
+            const tripDate = new Date(trip.date);
+            if (fromDate && tripDate < fromDate) return false;
+            if (toDate && tripDate > toDate) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
@@ -121,7 +123,10 @@ const Dashboard: React.FC = () => {
         const prevEndDateStr = formatDate(prevEndDate);
 
         const prevPeriodTrips = allTrips.filter(trip => {
-            if (trip.date < prevStartDateStr || trip.date > prevEndDateStr) return false;
+            const tripDate = new Date(trip.date);
+            const prevStartDateObj = new Date(prevStartDateStr + 'T00:00:00');
+            const prevEndDateObj = new Date(prevEndDateStr + 'T23:59:59');
+            if (tripDate < prevStartDateObj || tripDate > prevEndDateObj) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
@@ -222,7 +227,7 @@ const Dashboard: React.FC = () => {
                             <Link to="/trips" className="text-sm font-medium text-primary hover:underline flex-shrink-0">Show All</Link>
                         </div>
                     </div>
-                    <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.tonnage)} T</td></tr>))}</tbody></table></div>
+                        <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.netWeight)} T</td></tr>))}</tbody></table></div>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">

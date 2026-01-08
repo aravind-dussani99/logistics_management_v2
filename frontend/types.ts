@@ -56,11 +56,16 @@ export interface Trip {
 
   // New fields for received trips
   receivedDate?: string;
+  receivedBy?: string;
+  receivedByRole?: string;
   endEmptyWeight?: number;
   endGrossWeight?: number;
   endNetWeight?: number;
   endWaymentSlipUpload?: TripUploadPayload;
   weightDifferenceReason?: string;
+  validatedBy?: string;
+  validatedAt?: string;
+  validationComments?: string;
   pendingRequestType?: 'delete' | 'update' | 'sent-back' | string;
   pendingRequestMessage?: string;
   pendingRequestBy?: string;
@@ -74,6 +79,16 @@ export interface TripUploadFile {
 }
 
 export type TripUploadPayload = string | TripUploadFile[];
+
+export interface TripActivity {
+  id: string;
+  tripId: number;
+  action: string;
+  message: string;
+  actorName: string;
+  actorRole: string;
+  createdAt: string;
+}
 
 export interface DailyExpense {
     id: string;

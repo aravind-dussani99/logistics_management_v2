@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Trip, TripUploadFile } from '../types';
 import { formatDateDisplay, safeToFixed } from '../utils';
 
@@ -43,6 +44,7 @@ interface ReceiveTripFormProps {
 
 const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
     const { updateTrip } = useData();
+    const { currentUser } = useAuth();
     const [formData, setFormData] = useState({
         receivedDate: new Date().toISOString().split('T')[0],
         endEmptyWeight: '',
@@ -67,14 +69,14 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return;
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        const fileData = await new Promise<TripUploadFile>((resolve, reject) => {
+        const fileList = Array.from(e.target.files);
+        const entries = await Promise.all(fileList.map(file => new Promise<TripUploadFile>((resolve, reject) => {
+            const reader = new FileReader();
             reader.onload = () => resolve({ name: file.name, url: String(reader.result || '') });
             reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
             reader.readAsDataURL(file);
-        });
-        setEndSlipFiles([fileData]);
+        })));
+        setEndSlipFiles(entries);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -88,6 +90,8 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                 endGrossWeight: Number(formData.endGrossWeight || 0),
                 endNetWeight: Number(formData.endNetWeight || 0),
                 endWaymentSlipUpload,
+                receivedBy: currentUser?.name || currentUser?.username || '',
+                receivedByRole: currentUser?.role || '',
                 status: 'pending validation',
             });
             onClose();
@@ -120,7 +124,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                         <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight} onChange={handleInputChange} />
                         <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly />
                          <div className="lg:col-span-4">
-                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} fileName={endSlipFiles[0]?.name} />
+                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} fileName={endSlipFiles.length ? `${endSlipFiles.length} file(s)` : ''} multiple />
                          </div>
                          <div className="lg:col-span-2">
                              <InputField label="Weight Difference (T)" value={`${safeToFixed(weightDifference)} T`} isReadOnly />

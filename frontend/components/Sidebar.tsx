@@ -18,8 +18,8 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       title: 'Core Operations',
       items: [
         { to: '/dashboard', icon: isSupervisor ? 'enter-outline' : 'speedometer-outline', name: isSupervisor ? 'Enter Trips' : 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST] },
-        { to: '/trips', icon: 'bus-outline', name: 'Daily Trips', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/trips', icon: 'bus-outline', name: 'Trip Management', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.DROPOFF_SUPERVISOR] },
         { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],

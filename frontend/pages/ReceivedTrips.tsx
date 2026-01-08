@@ -13,6 +13,7 @@ import AlertDialog from '../components/AlertDialog';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 import { formatDateDisplay } from '../utils';
+import { Navigate } from 'react-router-dom';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -45,6 +46,95 @@ const ReceivedTrips: React.FC = () => {
     const handleReceive = (trip: Trip) => {
         openModal(`Receive Trip #${trip.id}`, <ReceiveTripForm trip={trip} onClose={closeModal} />);
     };
+
+    const handleRaiseIssue = (trip: Trip) => {
+        if (!currentUser) return;
+        openModal('Raise Issue', (
+            <RequestDialog
+                title={`Raise issue for Trip #${trip.id}`}
+                label="Raise Issue Comments"
+                confirmLabel="Submit Issue"
+                onCancel={closeModal}
+                onConfirm={async (reason) => {
+                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    closeModal();
+                }}
+            />
+        ));
+    };
+
+    const handleValidate = (trip: Trip) => {
+        openModal('Validate Trip', (
+            <RequestDialog
+                title={`Validate Trip #${trip.id}`}
+                label="Validation comments"
+                confirmLabel="Validate"
+                onCancel={closeModal}
+                onConfirm={async (message) => {
+                    await updateTrip(trip.id, {
+                        status: 'completed',
+                        validationComments: message || '',
+                        validatedBy: currentUser?.name || currentUser?.username || '',
+                        validatedAt: new Date().toISOString(),
+                        pendingRequestType: null,
+                        pendingRequestMessage: null,
+                        pendingRequestBy: null,
+                        pendingRequestRole: null,
+                        pendingRequestAt: null,
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} validated. ${message || ''}`.trim(),
+                        type: 'info',
+                        targetRole: Role.ADMIN,
+                        targetUser: null,
+                        tripId: trip.id,
+                        requestType: 'validated',
+                        requesterName: currentUser?.name || 'Admin',
+                        requesterRole: currentUser?.role || Role.ADMIN,
+                        requestMessage: message || '',
+                    });
+                    closeModal();
+                }}
+            />
+        ));
+    };
+
+    const handleSendBack = (trip: Trip, target: 'pickup' | 'dropoff') => {
+        const targetRole = target === 'pickup' ? Role.PICKUP_SUPERVISOR : Role.DROPOFF_SUPERVISOR;
+        const targetUser = target === 'pickup' ? (trip.createdBy || null) : (trip.receivedBy || null);
+        const newStatus = target === 'pickup' ? 'pending upload' : 'in transit';
+        const requestType = target === 'pickup' ? 'sent-back-pickup' : 'sent-back-dropoff';
+        openModal(`Send Back to ${target === 'pickup' ? 'Pick-up Supervisor' : 'Drop-off Supervisor'}`, (
+            <RequestDialog
+                title={`Send back to ${target === 'pickup' ? 'Pick-up Supervisor' : 'Drop-off Supervisor'}`}
+                label="Reason"
+                confirmLabel="Send Back"
+                onCancel={closeModal}
+                onConfirm={async (message) => {
+                    await updateTrip(trip.id, {
+                        status: newStatus,
+                        pendingRequestType: requestType,
+                        pendingRequestMessage: message || '',
+                        pendingRequestBy: currentUser?.name || currentUser?.username || '',
+                        pendingRequestRole: currentUser?.role || '',
+                        pendingRequestAt: new Date().toISOString(),
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} sent back to ${target === 'pickup' ? 'Pick-up' : 'Drop-off'} Supervisor. ${message || ''}`.trim(),
+                        type: 'alert',
+                        targetRole,
+                        targetUser,
+                        tripId: trip.id,
+                        requestType,
+                        requesterName: currentUser?.name || 'Admin',
+                        requesterRole: currentUser?.role || Role.ADMIN,
+                        requestMessage: message || '',
+                    });
+                    closeModal();
+                }}
+            />
+        ));
+    };
     
     const paginatedTrips = useMemo(() => {
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -63,6 +153,10 @@ const ReceivedTrips: React.FC = () => {
     };
 
     const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Royalty M3', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+
+    if (canManageTrips) {
+        return <Navigate to="/trips" replace />;
+    }
 
     return (
         <div className="relative">
@@ -141,6 +235,35 @@ const ReceivedTrips: React.FC = () => {
                                             </button>
                                         </>
                                     )}
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && (trip.status || '').toLowerCase() !== 'completed' && (
+                                        <button
+                                            onClick={() => {
+                                                openModal('Request Update', (
+                                                    <RequestDialog
+                                                        title={`Request update for Trip #${trip.id}`}
+                                                        confirmLabel="Send Request"
+                                                        onCancel={closeModal}
+                                                        onConfirm={async (reason) => {
+                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                                                            closeModal();
+                                                        }}
+                                                    />
+                                                ));
+                                            }}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'update'}
+                                        >
+                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                        </button>
+                                    )}
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() === 'completed' && (
+                                        <button
+                                            onClick={() => handleRaiseIssue(trip)}
+                                            className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                        >
+                                            Raise Issue
+                                        </button>
+                                    )}
                                     {canManageTrips && (
                                         <>
                                             <button onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
@@ -173,43 +296,28 @@ const ReceivedTrips: React.FC = () => {
                                             >
                                                 Delete
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    openModal('Send Back to Enter Trips', (
-                                                        <RequestDialog
-                                                            title="Send back to Enter Trips"
-                                                            label="Message to supervisor"
-                                                            confirmLabel="Send Back"
-                                                            onCancel={closeModal}
-                                                            onConfirm={async (message) => {
-                                                                await updateTrip(trip.id, {
-                                                                    status: 'pending upload',
-                                                                    pendingRequestType: null,
-                                                                    pendingRequestMessage: null,
-                                                                    pendingRequestBy: null,
-                                                                    pendingRequestRole: null,
-                                                                    pendingRequestAt: null,
-                                                                });
-                                                                await notificationApi.create({
-                                                                    message: `Trip #${trip.id} sent back to Enter Trips. ${message || ''}`.trim(),
-                                                                    type: 'info',
-                                                                    targetRole: Role.PICKUP_SUPERVISOR,
-                                                                    targetUser: trip.createdBy || null,
-                                                                    tripId: trip.id,
-                                                                    requestType: 'sent-back',
-                                                                    requesterName: currentUser?.name || 'Admin',
-                                                                    requesterRole: currentUser?.role || Role.ADMIN,
-                                                                    requestMessage: message || '',
-                                                                });
-                                                                closeModal();
-                                                            }}
-                                                        />
-                                                    ));
-                                                }}
-                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
-                                            >
-                                                Send Back
-                                            </button>
+                                            {(trip.status || '').toLowerCase() === 'pending validation' && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleValidate(trip)}
+                                                        className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+                                                    >
+                                                        Validate
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSendBack(trip, 'dropoff')}
+                                                        className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                                    >
+                                                        Send Back to Drop-off
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSendBack(trip, 'pickup')}
+                                                        className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                                    >
+                                                        Send Back to Pick-up
+                                                    </button>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                 </td>

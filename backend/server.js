@@ -75,6 +75,23 @@ const getUserDisplayName = (user) => user?.name || user?.username || '';
 const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
 const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
 
+const logTripActivity = async ({ tripId, action, message, user }) => {
+  if (!tripId) return;
+  try {
+    await prisma.tripActivityRecord.create({
+      data: {
+        tripId: Number(tripId),
+        action,
+        message,
+        actorName: getUserDisplayName(user) || 'System',
+        actorRole: user?.role || 'SYSTEM',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to log trip activity', error);
+  }
+};
+
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
   const allowedOriginRaw = process.env.CORS_ORIGIN || '*';
@@ -1873,6 +1890,23 @@ app.get('/api/trips', async (req, res) => {
   }
 });
 
+app.get('/api/trips/:id/activity', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  try {
+    const entries = await prisma.tripActivityRecord.findMany({
+      where: { tripId: Number(id) },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(entries);
+  } catch (error) {
+    console.error('Failed to list trip activity', error);
+    res.status(500).json({ error: 'Failed to list trip activity' });
+  }
+});
+
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
@@ -2017,11 +2051,16 @@ app.post('/api/trips', async (req, res) => {
         royaltyUpload: data.royaltyUpload || '',
         taxInvoiceUpload: data.taxInvoiceUpload || '',
         receivedDate: data.receivedDate ? new Date(data.receivedDate) : null,
+        receivedBy: data.receivedBy || null,
+        receivedByRole: data.receivedByRole || null,
         endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : null,
         endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : null,
         endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : null,
         endWaymentSlipUpload: data.endWaymentSlipUpload || null,
         weightDifferenceReason: data.weightDifferenceReason || null,
+        validatedBy: data.validatedBy || null,
+        validatedAt: data.validatedAt ? new Date(data.validatedAt) : null,
+        validationComments: data.validationComments || null,
       },
     });
     res.status(201).json(trip);
@@ -2101,11 +2140,16 @@ app.put('/api/trips/:id', async (req, res) => {
         createdBy: data.createdBy,
         ...uploadUpdates,
         receivedDate: data.receivedDate ? new Date(data.receivedDate) : data.receivedDate,
+        receivedBy: data.receivedBy,
+        receivedByRole: data.receivedByRole,
         endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : undefined,
         endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : undefined,
         endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : undefined,
         endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? data.endWaymentSlipUpload,
         weightDifferenceReason: data.weightDifferenceReason,
+        validatedBy: data.validatedBy,
+        validatedAt: data.validatedAt ? new Date(data.validatedAt) : data.validatedAt,
+        validationComments: data.validationComments,
         pendingRequestType: data.pendingRequestType,
         pendingRequestMessage: data.pendingRequestMessage,
         pendingRequestBy: data.pendingRequestBy,
@@ -2113,6 +2157,30 @@ app.put('/api/trips/:id', async (req, res) => {
         pendingRequestAt: data.pendingRequestAt ? new Date(data.pendingRequestAt) : data.pendingRequestAt,
       },
     });
+    if (data.status && data.status !== existingTrip.status) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'status_change',
+        message: `Status changed from ${existingTrip.status || 'unknown'} to ${data.status}.`,
+        user: req.user,
+      });
+    }
+    if (data.pendingRequestType && data.pendingRequestType !== existingTrip.pendingRequestType) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'request',
+        message: `Request ${data.pendingRequestType}${data.pendingRequestMessage ? `: ${data.pendingRequestMessage}` : ''}`,
+        user: req.user,
+      });
+    }
+    if (data.validationComments) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'validation',
+        message: `Validation comments added.`,
+        user: req.user,
+      });
+    }
     res.json(trip);
   } catch (error) {
     console.error('Failed to update trip', error);
@@ -2151,6 +2219,12 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         pendingRequestRole: requestedByRole,
         pendingRequestAt: new Date(),
       },
+    });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'request_delete',
+      message: reason || '',
+      user: req.user,
     });
     res.status(201).json(notification);
   } catch (error) {
@@ -2191,10 +2265,62 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         pendingRequestAt: new Date(),
       },
     });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'request_update',
+      message: reason || '',
+      user: req.user,
+    });
     res.status(201).json(notification);
   } catch (error) {
     console.error('Failed to request trip update', error);
     res.status(500).json({ error: 'Failed to request update' });
+  }
+});
+
+app.post('/api/trips/:id/raise-issue', async (req, res) => {
+  const { id } = req.params;
+  const { requestedBy = 'User', requestedByRole = 'User', reason = '' } = req.body || {};
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const message = `Issue raised for Trip #${trip.id} (${trip.invoiceDCNumber || 'No Invoice'}) by ${requestedBy}.${reason ? ` Reason: ${reason}` : ''}`;
+    const targets = ['ADMIN', 'MANAGER', 'ACCOUNTANT'];
+    const notifications = await Promise.all(targets.map(targetRole => prisma.notificationRecord.create({
+      data: {
+        message,
+        type: 'alert',
+        timestamp: new Date(),
+        read: false,
+        targetRole,
+        targetUser: null,
+        tripId: trip.id,
+        requestType: 'issue',
+        requesterName: requestedBy,
+        requesterRole: requestedByRole,
+        requestMessage: reason,
+      },
+    })));
+    await prisma.tripRecord.update({
+      where: { id: trip.id },
+      data: {
+        pendingRequestType: 'issue',
+        pendingRequestMessage: reason || '',
+        pendingRequestBy: requestedBy,
+        pendingRequestRole: requestedByRole,
+        pendingRequestAt: new Date(),
+      },
+    });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'raise_issue',
+      message: reason || '',
+      user: req.user,
+    });
+    res.status(201).json(notifications);
+  } catch (error) {
+    console.error('Failed to raise issue', error);
+    res.status(500).json({ error: 'Failed to raise issue' });
   }
 });
 

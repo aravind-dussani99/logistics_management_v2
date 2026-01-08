@@ -1,4 +1,4 @@
-import { Trip } from '../types';
+import { Trip, TripActivity } from '../types';
 import { authFetch } from './apiBase';
 
 const basePath = '/api/trips';
@@ -32,6 +32,10 @@ export const tripApi = {
     });
     return handleResponse(response) as Promise<Trip>;
   },
+  getActivity: async (id: number): Promise<TripActivity[]> => {
+    const response = await authFetch(`${basePath}/${id}/activity`);
+    return handleResponse(response) as Promise<TripActivity[]>;
+  },
   remove: async (id: number): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
@@ -45,6 +49,13 @@ export const tripApi = {
   },
   requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/request-update`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    await handleResponse(response);
+  },
+  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+    const response = await authFetch(`${basePath}/${id}/raise-issue`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
