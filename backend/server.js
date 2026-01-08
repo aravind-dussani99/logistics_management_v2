@@ -321,7 +321,14 @@ const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) 
       cacheControl: 'public, max-age=31536000',
     },
   });
-  return `gs://${ATTACHMENTS_BUCKET}/${objectPath}`;
+  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
+const toPublicUrl = (value) => {
+  if (typeof value !== 'string') return value;
+  const extracted = extractGsPath(value);
+  if (!extracted) return value;
+  return `https://storage.googleapis.com/${extracted.bucket}/${extracted.object}`;
 };
 
 const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
@@ -333,7 +340,7 @@ const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
   for (const item of list) {
     const parsed = parseDataUrl(item.url);
     if (!parsed) {
-      updated.push({ name: item.name, url: item.url || '' });
+      updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
       continue;
     }
     sequence += 1;
