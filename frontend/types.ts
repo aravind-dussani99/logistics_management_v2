@@ -20,13 +20,18 @@ export interface Trip {
   pickupPlace?: string;
   dropOffPlace?: string;
   vendorName: string;
+  vendorCustomerIsOneOff?: boolean;
   customer: string;
   invoiceDCNumber: string;
   quarryName: string;
+  mineQuarryIsOneOff?: boolean;
   royaltyOwnerName: string;
+  royaltyOwnerIsOneOff?: boolean;
   material: string;
   vehicleNumber: string;
+  vehicleIsOneOff?: boolean;
   transporterName:string;
+  transportOwnerIsOneOff?: boolean;
   transportOwnerMobileNumber?: string;
   emptyWeight: number;
   grossWeight: number;
@@ -71,6 +76,26 @@ export interface Trip {
   pendingRequestBy?: string;
   pendingRequestRole?: string;
   pendingRequestAt?: string;
+  rateOverrideEnabled?: boolean;
+  rateOverride?: TripRateOverride | null;
+}
+
+export interface TripRateOverride {
+  materialTypeId: string;
+  ratePartyType: RatePartyType;
+  ratePartyId: string;
+  pickupLocationId: string;
+  dropOffLocationId: string;
+  totalKm: number;
+  ratePerKm: number;
+  ratePerTon: number;
+  gstChargeable: boolean;
+  gstPercentage: number;
+  gstAmount: number;
+  totalRatePerTon: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  remarks: string;
 }
 
 export interface TripUploadFile {

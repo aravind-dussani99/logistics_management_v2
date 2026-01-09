@@ -2013,8 +2013,8 @@ app.post('/api/trips', async (req, res) => {
       return res.status(403).json({ error: 'Pickup location mismatch.' });
     }
   }
-  if (!data.date || !data.customer || !data.vehicleNumber) {
-    return res.status(400).json({ error: 'Date, customer, and vehicle number are required.' });
+  if (!data.date || !data.customer) {
+    return res.status(400).json({ error: 'Date and customer are required.' });
   }
   try {
     const trip = await prisma.tripRecord.create({
@@ -2026,13 +2026,18 @@ app.post('/api/trips', async (req, res) => {
           : (data.pickupPlace || ''),
         dropOffPlace: data.dropOffPlace || '',
         vendorName: data.vendorName || '',
+        vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
         customer: data.customer || '',
         invoiceDCNumber: data.invoiceDCNumber || '',
         quarryName: data.quarryName || '',
+        mineQuarryIsOneOff: Boolean(data.mineQuarryIsOneOff),
         royaltyOwnerName: data.royaltyOwnerName || '',
+        royaltyOwnerIsOneOff: Boolean(data.royaltyOwnerIsOneOff),
         material: data.material || '',
         vehicleNumber: data.vehicleNumber || '',
+        vehicleIsOneOff: Boolean(data.vehicleIsOneOff),
         transporterName: data.transporterName || '',
+        transportOwnerIsOneOff: Boolean(data.transportOwnerIsOneOff),
         transportOwnerMobileNumber: data.transportOwnerMobileNumber || '',
         emptyWeight: Number(data.emptyWeight || 0),
         grossWeight: Number(data.grossWeight || 0),
@@ -2068,6 +2073,8 @@ app.post('/api/trips', async (req, res) => {
         validatedBy: data.validatedBy || null,
         validatedAt: data.validatedAt ? new Date(data.validatedAt) : null,
         validationComments: data.validationComments || null,
+        rateOverrideEnabled: Boolean(data.rateOverrideEnabled),
+        rateOverride: data.rateOverride || null,
       },
     });
     res.status(201).json(trip);
@@ -2119,13 +2126,18 @@ app.put('/api/trips/:id', async (req, res) => {
         pickupPlace: data.pickupPlace,
         dropOffPlace: data.dropOffPlace,
         vendorName: data.vendorName,
+        vendorCustomerIsOneOff: data.vendorCustomerIsOneOff !== undefined ? Boolean(data.vendorCustomerIsOneOff) : undefined,
         customer: data.customer,
         invoiceDCNumber: data.invoiceDCNumber,
         quarryName: data.quarryName,
+        mineQuarryIsOneOff: data.mineQuarryIsOneOff !== undefined ? Boolean(data.mineQuarryIsOneOff) : undefined,
         royaltyOwnerName: data.royaltyOwnerName,
+        royaltyOwnerIsOneOff: data.royaltyOwnerIsOneOff !== undefined ? Boolean(data.royaltyOwnerIsOneOff) : undefined,
         material: data.material,
         vehicleNumber: data.vehicleNumber,
+        vehicleIsOneOff: data.vehicleIsOneOff !== undefined ? Boolean(data.vehicleIsOneOff) : undefined,
         transporterName: data.transporterName,
+        transportOwnerIsOneOff: data.transportOwnerIsOneOff !== undefined ? Boolean(data.transportOwnerIsOneOff) : undefined,
         transportOwnerMobileNumber: data.transportOwnerMobileNumber,
         emptyWeight: data.emptyWeight !== undefined ? Number(data.emptyWeight) : undefined,
         grossWeight: data.grossWeight !== undefined ? Number(data.grossWeight) : undefined,
@@ -2162,6 +2174,8 @@ app.put('/api/trips/:id', async (req, res) => {
         pendingRequestBy: data.pendingRequestBy,
         pendingRequestRole: data.pendingRequestRole,
         pendingRequestAt: data.pendingRequestAt ? new Date(data.pendingRequestAt) : data.pendingRequestAt,
+        rateOverrideEnabled: data.rateOverrideEnabled !== undefined ? Boolean(data.rateOverrideEnabled) : undefined,
+        rateOverride: data.rateOverride,
       },
     });
     if (data.status && data.status !== existingTrip.status) {

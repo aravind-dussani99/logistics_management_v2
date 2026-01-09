@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role } from '../types';
+import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role, TripRateOverride } from '../types';
 import { safeToFixed } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import { tripApi } from '../services/tripApi';
@@ -50,7 +50,23 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
 );
 
 const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onClose }) => {
-    const { addTrip, updateTrip, vehicles, materialTypeDefinitions, siteLocations, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+    const {
+        addTrip,
+        updateTrip,
+        addVendorCustomer,
+        addMineQuarry,
+        addRoyaltyOwnerProfile,
+        addTransportOwnerProfile,
+        addVehicleMaster,
+        vehicles,
+        materialTypeDefinitions,
+        siteLocations,
+        merchantTypes,
+        vendorCustomers,
+        mineQuarries,
+        royaltyOwnerProfiles,
+        transportOwnerProfiles,
+    } = useData();
     const { currentUser } = useAuth();
     const [formData, setFormData] = useState<Partial<TripType>>({
         date: new Date().toISOString().split('T')[0],
@@ -72,8 +88,72 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const [previewFile, setPreviewFile] = useState<TripUploadFile | null>(null);
     const [activityLog, setActivityLog] = useState<TripActivity[]>([]);
     const [activityError, setActivityError] = useState('');
+    const ONE_OFF_VALUE = '__oneoff__';
+    const isPrivileged = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
+    const [oneOffSelection, setOneOffSelection] = useState({
+        customer: false,
+        quarryName: false,
+        royaltyOwnerName: false,
+        transporterName: false,
+        vehicleNumber: false,
+    });
+    const [oneOffValues, setOneOffValues] = useState({
+        customer: '',
+        quarryName: '',
+        royaltyOwnerName: '',
+        transporterName: '',
+        vehicleNumber: '',
+    });
+    const [saveToMaster, setSaveToMaster] = useState({
+        customer: false,
+        quarryName: false,
+        royaltyOwnerName: false,
+        transporterName: false,
+        vehicleNumber: false,
+    });
+    const [oneOffMaster, setOneOffMaster] = useState({
+        customer: { merchantTypeId: '', siteLocationId: '', contactNumber: '', email: '', companyName: '', gstOptIn: false, gstNumber: '', gstDetails: '', remarks: '' },
+        quarryName: { merchantTypeId: '', siteLocationId: '', contactNumber: '', email: '', companyName: '', gstOptIn: false, gstNumber: '', gstDetails: '', remarks: '' },
+        royaltyOwnerName: { merchantTypeId: '', siteLocationId: '', contactNumber: '', email: '', companyName: '', gstOptIn: false, gstNumber: '', gstDetails: '', remarks: '' },
+        transporterName: { merchantTypeId: '', siteLocationId: '', contactNumber: '', email: '', companyName: '', gstOptIn: false, gstNumber: '', gstDetails: '', remarks: '' },
+        vehicleNumber: { vehicleType: '', ownerName: '', contactNumber: '', capacity: '', remarks: '' },
+    });
+    const [masterErrors, setMasterErrors] = useState<{ [key: string]: string }>({});
+    const [rateError, setRateError] = useState('');
+    const [rateOverrideEnabled, setRateOverrideEnabled] = useState(false);
+    const [rateOverride, setRateOverride] = useState<TripRateOverride>({
+        materialTypeId: '',
+        ratePartyType: 'transport-owner',
+        ratePartyId: '',
+        pickupLocationId: '',
+        dropOffLocationId: '',
+        totalKm: 0,
+        ratePerKm: 0,
+        ratePerTon: 0,
+        gstChargeable: false,
+        gstPercentage: 0,
+        gstAmount: 0,
+        totalRatePerTon: 0,
+        effectiveFrom: '',
+        effectiveTo: '',
+        remarks: '',
+    });
     const pickupSites = siteLocations.filter(site => site.type === 'pickup' || site.type === 'both');
     const dropOffSites = siteLocations.filter(site => site.type === 'drop-off' || site.type === 'both');
+    const ratePartyOptions = (() => {
+        switch (rateOverride.ratePartyType) {
+            case 'mine-quarry':
+                return mineQuarries.map(item => ({ id: item.id, name: item.name }));
+            case 'vendor-customer':
+                return vendorCustomers.map(item => ({ id: item.id, name: item.name }));
+            case 'royalty-owner':
+                return royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+            case 'transport-owner':
+                return transportOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+            default:
+                return [];
+        }
+    })();
 
     const parseUploadValue = (value?: TripUploadFile[] | string | null) => {
         if (!value) return [];
@@ -118,8 +198,43 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 taxInvoiceUpload: parseUploadValue(trip.taxInvoiceUpload),
                 endWaymentSlipUpload: parseUploadValue(trip.endWaymentSlipUpload),
             });
+            setOneOffSelection({
+                customer: Boolean(trip.vendorCustomerIsOneOff),
+                quarryName: Boolean(trip.mineQuarryIsOneOff),
+                royaltyOwnerName: Boolean(trip.royaltyOwnerIsOneOff),
+                transporterName: Boolean(trip.transportOwnerIsOneOff),
+                vehicleNumber: Boolean(trip.vehicleIsOneOff),
+            });
+            setOneOffValues({
+                customer: trip.customer || '',
+                quarryName: trip.quarryName || '',
+                royaltyOwnerName: trip.royaltyOwnerName || '',
+                transporterName: trip.transporterName || '',
+                vehicleNumber: trip.vehicleNumber || '',
+            });
+            setRateOverrideEnabled(Boolean(trip.rateOverrideEnabled));
+            if (trip.rateOverride && typeof trip.rateOverride === 'object') {
+                setRateOverride(prev => ({
+                    ...prev,
+                    ...(trip.rateOverride as TripRateOverride),
+                }));
+            }
         }
     }, [trip]);
+
+    useEffect(() => {
+        if (!rateOverrideEnabled) return;
+        const gstAmount = rateOverride.gstChargeable
+            ? (Number(rateOverride.ratePerTon) * Number(rateOverride.gstPercentage || 0)) / 100
+            : 0;
+        const totalRatePerTon = Number(rateOverride.ratePerTon) + gstAmount;
+        if (gstAmount === rateOverride.gstAmount && totalRatePerTon === rateOverride.totalRatePerTon) return;
+        setRateOverride(prev => ({
+            ...prev,
+            gstAmount,
+            totalRatePerTon,
+        }));
+    }, [rateOverrideEnabled, rateOverride.ratePerTon, rateOverride.gstPercentage, rateOverride.gstChargeable, rateOverride.gstAmount, rateOverride.totalRatePerTon]);
 
     useEffect(() => {
         if (mode !== 'view' || !trip?.id) return;
@@ -171,6 +286,76 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         setFormData(newFormData);
     };
 
+    const handleOneOffSelect = (field: keyof typeof oneOffSelection, value: string) => {
+        const isOneOff = value === ONE_OFF_VALUE;
+        setOneOffSelection(prev => ({ ...prev, [field]: isOneOff }));
+        setFormData(prev => {
+            const updated = {
+                ...prev,
+                [field]: isOneOff ? '' : value,
+                [`${field === 'customer' ? 'vendorCustomerIsOneOff' : field === 'quarryName' ? 'mineQuarryIsOneOff' : field === 'royaltyOwnerName' ? 'royaltyOwnerIsOneOff' : field === 'transporterName' ? 'transportOwnerIsOneOff' : 'vehicleIsOneOff'}`]: isOneOff,
+            } as typeof prev;
+            if (!isOneOff && field === 'vehicleNumber') {
+                const vehicle = vehicles.find(item => item.vehicleNumber === value);
+                updated.transporterName = vehicle?.ownerName || '';
+                const ownerMatch = transportOwnerProfiles.find(item => item.name === updated.transporterName);
+                updated.transportOwnerMobileNumber = ownerMatch?.contactNumber || '';
+            }
+            if (!isOneOff && field === 'transporterName') {
+                const ownerMatch = transportOwnerProfiles.find(item => item.name === value);
+                updated.transportOwnerMobileNumber = ownerMatch?.contactNumber || '';
+            }
+            if (!isOneOff && field === 'quarryName') {
+                updated.vendorName = value;
+            }
+            return updated;
+        });
+        if (isOneOff) {
+            setOneOffValues(prev => ({ ...prev, [field]: '' }));
+        }
+    };
+
+    const handleOneOffValueChange = (field: keyof typeof oneOffValues, value: string) => {
+        setOneOffValues(prev => ({ ...prev, [field]: value }));
+        setFormData(prev => ({ ...prev, [field]: value } as typeof prev));
+    };
+
+    const handleMasterFieldChange = (field: keyof typeof oneOffMaster, key: string, value: string | boolean) => {
+        setOneOffMaster(prev => ({
+            ...prev,
+            [field]: {
+                ...prev[field],
+                [key]: value,
+            },
+        }));
+    };
+
+    const validateMasterSave = () => {
+        const nextErrors: { [key: string]: string } = {};
+        (['customer', 'quarryName', 'royaltyOwnerName', 'transporterName'] as const).forEach((field) => {
+            if (!saveToMaster[field]) return;
+            const entry = oneOffMaster[field];
+            if (!entry.merchantTypeId || !entry.siteLocationId || !entry.contactNumber) {
+                nextErrors[field] = 'Merchant type, site location, and contact number are required to save.';
+            }
+        });
+        if (saveToMaster.vehicleNumber) {
+            const entry = oneOffMaster.vehicleNumber;
+            if (!entry.vehicleType || !entry.ownerName || !entry.contactNumber) {
+                nextErrors.vehicleNumber = 'Vehicle type, owner name, and contact number are required to save.';
+            }
+        }
+        setMasterErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    };
+
+    const handleRateOverrideChange = (field: keyof TripRateOverride, value: string | number | boolean) => {
+        setRateOverride(prev => ({
+            ...prev,
+            [field]: value,
+        }));
+    };
+
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, files: selected } = e.target;
         if (!selected || selected.length === 0) return;
@@ -190,9 +375,68 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         setIsSubmitting(true);
         try {
             if (mode === 'enter') {
+                if (!validateMasterSave()) {
+                    setIsSubmitting(false);
+                    return;
+                }
+                if (rateOverrideEnabled) {
+                    if (!rateOverride.materialTypeId || !rateOverride.ratePartyId || !rateOverride.pickupLocationId || !rateOverride.dropOffLocationId || !rateOverride.effectiveFrom) {
+                        setRateError('Please complete the required rate fields.');
+                        setIsSubmitting(false);
+                        return;
+                    }
+                    setRateError('');
+                }
+                try {
+                    if (oneOffSelection.customer && saveToMaster.customer) {
+                        await addVendorCustomer({
+                            ...oneOffMaster.customer,
+                            name: oneOffValues.customer,
+                        });
+                    }
+                    if (oneOffSelection.quarryName && saveToMaster.quarryName) {
+                        await addMineQuarry({
+                            ...oneOffMaster.quarryName,
+                            name: oneOffValues.quarryName,
+                        });
+                    }
+                    if (oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName) {
+                        await addRoyaltyOwnerProfile({
+                            ...oneOffMaster.royaltyOwnerName,
+                            name: oneOffValues.royaltyOwnerName,
+                        });
+                    }
+                    if (oneOffSelection.transporterName && saveToMaster.transporterName) {
+                        await addTransportOwnerProfile({
+                            ...oneOffMaster.transporterName,
+                            name: oneOffValues.transporterName,
+                        });
+                    }
+                    if (oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber) {
+                        await addVehicleMaster({
+                            vehicleNumber: oneOffValues.vehicleNumber,
+                            vehicleType: oneOffMaster.vehicleNumber.vehicleType,
+                            ownerName: oneOffMaster.vehicleNumber.ownerName,
+                            contactNumber: oneOffMaster.vehicleNumber.contactNumber,
+                            capacity: Number(oneOffMaster.vehicleNumber.capacity || 0),
+                            remarks: oneOffMaster.vehicleNumber.remarks,
+                        });
+                    }
+                } catch (error) {
+                    console.error('Failed to save one-off master data', error);
+                    setIsSubmitting(false);
+                    return;
+                }
                 const tripPayload = {
                     ...formData,
                     place: formData.place || formData.dropOffPlace || '',
+                    vendorCustomerIsOneOff: oneOffSelection.customer,
+                    mineQuarryIsOneOff: oneOffSelection.quarryName,
+                    royaltyOwnerIsOneOff: oneOffSelection.royaltyOwnerName,
+                    transportOwnerIsOneOff: oneOffSelection.transporterName,
+                    vehicleIsOneOff: oneOffSelection.vehicleNumber,
+                    rateOverrideEnabled: rateOverrideEnabled,
+                    rateOverride: rateOverrideEnabled ? rateOverride : null,
                 };
                 await addTrip(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>);
             } else if (mode === 'upload' || mode === 'edit') {
@@ -205,7 +449,13 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     endWaymentSlipUpload: serializeUploadValue(files.endWaymentSlipUpload),
                 }
                 const nextStatus = mode === 'upload' ? 'in transit' : formData.status;
-                await updateTrip(trip!.id, { ...formData, ...uploadData, status: nextStatus });
+                await updateTrip(trip!.id, {
+                    ...formData,
+                    ...uploadData,
+                    status: nextStatus,
+                    rateOverrideEnabled: rateOverrideEnabled,
+                    rateOverride: rateOverrideEnabled ? rateOverride : null,
+                });
             }
             onClose();
         } catch (error) {
@@ -276,40 +526,242 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                 {dropOffSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
                             </InputField>
                              <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} />
-                            <InputField label="Vendor & Customer Name" id="customer" type="select" value={formData.customer} onChange={handleInputChange} required>
+                            <InputField label="Vendor & Customer Name" id="customer" type="select" value={oneOffSelection.customer ? ONE_OFF_VALUE : formData.customer} onChange={(event) => handleOneOffSelect('customer', event.target.value)} required>
                                 <option value="">Select Vendor/Customer</option>
                                 {vendorCustomers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                <option value={ONE_OFF_VALUE}>One-time / Other</option>
                             </InputField>
-                             <InputField label="Mine & Quarry Name" id="quarryName" type="select" value={formData.quarryName} onChange={handleInputChange} required>
+                            {oneOffSelection.customer && (
+                                <>
+                                    <InputField label="One-time Vendor/Customer Name" id="oneOffCustomerName" type="text" value={oneOffValues.customer} onChange={(event) => handleOneOffValueChange('customer', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveCustomer"
+                                            type="checkbox"
+                                            checked={saveToMaster.customer}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, customer: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveCustomer" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.customer && <span className="text-xs text-red-500">{masterErrors.customer}</span>}
+                                    </div>
+                                    {saveToMaster.customer && (
+                                        <>
+                                            <InputField label="Merchant Type" id="customerMerchantTypeId" type="select" value={oneOffMaster.customer.merchantTypeId} onChange={(event) => handleMasterFieldChange('customer', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="customerSiteLocationId" type="select" value={oneOffMaster.customer.siteLocationId} onChange={(event) => handleMasterFieldChange('customer', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="customerContactNumber" type="text" value={oneOffMaster.customer.contactNumber} onChange={(event) => handleMasterFieldChange('customer', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                             <InputField label="Mine & Quarry Name" id="quarryName" type="select" value={oneOffSelection.quarryName ? ONE_OFF_VALUE : formData.quarryName} onChange={(event) => handleOneOffSelect('quarryName', event.target.value)} required>
                                 <option value="">Select Mine/Quarry</option>
                                 {mineQuarries.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                <option value={ONE_OFF_VALUE}>One-time / Other</option>
                             </InputField>
+                            {oneOffSelection.quarryName && (
+                                <>
+                                    <InputField label="One-time Mine/Quarry Name" id="oneOffQuarryName" type="text" value={oneOffValues.quarryName} onChange={(event) => handleOneOffValueChange('quarryName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveQuarry"
+                                            type="checkbox"
+                                            checked={saveToMaster.quarryName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, quarryName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveQuarry" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.quarryName && <span className="text-xs text-red-500">{masterErrors.quarryName}</span>}
+                                    </div>
+                                    {saveToMaster.quarryName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="quarryMerchantTypeId" type="select" value={oneOffMaster.quarryName.merchantTypeId} onChange={(event) => handleMasterFieldChange('quarryName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="quarrySiteLocationId" type="select" value={oneOffMaster.quarryName.siteLocationId} onChange={(event) => handleMasterFieldChange('quarryName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="quarryContactNumber" type="text" value={oneOffMaster.quarryName.contactNumber} onChange={(event) => handleMasterFieldChange('quarryName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Material Type" id="material" type="select" value={formData.material} onChange={handleInputChange} required>
                                 <option value="">Select Material</option>
                                 {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                             </InputField>
-                            <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="select" value={formData.royaltyOwnerName} onChange={handleInputChange}>
+                            <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="select" value={oneOffSelection.royaltyOwnerName ? ONE_OFF_VALUE : formData.royaltyOwnerName} onChange={(event) => handleOneOffSelect('royaltyOwnerName', event.target.value)}>
                                  <option value="">Select Royalty Owner</option>
                                  {royaltyOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                 <option value={ONE_OFF_VALUE}>One-time / Other</option>
                             </InputField>
+                            {oneOffSelection.royaltyOwnerName && (
+                                <>
+                                    <InputField label="One-time Royalty Owner Name" id="oneOffRoyaltyOwnerName" type="text" value={oneOffValues.royaltyOwnerName} onChange={(event) => handleOneOffValueChange('royaltyOwnerName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveRoyalty"
+                                            type="checkbox"
+                                            checked={saveToMaster.royaltyOwnerName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, royaltyOwnerName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveRoyalty" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.royaltyOwnerName && <span className="text-xs text-red-500">{masterErrors.royaltyOwnerName}</span>}
+                                    </div>
+                                    {saveToMaster.royaltyOwnerName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="royaltyMerchantTypeId" type="select" value={oneOffMaster.royaltyOwnerName.merchantTypeId} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="royaltySiteLocationId" type="select" value={oneOffMaster.royaltyOwnerName.siteLocationId} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="royaltyContactNumber" type="text" value={oneOffMaster.royaltyOwnerName.contactNumber} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} />
                             <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} />
                             <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" value={formData.royaltyM3} onChange={handleInputChange} />
 
-                            <InputField label="Vehicle Number" id="vehicleNumber" type="select" value={formData.vehicleNumber} onChange={handleInputChange} required>
+                            <InputField label="Vehicle Number" id="vehicleNumber" type="select" value={oneOffSelection.vehicleNumber ? ONE_OFF_VALUE : formData.vehicleNumber} onChange={(event) => handleOneOffSelect('vehicleNumber', event.target.value)}>
                                 <option value="">Select Vehicle</option>
                                 {vehicles.map(v => <option key={v.id} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
+                                <option value={ONE_OFF_VALUE}>One-time / Other</option>
                             </InputField>
-                            <InputField label="Transport & Owner Name" id="transporterName" type="select" value={formData.transporterName} onChange={handleInputChange} required>
+                            {oneOffSelection.vehicleNumber && (
+                                <>
+                                    <InputField label="One-time Vehicle Number" id="oneOffVehicleNumber" type="text" value={oneOffValues.vehicleNumber} onChange={(event) => handleOneOffValueChange('vehicleNumber', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveVehicle"
+                                            type="checkbox"
+                                            checked={saveToMaster.vehicleNumber}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, vehicleNumber: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveVehicle" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.vehicleNumber && <span className="text-xs text-red-500">{masterErrors.vehicleNumber}</span>}
+                                    </div>
+                                    {saveToMaster.vehicleNumber && (
+                                        <>
+                                            <InputField label="Vehicle Type" id="vehicleType" type="text" value={oneOffMaster.vehicleNumber.vehicleType} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'vehicleType', event.target.value)} />
+                                            <InputField label="Owner Name" id="vehicleOwnerName" type="text" value={oneOffMaster.vehicleNumber.ownerName} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'ownerName', event.target.value)} />
+                                            <InputField label="Owner Contact" id="vehicleContactNumber" type="text" value={oneOffMaster.vehicleNumber.contactNumber} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'contactNumber', event.target.value)} />
+                                            <InputField label="Capacity" id="vehicleCapacity" type="number" value={oneOffMaster.vehicleNumber.capacity} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'capacity', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                            <InputField label="Transport & Owner Name" id="transporterName" type="select" value={oneOffSelection.transporterName ? ONE_OFF_VALUE : formData.transporterName} onChange={(event) => handleOneOffSelect('transporterName', event.target.value)}>
                                 <option value="">Select Transport Owner</option>
                                 {transportOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                <option value={ONE_OFF_VALUE}>One-time / Other</option>
                             </InputField>
+                            {oneOffSelection.transporterName && (
+                                <>
+                                    <InputField label="One-time Transport Owner Name" id="oneOffTransportOwnerName" type="text" value={oneOffValues.transporterName} onChange={(event) => handleOneOffValueChange('transporterName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveTransportOwner"
+                                            type="checkbox"
+                                            checked={saveToMaster.transporterName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, transporterName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveTransportOwner" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.transporterName && <span className="text-xs text-red-500">{masterErrors.transporterName}</span>}
+                                    </div>
+                                    {saveToMaster.transporterName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="transportMerchantTypeId" type="select" value={oneOffMaster.transporterName.merchantTypeId} onChange={(event) => handleMasterFieldChange('transporterName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="transportSiteLocationId" type="select" value={oneOffMaster.transporterName.siteLocationId} onChange={(event) => handleMasterFieldChange('transporterName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="transportContactNumber" type="text" value={oneOffMaster.transporterName.contactNumber} onChange={(event) => handleMasterFieldChange('transporterName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Transport & Owner Mobile Number" id="transportOwnerMobileNumber" type="text" value={formData.transportOwnerMobileNumber} onChange={handleInputChange} />
                             
                             <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} />
                             <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} />
                             <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={safeToFixed(formData.netWeight)} isReadOnly={true} />
                         </div>
+                        {isPrivileged && (
+                            <div className="mt-8">
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Add Rate (Optional)</h4>
+                                <div className="mt-3 flex items-center gap-2">
+                                    <input
+                                        id="rateOverrideEnabled"
+                                        type="checkbox"
+                                        checked={rateOverrideEnabled}
+                                        onChange={(event) => setRateOverrideEnabled(event.target.checked)}
+                                    />
+                                    <label htmlFor="rateOverrideEnabled" className="text-sm text-gray-700 dark:text-gray-300">Override rate for this trip</label>
+                                    {rateError && <span className="text-xs text-red-500">{rateError}</span>}
+                                </div>
+                                {rateOverrideEnabled && (
+                                    <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+                                        <InputField label="Material Type" id="rateOverrideMaterialType" type="select" value={rateOverride.materialTypeId} onChange={(event) => handleRateOverrideChange('materialTypeId', event.target.value)}>
+                                            <option value="">Select Material</option>
+                                            {materialTypeDefinitions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Rate Party Type" id="rateOverrideRatePartyType" type="select" value={rateOverride.ratePartyType} onChange={(event) => {
+                                            const nextType = event.target.value as TripRateOverride['ratePartyType'];
+                                            setRateOverride(prev => ({ ...prev, ratePartyType: nextType, ratePartyId: '' }));
+                                        }}>
+                                            <option value="transport-owner">Transport Owner</option>
+                                            <option value="mine-quarry">Mine/Quarry</option>
+                                            <option value="vendor-customer">Vendor/Customer</option>
+                                            <option value="royalty-owner">Royalty Owner</option>
+                                        </InputField>
+                                        <InputField label="Rate Party" id="rateOverrideRateParty" type="select" value={rateOverride.ratePartyId} onChange={(event) => handleRateOverrideChange('ratePartyId', event.target.value)}>
+                                            <option value="">Select Rate Party</option>
+                                            {ratePartyOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Pickup Location" id="rateOverridePickup" type="select" value={rateOverride.pickupLocationId} onChange={(event) => handleRateOverrideChange('pickupLocationId', event.target.value)}>
+                                            <option value="">Select Pickup</option>
+                                            {pickupSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Drop-off Location" id="rateOverrideDropOff" type="select" value={rateOverride.dropOffLocationId} onChange={(event) => handleRateOverrideChange('dropOffLocationId', event.target.value)}>
+                                            <option value="">Select Drop-off</option>
+                                            {dropOffSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Total Km" id="rateOverrideTotalKm" type="number" step="0.01" value={rateOverride.totalKm} onChange={(event) => handleRateOverrideChange('totalKm', Number(event.target.value))} />
+                                        <InputField label="Rate per Km" id="rateOverrideRatePerKm" type="number" step="0.01" value={rateOverride.ratePerKm} onChange={(event) => handleRateOverrideChange('ratePerKm', Number(event.target.value))} />
+                                        <InputField label="Rate per Ton" id="rateOverrideRatePerTon" type="number" step="0.01" value={rateOverride.ratePerTon} onChange={(event) => handleRateOverrideChange('ratePerTon', Number(event.target.value))} />
+                                        <div className="col-span-1 flex items-center gap-2 pt-6">
+                                            <input
+                                                id="rateOverrideGstChargeable"
+                                                type="checkbox"
+                                                checked={rateOverride.gstChargeable}
+                                                onChange={(event) => handleRateOverrideChange('gstChargeable', event.target.checked)}
+                                            />
+                                            <label htmlFor="rateOverrideGstChargeable" className="text-sm text-gray-700 dark:text-gray-300">GST Chargeable</label>
+                                        </div>
+                                        <InputField label="GST %" id="rateOverrideGstPercentage" type="number" step="0.01" value={rateOverride.gstPercentage} onChange={(event) => handleRateOverrideChange('gstPercentage', Number(event.target.value))} />
+                                        <InputField label="GST Amount" id="rateOverrideGstAmount" type="number" step="0.01" value={rateOverride.gstAmount} onChange={(event) => handleRateOverrideChange('gstAmount', Number(event.target.value))} />
+                                        <InputField label="Total Rate per Ton" id="rateOverrideTotalRate" type="number" step="0.01" value={rateOverride.totalRatePerTon} onChange={(event) => handleRateOverrideChange('totalRatePerTon', Number(event.target.value))} />
+                                        <InputField label="Effective From" id="rateOverrideEffectiveFrom" type="date" value={rateOverride.effectiveFrom} onChange={(event) => handleRateOverrideChange('effectiveFrom', event.target.value)} />
+                                        <InputField label="Effective To" id="rateOverrideEffectiveTo" type="date" value={rateOverride.effectiveTo} onChange={(event) => handleRateOverrideChange('effectiveTo', event.target.value)} />
+                                        <InputField label="Remarks" id="rateOverrideRemarks" type="text" value={rateOverride.remarks} onChange={(event) => handleRateOverrideChange('remarks', event.target.value)} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
                 
@@ -365,34 +817,174 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                 {dropOffSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
                             </InputField>
                              <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Vendor & Customer Name" id="customer" type="select" value={formData.customer} onChange={handleInputChange} isReadOnly={isReadOnly} required>
+                            <InputField label="Vendor & Customer Name" id="customer" type="select" value={isReadOnly ? formData.customer : (oneOffSelection.customer ? ONE_OFF_VALUE : formData.customer)} onChange={isReadOnly ? handleInputChange : (event) => handleOneOffSelect('customer', event.target.value)} isReadOnly={isReadOnly} required>
                                 <option value="">Select Vendor/Customer</option>
                                 {vendorCustomers.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                {!isReadOnly && <option value={ONE_OFF_VALUE}>One-time / Other</option>}
                             </InputField>
-                            <InputField label="Mine & Quarry Name" id="quarryName" type="select" value={formData.quarryName} onChange={handleInputChange} isReadOnly={isReadOnly} required>
+                            {!isReadOnly && oneOffSelection.customer && (
+                                <>
+                                    <InputField label="One-time Vendor/Customer Name" id="oneOffCustomerName" type="text" value={oneOffValues.customer} onChange={(event) => handleOneOffValueChange('customer', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveCustomerEdit"
+                                            type="checkbox"
+                                            checked={saveToMaster.customer}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, customer: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveCustomerEdit" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.customer && <span className="text-xs text-red-500">{masterErrors.customer}</span>}
+                                    </div>
+                                    {saveToMaster.customer && (
+                                        <>
+                                            <InputField label="Merchant Type" id="customerMerchantTypeIdEdit" type="select" value={oneOffMaster.customer.merchantTypeId} onChange={(event) => handleMasterFieldChange('customer', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="customerSiteLocationIdEdit" type="select" value={oneOffMaster.customer.siteLocationId} onChange={(event) => handleMasterFieldChange('customer', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="customerContactNumberEdit" type="text" value={oneOffMaster.customer.contactNumber} onChange={(event) => handleMasterFieldChange('customer', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                            <InputField label="Mine & Quarry Name" id="quarryName" type="select" value={isReadOnly ? formData.quarryName : (oneOffSelection.quarryName ? ONE_OFF_VALUE : formData.quarryName)} onChange={isReadOnly ? handleInputChange : (event) => handleOneOffSelect('quarryName', event.target.value)} isReadOnly={isReadOnly} required>
                                 <option value="">Select Mine/Quarry</option>
                                 {mineQuarries.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                {!isReadOnly && <option value={ONE_OFF_VALUE}>One-time / Other</option>}
                             </InputField>
+                            {!isReadOnly && oneOffSelection.quarryName && (
+                                <>
+                                    <InputField label="One-time Mine/Quarry Name" id="oneOffQuarryName" type="text" value={oneOffValues.quarryName} onChange={(event) => handleOneOffValueChange('quarryName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveQuarryEdit"
+                                            type="checkbox"
+                                            checked={saveToMaster.quarryName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, quarryName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveQuarryEdit" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.quarryName && <span className="text-xs text-red-500">{masterErrors.quarryName}</span>}
+                                    </div>
+                                    {saveToMaster.quarryName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="quarryMerchantTypeIdEdit" type="select" value={oneOffMaster.quarryName.merchantTypeId} onChange={(event) => handleMasterFieldChange('quarryName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="quarrySiteLocationIdEdit" type="select" value={oneOffMaster.quarryName.siteLocationId} onChange={(event) => handleMasterFieldChange('quarryName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="quarryContactNumberEdit" type="text" value={oneOffMaster.quarryName.contactNumber} onChange={(event) => handleMasterFieldChange('quarryName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Material Type" id="material" type="select" value={formData.material} onChange={handleInputChange} isReadOnly={isReadOnly} required>
                                 <option value="">Select Material</option>
                                 {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                             </InputField>
-                            <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="select" value={formData.royaltyOwnerName} onChange={handleInputChange} isReadOnly={isReadOnly}>
+                            <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="select" value={isReadOnly ? formData.royaltyOwnerName : (oneOffSelection.royaltyOwnerName ? ONE_OFF_VALUE : formData.royaltyOwnerName)} onChange={isReadOnly ? handleInputChange : (event) => handleOneOffSelect('royaltyOwnerName', event.target.value)} isReadOnly={isReadOnly}>
                                 <option value="">Select Royalty Owner</option>
                                 {royaltyOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                {!isReadOnly && <option value={ONE_OFF_VALUE}>One-time / Other</option>}
                             </InputField>
+                            {!isReadOnly && oneOffSelection.royaltyOwnerName && (
+                                <>
+                                    <InputField label="One-time Royalty Owner Name" id="oneOffRoyaltyOwnerName" type="text" value={oneOffValues.royaltyOwnerName} onChange={(event) => handleOneOffValueChange('royaltyOwnerName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveRoyaltyEdit"
+                                            type="checkbox"
+                                            checked={saveToMaster.royaltyOwnerName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, royaltyOwnerName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveRoyaltyEdit" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.royaltyOwnerName && <span className="text-xs text-red-500">{masterErrors.royaltyOwnerName}</span>}
+                                    </div>
+                                    {saveToMaster.royaltyOwnerName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="royaltyMerchantTypeIdEdit" type="select" value={oneOffMaster.royaltyOwnerName.merchantTypeId} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="royaltySiteLocationIdEdit" type="select" value={oneOffMaster.royaltyOwnerName.siteLocationId} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="royaltyContactNumberEdit" type="text" value={oneOffMaster.royaltyOwnerName.contactNumber} onChange={(event) => handleMasterFieldChange('royaltyOwnerName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" value={formData.royaltyM3} onChange={handleInputChange} isReadOnly={isReadOnly} />
 
-                            <InputField label="Vehicle Number" id="vehicleNumber" type="select" value={formData.vehicleNumber} onChange={handleInputChange} isReadOnly={isReadOnly} required>
+                            <InputField label="Vehicle Number" id="vehicleNumber" type="select" value={isReadOnly ? formData.vehicleNumber : (oneOffSelection.vehicleNumber ? ONE_OFF_VALUE : formData.vehicleNumber)} onChange={isReadOnly ? handleInputChange : (event) => handleOneOffSelect('vehicleNumber', event.target.value)} isReadOnly={isReadOnly}>
                                 <option value="">Select Vehicle</option>
                                 {vehicles.map(v => <option key={v.id} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
+                                {!isReadOnly && <option value={ONE_OFF_VALUE}>One-time / Other</option>}
                             </InputField>
-                            <InputField label="Transport & Owner Name" id="transporterName" type="select" value={formData.transporterName} onChange={handleInputChange} isReadOnly={isReadOnly}>
+                            {!isReadOnly && oneOffSelection.vehicleNumber && (
+                                <>
+                                    <InputField label="One-time Vehicle Number" id="oneOffVehicleNumberEdit" type="text" value={oneOffValues.vehicleNumber} onChange={(event) => handleOneOffValueChange('vehicleNumber', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveVehicleEdit"
+                                            type="checkbox"
+                                            checked={saveToMaster.vehicleNumber}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, vehicleNumber: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveVehicleEdit" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.vehicleNumber && <span className="text-xs text-red-500">{masterErrors.vehicleNumber}</span>}
+                                    </div>
+                                    {saveToMaster.vehicleNumber && (
+                                        <>
+                                            <InputField label="Vehicle Type" id="vehicleTypeEdit" type="text" value={oneOffMaster.vehicleNumber.vehicleType} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'vehicleType', event.target.value)} />
+                                            <InputField label="Owner Name" id="vehicleOwnerNameEdit" type="text" value={oneOffMaster.vehicleNumber.ownerName} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'ownerName', event.target.value)} />
+                                            <InputField label="Owner Contact" id="vehicleContactNumberEdit" type="text" value={oneOffMaster.vehicleNumber.contactNumber} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'contactNumber', event.target.value)} />
+                                            <InputField label="Capacity" id="vehicleCapacityEdit" type="number" value={oneOffMaster.vehicleNumber.capacity} onChange={(event) => handleMasterFieldChange('vehicleNumber', 'capacity', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                            <InputField label="Transport & Owner Name" id="transporterName" type="select" value={isReadOnly ? formData.transporterName : (oneOffSelection.transporterName ? ONE_OFF_VALUE : formData.transporterName)} onChange={isReadOnly ? handleInputChange : (event) => handleOneOffSelect('transporterName', event.target.value)} isReadOnly={isReadOnly}>
                                 <option value="">Select Transport Owner</option>
                                 {transportOwnerProfiles.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                {!isReadOnly && <option value={ONE_OFF_VALUE}>One-time / Other</option>}
                             </InputField>
+                            {!isReadOnly && oneOffSelection.transporterName && (
+                                <>
+                                    <InputField label="One-time Transport Owner Name" id="oneOffTransportOwnerNameEdit" type="text" value={oneOffValues.transporterName} onChange={(event) => handleOneOffValueChange('transporterName', event.target.value)} />
+                                    <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+                                        <input
+                                            id="saveTransportOwnerEdit"
+                                            type="checkbox"
+                                            checked={saveToMaster.transporterName}
+                                            onChange={(event) => setSaveToMaster(prev => ({ ...prev, transporterName: event.target.checked }))}
+                                        />
+                                        <label htmlFor="saveTransportOwnerEdit" className="text-sm text-gray-700 dark:text-gray-300">Save to Master Data</label>
+                                        {masterErrors.transporterName && <span className="text-xs text-red-500">{masterErrors.transporterName}</span>}
+                                    </div>
+                                    {saveToMaster.transporterName && (
+                                        <>
+                                            <InputField label="Merchant Type" id="transportMerchantTypeIdEdit" type="select" value={oneOffMaster.transporterName.merchantTypeId} onChange={(event) => handleMasterFieldChange('transporterName', 'merchantTypeId', event.target.value)}>
+                                                <option value="">Select Merchant Type</option>
+                                                {merchantTypes.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Site Location" id="transportSiteLocationIdEdit" type="select" value={oneOffMaster.transporterName.siteLocationId} onChange={(event) => handleMasterFieldChange('transporterName', 'siteLocationId', event.target.value)}>
+                                                <option value="">Select Site Location</option>
+                                                {siteLocations.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                            </InputField>
+                                            <InputField label="Contact Number" id="transportContactNumberEdit" type="text" value={oneOffMaster.transporterName.contactNumber} onChange={(event) => handleMasterFieldChange('transporterName', 'contactNumber', event.target.value)} />
+                                        </>
+                                    )}
+                                </>
+                            )}
                             <InputField label="Transport & Owner Mobile Number" id="transportOwnerMobileNumber" type="text" value={formData.transportOwnerMobileNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
 
                             <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} isReadOnly={isReadOnly} />
@@ -410,6 +1002,68 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} isReadOnly={isReadOnly} multiple />
                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={isReadOnly} multiple />
                         </div>
+                        {!isReadOnly && isPrivileged && (
+                            <div className="mt-8">
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Add Rate (Optional)</h4>
+                                <div className="mt-3 flex items-center gap-2">
+                                    <input
+                                        id="rateOverrideEnabledEdit"
+                                        type="checkbox"
+                                        checked={rateOverrideEnabled}
+                                        onChange={(event) => setRateOverrideEnabled(event.target.checked)}
+                                    />
+                                    <label htmlFor="rateOverrideEnabledEdit" className="text-sm text-gray-700 dark:text-gray-300">Override rate for this trip</label>
+                                    {rateError && <span className="text-xs text-red-500">{rateError}</span>}
+                                </div>
+                                {rateOverrideEnabled && (
+                                    <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+                                        <InputField label="Material Type" id="rateOverrideMaterialTypeEdit" type="select" value={rateOverride.materialTypeId} onChange={(event) => handleRateOverrideChange('materialTypeId', event.target.value)}>
+                                            <option value="">Select Material</option>
+                                            {materialTypeDefinitions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Rate Party Type" id="rateOverrideRatePartyTypeEdit" type="select" value={rateOverride.ratePartyType} onChange={(event) => {
+                                            const nextType = event.target.value as TripRateOverride['ratePartyType'];
+                                            setRateOverride(prev => ({ ...prev, ratePartyType: nextType, ratePartyId: '' }));
+                                        }}>
+                                            <option value="transport-owner">Transport Owner</option>
+                                            <option value="mine-quarry">Mine/Quarry</option>
+                                            <option value="vendor-customer">Vendor/Customer</option>
+                                            <option value="royalty-owner">Royalty Owner</option>
+                                        </InputField>
+                                        <InputField label="Rate Party" id="rateOverrideRatePartyEdit" type="select" value={rateOverride.ratePartyId} onChange={(event) => handleRateOverrideChange('ratePartyId', event.target.value)}>
+                                            <option value="">Select Rate Party</option>
+                                            {ratePartyOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Pickup Location" id="rateOverridePickupEdit" type="select" value={rateOverride.pickupLocationId} onChange={(event) => handleRateOverrideChange('pickupLocationId', event.target.value)}>
+                                            <option value="">Select Pickup</option>
+                                            {pickupSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Drop-off Location" id="rateOverrideDropOffEdit" type="select" value={rateOverride.dropOffLocationId} onChange={(event) => handleRateOverrideChange('dropOffLocationId', event.target.value)}>
+                                            <option value="">Select Drop-off</option>
+                                            {dropOffSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
+                                        </InputField>
+                                        <InputField label="Total Km" id="rateOverrideTotalKmEdit" type="number" step="0.01" value={rateOverride.totalKm} onChange={(event) => handleRateOverrideChange('totalKm', Number(event.target.value))} />
+                                        <InputField label="Rate per Km" id="rateOverrideRatePerKmEdit" type="number" step="0.01" value={rateOverride.ratePerKm} onChange={(event) => handleRateOverrideChange('ratePerKm', Number(event.target.value))} />
+                                        <InputField label="Rate per Ton" id="rateOverrideRatePerTonEdit" type="number" step="0.01" value={rateOverride.ratePerTon} onChange={(event) => handleRateOverrideChange('ratePerTon', Number(event.target.value))} />
+                                        <div className="col-span-1 flex items-center gap-2 pt-6">
+                                            <input
+                                                id="rateOverrideGstChargeableEdit"
+                                                type="checkbox"
+                                                checked={rateOverride.gstChargeable}
+                                                onChange={(event) => handleRateOverrideChange('gstChargeable', event.target.checked)}
+                                            />
+                                            <label htmlFor="rateOverrideGstChargeableEdit" className="text-sm text-gray-700 dark:text-gray-300">GST Chargeable</label>
+                                        </div>
+                                        <InputField label="GST %" id="rateOverrideGstPercentageEdit" type="number" step="0.01" value={rateOverride.gstPercentage} onChange={(event) => handleRateOverrideChange('gstPercentage', Number(event.target.value))} />
+                                        <InputField label="GST Amount" id="rateOverrideGstAmountEdit" type="number" step="0.01" value={rateOverride.gstAmount} onChange={(event) => handleRateOverrideChange('gstAmount', Number(event.target.value))} />
+                                        <InputField label="Total Rate per Ton" id="rateOverrideTotalRateEdit" type="number" step="0.01" value={rateOverride.totalRatePerTon} onChange={(event) => handleRateOverrideChange('totalRatePerTon', Number(event.target.value))} />
+                                        <InputField label="Effective From" id="rateOverrideEffectiveFromEdit" type="date" value={rateOverride.effectiveFrom} onChange={(event) => handleRateOverrideChange('effectiveFrom', event.target.value)} />
+                                        <InputField label="Effective To" id="rateOverrideEffectiveToEdit" type="date" value={rateOverride.effectiveTo} onChange={(event) => handleRateOverrideChange('effectiveTo', event.target.value)} />
+                                        <InputField label="Remarks" id="rateOverrideRemarksEdit" type="text" value={rateOverride.remarks} onChange={(event) => handleRateOverrideChange('remarks', event.target.value)} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {renderUploadList('E-Way Bill', files.ewayBillUpload)}
                             {renderUploadList('Invoice / DC', files.invoiceDCUpload)}

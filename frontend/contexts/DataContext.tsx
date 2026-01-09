@@ -373,10 +373,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const netWeight = Number(trip.netWeight || 0);
-    const customerRate = findRate('vendor-customer', trip.customer);
-    const quarryRate = findRate('mine-quarry', trip.quarryName);
-    const transportRate = findRate('transport-owner', trip.transporterName);
-    const royaltyRate = findRate('royalty-owner', trip.royaltyOwnerName);
+    const resolveOverrideRate = (ratePartyType: string) => {
+      if (!trip.rateOverrideEnabled || !trip.rateOverride) return null;
+      if (trip.rateOverride.ratePartyType !== ratePartyType) return null;
+      return Number(trip.rateOverride.totalRatePerTon || 0);
+    };
+
+    const customerRate = resolveOverrideRate('vendor-customer') ?? findRate('vendor-customer', trip.customer);
+    const quarryRate = resolveOverrideRate('mine-quarry') ?? findRate('mine-quarry', trip.quarryName);
+    const transportRate = resolveOverrideRate('transport-owner') ?? findRate('transport-owner', trip.transporterName);
+    const royaltyRate = resolveOverrideRate('royalty-owner') ?? findRate('royalty-owner', trip.royaltyOwnerName);
 
     const revenue = customerRate * netWeight;
     const materialCost = quarryRate * netWeight;

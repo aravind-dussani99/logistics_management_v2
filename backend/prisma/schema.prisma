@@ -347,13 +347,18 @@ model TripRecord {
   pickupPlace           String
   dropOffPlace          String
   vendorName            String
+  vendorCustomerIsOneOff Boolean  @default(false)
   customer              String
   invoiceDCNumber       String
   quarryName            String
+  mineQuarryIsOneOff     Boolean  @default(false)
   royaltyOwnerName      String
+  royaltyOwnerIsOneOff   Boolean  @default(false)
   material              String
   vehicleNumber         String
+  vehicleIsOneOff        Boolean  @default(false)
   transporterName       String
+  transportOwnerIsOneOff Boolean  @default(false)
   transportOwnerMobileNumber String
   emptyWeight           Float
   grossWeight           Float
@@ -394,6 +399,8 @@ model TripRecord {
   pendingRequestBy      String?
   pendingRequestRole    String?
   pendingRequestAt      DateTime?
+  rateOverrideEnabled   Boolean  @default(false)
+  rateOverride          Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
