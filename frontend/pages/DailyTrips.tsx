@@ -10,6 +10,7 @@ import { formatDateDisplay, safeToFixed } from '../utils';
 import { useLocation } from 'react-router-dom';
 import { useUI } from '../contexts/UIContext';
 import SupervisorTripForm from '../components/SupervisorTripForm';
+import ReceiveTripForm from '../components/ReceiveTripForm';
 import AlertDialog from '../components/AlertDialog';
 import RequestDialog from '../components/RequestDialog';
 import { notificationApi } from '../services/notificationApi';
@@ -24,6 +25,59 @@ const getMtdRange = () => {
       dateFrom: formatDate(startOfMonth),
       dateTo: formatDate(today)
     };
+};
+
+const TripActionsDialog: React.FC<{
+    inTransitTrips: Trip[];
+    onEnter: () => void;
+    onReceive: (trip: Trip) => void;
+    onClose: () => void;
+}> = ({ inTransitTrips, onEnter, onReceive, onClose }) => {
+    const [selectedTripId, setSelectedTripId] = useState<string>(inTransitTrips[0]?.id ? String(inTransitTrips[0].id) : '');
+    const selectedTrip = inTransitTrips.find(trip => String(trip.id) === selectedTripId);
+
+    return (
+        <div className="space-y-4 p-2">
+            <button
+                type="button"
+                onClick={onEnter}
+                className="w-full flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark"
+            >
+                <ion-icon name="document-text-outline" className="text-lg"></ion-icon>
+                Enter Trip
+            </button>
+            <div className="rounded-md border border-gray-200 dark:border-gray-600 p-3">
+                <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Receive Trip</div>
+                <select
+                    value={selectedTripId}
+                    onChange={(event) => setSelectedTripId(event.target.value)}
+                    className="mt-2 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                    {inTransitTrips.length === 0 && <option value="">No trips in transit</option>}
+                    {inTransitTrips.map((trip) => (
+                        <option key={trip.id} value={trip.id}>
+                            #{trip.id} · {trip.vehicleNumber || 'Vehicle'} · {formatDateDisplay(trip.date)}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    type="button"
+                    onClick={() => selectedTrip && onReceive(selectedTrip)}
+                    disabled={!selectedTrip}
+                    className="mt-3 w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                >
+                    Open Receive Form
+                </button>
+            </div>
+            <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+                Close
+            </button>
+        </div>
+    );
 };
 
 const DailyTrips: React.FC = () => {
@@ -176,6 +230,22 @@ const DailyTrips: React.FC = () => {
         return `Showing data from ${from} to ${to}`;
     }, [filters.dateFrom, filters.dateTo]);
 
+    const inTransitTrips = useMemo(
+        () => allTrips.filter(trip => trip.status === 'in transit'),
+        [allTrips]
+    );
+
+    const openTripActions = () => {
+        openModal('Trip Actions', (
+            <TripActionsDialog
+                inTransitTrips={inTransitTrips}
+                onEnter={() => openModal('Enter New Trip', <SupervisorTripForm mode="enter" onClose={closeModal} />)}
+                onReceive={(trip) => openModal(`Receive Trip #${trip.id}`, <ReceiveTripForm trip={trip} onClose={closeModal} />)}
+                onClose={closeModal}
+            />
+        ));
+    };
+
     return (
         <div className="relative">
             <PageHeader
@@ -186,6 +256,7 @@ const DailyTrips: React.FC = () => {
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
                 showMoreFilters={['vehicle', 'customer', 'royalty']}
+                pageAction={{ label: 'Add', action: openTripActions }}
             />
 
             <main className="pt-6">

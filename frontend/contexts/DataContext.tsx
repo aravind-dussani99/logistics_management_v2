@@ -25,6 +25,8 @@ import { useAuth } from './AuthContext';
 type NewTripData = Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status'>;
 
 interface DataContextType {
+  loadTrips: () => Promise<void>;
+  loadTripMasters: () => Promise<void>;
   trips: Trip[];
   advances: Advance[];
   payments: Payment[];
@@ -169,6 +171,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const { currentUser } = useAuth();
+  const [hasLoadedTrips, setHasLoadedTrips] = useState(false);
+  const [hasLoadedTripMasters, setHasLoadedTripMasters] = useState(false);
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
@@ -202,6 +206,48 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setRefreshKey(oldKey => oldKey + 1);
   }, []);
 
+  const loadTrips = useCallback(async () => {
+    if (!currentUser || hasLoadedTrips) return;
+    const tripsData = await tripApi.getAll();
+    setTrips(tripsData);
+    setHasLoadedTrips(true);
+  }, [currentUser, hasLoadedTrips]);
+
+  const loadTripMasters = useCallback(async () => {
+    if (!currentUser || hasLoadedTripMasters) return;
+    const [
+      siteLocationsData,
+      merchantTypesData,
+      vehicleMasterData,
+      mineQuarryData,
+      vendorCustomerData,
+      royaltyOwnerData,
+      transportOwnerData,
+      materialTypeDefinitionData,
+      materialRateData,
+    ] = await Promise.all([
+      siteLocationApi.getAll(),
+      merchantTypeApi.getAll(),
+      vehicleMasterApi.getAll(),
+      mineQuarryApi.getAll(),
+      vendorCustomerApi.getAll(),
+      royaltyOwnerDataApi.getAll(),
+      transportOwnerApi.getAll(),
+      materialTypeDefinitionApi.getAll(),
+      materialRateApi.getAll(),
+    ]);
+    setSiteLocations(siteLocationsData);
+    setMerchantTypes(merchantTypesData);
+    setVehicleMasters(vehicleMasterData);
+    setMineQuarries(mineQuarryData);
+    setVendorCustomers(vendorCustomerData);
+    setRoyaltyOwnerProfiles(royaltyOwnerData);
+    setTransportOwnerProfiles(transportOwnerData);
+    setMaterialTypeDefinitions(materialTypeDefinitionData);
+    setMaterialRates(materialRateData);
+    setHasLoadedTripMasters(true);
+  }, [currentUser, hasLoadedTripMasters]);
+
   useEffect(() => {
     if (!currentUser) {
         setTrips([]);
@@ -231,10 +277,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setAccounts([]);
         setAccountCategories([]);
         setLoading(false);
+        setHasLoadedTrips(false);
+        setHasLoadedTripMasters(false);
         return;
     }
     const fetchData = async () => {
         setLoading(true);
+        const isSupervisor = currentUser.role === Role.PICKUP_SUPERVISOR || currentUser.role === Role.DROPOFF_SUPERVISOR || currentUser.role === Role.GUEST;
+        if (isSupervisor) {
+            const tripsData = await tripApi.getAll();
+            setTrips(tripsData);
+            setHasLoadedTrips(true);
+            setLoading(false);
+            return;
+        }
         const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role);
         const paymentsPromise = canReadPayments ? paymentApi.getAll() : Promise.resolve([] as Payment[]);
         const [
@@ -318,6 +374,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setRoyaltyStock(royaltyStockData);
         setAccounts(accountsData);
         setAccountCategories(categoriesData);
+        setHasLoadedTrips(true);
+        setHasLoadedTripMasters(true);
         setLoading(false);
     }
     fetchData();
@@ -711,6 +769,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     accounts,
     accountCategories,
     loading,
+    loadTrips,
+    loadTripMasters,
     addTrip,
     updateTrip,
     deleteTrip,

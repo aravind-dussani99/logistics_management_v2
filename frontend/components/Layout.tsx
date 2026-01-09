@@ -18,7 +18,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (modalContent) {
       closeModal();
     }
-  }, [location.pathname, location.search, modalContent, closeModal]);
+  }, [location.pathname, location.search, closeModal]);
 
   return (
     <div className="flex h-screen bg-light dark:bg-dark text-gray-800 dark:text-gray-200">

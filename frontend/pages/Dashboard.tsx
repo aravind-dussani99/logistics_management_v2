@@ -199,7 +199,7 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="relative">
-             <PageHeader
+            <PageHeader
                 title="Dashboard"
                 subtitle={dateRangeSubtitle}
                 filters={filters}
@@ -207,6 +207,7 @@ const Dashboard: React.FC = () => {
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
                 showMoreFilters={['vehicle', 'customer', 'royalty']}
+                showAddAction={false}
             />
             
             <main className="pt-6 space-y-6">

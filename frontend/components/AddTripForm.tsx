@@ -96,6 +96,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         addRoyaltyOwnerProfile,
         addTransportOwnerProfile,
         addVehicleMaster,
+        loadTripMasters,
         vehicles,
         materialTypeDefinitions,
         siteLocations,
@@ -178,6 +179,10 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                 return [];
         }
     })();
+
+    useEffect(() => {
+        loadTripMasters();
+    }, [loadTripMasters]);
 
     useEffect(() => {
         if (!rateOverrideEnabled) return;

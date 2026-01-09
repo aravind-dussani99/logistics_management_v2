@@ -58,6 +58,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         addRoyaltyOwnerProfile,
         addTransportOwnerProfile,
         addVehicleMaster,
+        loadTripMasters,
         vehicles,
         materialTypeDefinitions,
         siteLocations,
@@ -154,6 +155,10 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 return [];
         }
     })();
+
+    useEffect(() => {
+        loadTripMasters();
+    }, [loadTripMasters]);
 
     const parseUploadValue = (value?: TripUploadFile[] | string | null) => {
         if (!value) return [];
