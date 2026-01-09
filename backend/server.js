@@ -1161,8 +1161,8 @@ app.post('/api/merchants', async (req, res) => {
     gstDetails = '',
     remarks = '',
   } = req.body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return res.status(400).json({ error: 'Merchant type, name, contact number, and site location are required.' });
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return res.status(400).json({ error: 'Merchant type, name, and site location are required.' });
   }
   try {
     const merchant = await prisma.merchant.create({
@@ -1205,8 +1205,8 @@ app.put('/api/merchants/:id', async (req, res) => {
     gstDetails = '',
     remarks = '',
   } = req.body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return res.status(400).json({ error: 'Merchant type, name, contact number, and site location are required.' });
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return res.status(400).json({ error: 'Merchant type, name, and site location are required.' });
   }
   try {
     const merchant = await prisma.merchant.update({
@@ -2378,8 +2378,8 @@ app.post('/api/vehicle-masters', async (req, res) => {
     contactNumber,
     remarks = '',
   } = req.body || {};
-  if (!vehicleNumber || !vehicleType || !ownerName || !contactNumber) {
-    return res.status(400).json({ error: 'Vehicle number, type, owner name, and contact number are required.' });
+  if (!vehicleNumber) {
+    return res.status(400).json({ error: 'Vehicle number is required.' });
   }
   try {
     const vehicle = await prisma.vehicleMaster.create({
@@ -2409,8 +2409,8 @@ app.put('/api/vehicle-masters/:id', async (req, res) => {
     contactNumber,
     remarks = '',
   } = req.body || {};
-  if (!vehicleNumber || !vehicleType || !ownerName || !contactNumber) {
-    return res.status(400).json({ error: 'Vehicle number, type, owner name, and contact number are required.' });
+  if (!vehicleNumber) {
+    return res.status(400).json({ error: 'Vehicle number is required.' });
   }
   try {
     const vehicle = await prisma.vehicleMaster.update({
@@ -2537,11 +2537,10 @@ const validateMerchantProfile = (body) => {
   const {
     merchantTypeId,
     name,
-    contactNumber,
     siteLocationId,
   } = body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return 'Merchant type, name, contact number, and site location are required.';
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return 'Merchant type, name, and site location are required.';
   }
   return '';
 };
