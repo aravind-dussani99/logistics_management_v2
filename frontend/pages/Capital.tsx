@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import AccountingTable from '../components/AccountingTable';
 import PageHeader from '../components/PageHeader';
@@ -9,7 +9,19 @@ import { formatCurrency } from '../utils';
 const CAPITAL_CATEGORIES = ['Bank Account', 'Capital & Loans', 'Investment', 'Personal Funds'];
 
 const Capital: React.FC = () => {
-    const { trips, ledgerEntries, accounts, customers, quarries, vehicles, royaltyOwners, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles } = useData();
+    const { trips, ledgerEntries, accounts, customers, quarries, vehicles, royaltyOwners, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
+
+    useEffect(() => {
+        loadTrips();
+        loadLegacyMasters();
+        loadLedgerEntries();
+        loadAccounts();
+        loadPayments();
+        loadVendorCustomers();
+        loadMineQuarries();
+        loadTransportOwnerProfiles();
+        loadRoyaltyOwnerProfiles();
+    }, [loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
 
     const accountSummaries = useMemo(() => {
         const summaryMap: Map<string, AccountSummary> = new Map();

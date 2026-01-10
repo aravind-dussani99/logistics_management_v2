@@ -31,7 +31,7 @@ const getMtdRange = () => {
 
 const DailyExpenses: React.FC = () => {
     const { currentUser } = useAuth();
-    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts } = useData();
+    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
     const { openModal, closeModal } = useUI();
 
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
@@ -65,6 +65,13 @@ const DailyExpenses: React.FC = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData, refreshKey]);
+
+    useEffect(() => {
+        loadMineQuarries();
+        loadVendorCustomers();
+        loadRoyaltyOwnerProfiles();
+        loadTransportOwnerProfiles();
+    }, [loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
     const handleAddExpense = () => {
         openModal('Add New Transaction', <ExpenseForm onSave={handleSave} onClose={closeModal} expenses={expenses} openingBalance={openingBalance} />);

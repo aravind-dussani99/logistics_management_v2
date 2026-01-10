@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
 import PaymentForm from '../components/PaymentForm';
@@ -18,7 +18,7 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
 };
 
 const Payments: React.FC = () => {
-  const { payments, addPayment, updatePayment, deletePayment, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+  const { payments, addPayment, updatePayment, deletePayment, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', type: 'all', query: '' });
   const [currentPage, setCurrentPage] = useState(1);
@@ -194,3 +194,10 @@ const Payments: React.FC = () => {
 };
 
 export default Payments;
+  useEffect(() => {
+    loadPayments();
+    loadVendorCustomers();
+    loadMineQuarries();
+    loadRoyaltyOwnerProfiles();
+    loadTransportOwnerProfiles();
+  }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Trip, QuarryOwner, VehicleOwner, Customer, RoyaltyOwner, LedgerEntry, Account, PaymentType } from '../types';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
@@ -30,9 +30,21 @@ export interface AccountSummary {
 }
 
 const Accounting: React.FC = () => {
-    const { trips: allTrips, quarries, vehicles, customers, royaltyOwners, ledgerEntries, accounts, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles } = useData();
+    const { trips: allTrips, quarries, vehicles, customers, royaltyOwners, ledgerEntries, accounts, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [activeTab, setActiveTab] = useState<'vp' | 'vr' | 'cr' | 'others' | 'aged'>('vp');
+
+    useEffect(() => {
+        loadTrips();
+        loadLegacyMasters();
+        loadLedgerEntries();
+        loadAccounts();
+        loadPayments();
+        loadVendorCustomers();
+        loadMineQuarries();
+        loadTransportOwnerProfiles();
+        loadRoyaltyOwnerProfiles();
+    }, [loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
 
     const allDataForFilters = useMemo(() => {
         const uniqueRoyaltyOwnersNames = Array.from(new Set(allTrips.map(t => t.royaltyOwnerName)));

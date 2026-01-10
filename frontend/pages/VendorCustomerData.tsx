@@ -8,10 +8,16 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const VendorCustomerDataPage: React.FC = () => {
-  const { vendorCustomers, merchantTypes, siteLocations, addVendorCustomer, updateVendorCustomer, deleteVendorCustomer } = useData();
+  const { vendorCustomers, merchantTypes, siteLocations, addVendorCustomer, updateVendorCustomer, deleteVendorCustomer, loadVendorCustomers, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    loadVendorCustomers();
+    loadMerchantTypes();
+    loadSiteLocations();
+  }, [loadVendorCustomers, loadMerchantTypes, loadSiteLocations, refreshKey]);
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

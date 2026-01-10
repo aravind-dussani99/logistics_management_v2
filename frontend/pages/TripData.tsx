@@ -8,7 +8,11 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const TripDataPage: React.FC = () => {
-  const { trips } = useData();
+  const { trips, loadTrips, refreshKey } = useData();
+
+  useEffect(() => {
+    loadTrips();
+  }, [loadTrips, refreshKey]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 

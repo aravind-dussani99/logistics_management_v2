@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
         return <SupervisorTripReport />;
     }
     
-    const { trips, quarries, vehicles, customers, refreshKey } = useData();
+    const { trips, quarries, vehicles, customers, refreshKey, loadTrips, loadLegacyMasters } = useData();
 
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
     const [allData, setAllData] = useState<{ quarries: QuarryOwner[]; vehicles: VehicleOwner[]; customers: CustomerRate[]; royaltyOwners: string[] }>({ quarries: [], vehicles: [], customers: [], royaltyOwners: [] });
@@ -52,6 +52,11 @@ const Dashboard: React.FC = () => {
     const [chartWarning, setChartWarning] = useState<string | null>(null);
     
     const [pieDimension, setPieDimension] = useState<'transporter' | 'quarry' | 'customer'>('transporter');
+
+    useEffect(() => {
+        loadTrips();
+        loadLegacyMasters();
+    }, [loadTrips, loadLegacyMasters, refreshKey]);
 
     useEffect(() => {
         setAllTrips(trips);

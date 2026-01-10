@@ -8,10 +8,16 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const MineQuarryDataPage: React.FC = () => {
-  const { mineQuarries, merchantTypes, siteLocations, addMineQuarry, updateMineQuarry, deleteMineQuarry } = useData();
+  const { mineQuarries, merchantTypes, siteLocations, addMineQuarry, updateMineQuarry, deleteMineQuarry, loadMineQuarries, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    loadMineQuarries();
+    loadMerchantTypes();
+    loadSiteLocations();
+  }, [loadMineQuarries, loadMerchantTypes, loadSiteLocations, refreshKey]);
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

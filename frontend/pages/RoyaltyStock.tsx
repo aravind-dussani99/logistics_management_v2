@@ -9,9 +9,14 @@ import { Filters } from '../components/FilterPanel';
 import { formatCurrency, safeToFixed } from '../utils';
 
 const RoyaltyStockPage: React.FC = () => {
-    const { royaltyStock, addRoyaltyStock, trips } = useData();
+    const { royaltyStock, addRoyaltyStock, trips, loadRoyaltyStock, loadTrips, refreshKey } = useData();
     const { openModal, closeModal } = useUI();
     const [filters, setFilters] = useState<Filters>({});
+
+    useEffect(() => {
+        loadRoyaltyStock();
+        loadTrips();
+    }, [loadRoyaltyStock, loadTrips, refreshKey]);
 
     const totalPurchased = useMemo(() => royaltyStock.reduce((acc, item) => acc + item.quantity, 0), [royaltyStock]);
     const totalUsed = useMemo(() => trips.reduce((acc, trip) => acc + trip.royaltyM3, 0), [trips]);

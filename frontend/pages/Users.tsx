@@ -9,11 +9,15 @@ import UserForm from '../components/UserForm';
 const Users: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const { openModal, closeModal } = useUI();
-    const { refreshData, refreshKey, siteLocations } = useData();
+    const { refreshData, refreshKey, siteLocations, loadSiteLocations } = useData();
 
     useEffect(() => {
         usersApi.listUsers().then(setUsers).catch((error) => console.error('Failed to load users', error));
     }, [refreshKey]);
+
+    useEffect(() => {
+        loadSiteLocations();
+    }, [loadSiteLocations, refreshKey]);
 
     const handleEditUser = (user: User) => {
         openModal(`Edit User: ${user.name}`, <UserForm user={user} siteLocations={siteLocations as SiteLocation[]} onSave={(data) => handleSave(user.id, data)} onClose={closeModal} />);

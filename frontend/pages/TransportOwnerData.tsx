@@ -8,7 +8,13 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const TransportOwnerDataPage: React.FC = () => {
-  const { transportOwnerProfiles, merchantTypes, siteLocations, addTransportOwnerProfile, updateTransportOwnerProfile, deleteTransportOwnerProfile } = useData();
+  const { transportOwnerProfiles, merchantTypes, siteLocations, addTransportOwnerProfile, updateTransportOwnerProfile, deleteTransportOwnerProfile, loadTransportOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
+
+  useEffect(() => {
+    loadTransportOwnerProfiles();
+    loadMerchantTypes();
+    loadSiteLocations();
+  }, [loadTransportOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey]);
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');

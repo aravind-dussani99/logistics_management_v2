@@ -8,7 +8,7 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const MerchantTypesPage: React.FC = () => {
-  const { merchantTypes, addMerchantType, updateMerchantType, deleteMerchantType } = useData();
+  const { merchantTypes, addMerchantType, updateMerchantType, deleteMerchantType, loadMerchantTypes, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +50,10 @@ const MerchantTypesPage: React.FC = () => {
     if (!window.confirm('Delete this merchant type?')) return;
     await deleteMerchantType(id);
   };
+
+  useEffect(() => {
+    loadMerchantTypes();
+  }, [loadMerchantTypes, refreshKey]);
 
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredTypes.length / ITEMS_PER_PAGE) || 1;

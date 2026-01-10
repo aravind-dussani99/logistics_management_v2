@@ -8,7 +8,7 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const AccountTypesPage: React.FC = () => {
-  const { accountTypes, addAccountType, updateAccountType, deleteAccountType } = useData();
+  const { accountTypes, addAccountType, updateAccountType, deleteAccountType, loadAccountTypes, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +50,10 @@ const AccountTypesPage: React.FC = () => {
     if (!window.confirm('Delete this account type?')) return;
     await deleteAccountType(id);
   };
+
+  useEffect(() => {
+    loadAccountTypes();
+  }, [loadAccountTypes, refreshKey]);
 
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredTypes.length / ITEMS_PER_PAGE) || 1;

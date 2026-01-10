@@ -25,10 +25,37 @@ const MerchantBankAccountsPage: React.FC = () => {
     addMerchantBankAccount,
     updateMerchantBankAccount,
     deleteMerchantBankAccount,
+    loadMerchantBankAccounts,
+    loadMerchants,
+    loadAccountTypes,
+    loadMineQuarries,
+    loadVendorCustomers,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
   } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    loadMerchantBankAccounts();
+    loadMerchants();
+    loadAccountTypes();
+    loadMineQuarries();
+    loadVendorCustomers();
+    loadRoyaltyOwnerProfiles();
+    loadTransportOwnerProfiles();
+  }, [
+    loadMerchantBankAccounts,
+    loadMerchants,
+    loadAccountTypes,
+    loadMineQuarries,
+    loadVendorCustomers,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
+  ]);
 
   const getRatePartyName = (account: MerchantBankAccount) => {
     if (account.ratePartyName) return account.ratePartyName;

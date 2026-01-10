@@ -28,7 +28,7 @@ const getMtdRange = () => {
 
 const DailyTrips: React.FC = () => {
     const { currentUser } = useAuth();
-    const { refreshKey, customers, trips, quarries, vehicles, updateTrip, deleteTrip } = useData();
+    const { refreshKey, customers, trips, quarries, vehicles, updateTrip, deleteTrip, loadTrips, loadLegacyMasters } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
@@ -38,6 +38,11 @@ const DailyTrips: React.FC = () => {
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed'>('all');
+
+    useEffect(() => {
+        loadTrips();
+        loadLegacyMasters();
+    }, [loadTrips, loadLegacyMasters, refreshKey]);
 
     const handleValidate = (trip: Trip) => {
         openModal('Validate Trip', (

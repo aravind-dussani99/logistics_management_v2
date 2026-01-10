@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { LedgerEntry } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
@@ -22,10 +22,15 @@ const getMtdRange = () => {
 };
 
 const Ledger: React.FC = () => {
-    const { ledgerEntries, updateLedgerEntry, deleteLedgerEntry, refreshKey } = useData();
+    const { ledgerEntries, updateLedgerEntry, deleteLedgerEntry, refreshKey, loadLedgerEntries, loadAccounts } = useData();
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
     const { openModal, closeModal } = useUI();
+
+    useEffect(() => {
+        loadLedgerEntries();
+        loadAccounts();
+    }, [loadLedgerEntries, loadAccounts, refreshKey]);
 
     const handleAddEntry = () => {
         openModal('Add New Ledger Entry', <AddLedgerEntryForm onClose={closeModal} />);

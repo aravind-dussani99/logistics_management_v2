@@ -27,6 +27,27 @@ type NewTripData = Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost
 interface DataContextType {
   loadTrips: () => Promise<void>;
   loadTripMasters: () => Promise<void>;
+  loadLegacyMasters: () => Promise<void>;
+  loadAdvances: () => Promise<void>;
+  loadPayments: () => Promise<void>;
+  loadLedgerEntries: () => Promise<void>;
+  loadAccounts: () => Promise<void>;
+  loadAccountCategories: () => Promise<void>;
+  loadMaterials: () => Promise<void>;
+  loadRoyaltyStock: () => Promise<void>;
+  loadSiteLocations: () => Promise<void>;
+  loadMerchantTypes: () => Promise<void>;
+  loadMerchants: () => Promise<void>;
+  loadMerchantBankAccounts: () => Promise<void>;
+  loadAccountTypes: () => Promise<void>;
+  loadVehicleMasters: () => Promise<void>;
+  loadMineQuarries: () => Promise<void>;
+  loadVendorCustomers: () => Promise<void>;
+  loadRoyaltyOwnerProfiles: () => Promise<void>;
+  loadTransportOwnerProfiles: () => Promise<void>;
+  loadTransportOwnerVehicles: () => Promise<void>;
+  loadMaterialTypeDefinitions: () => Promise<void>;
+  loadMaterialRates: () => Promise<void>;
   trips: Trip[];
   advances: Advance[];
   payments: Payment[];
@@ -173,6 +194,27 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { currentUser } = useAuth();
   const [hasLoadedTrips, setHasLoadedTrips] = useState(false);
   const [hasLoadedTripMasters, setHasLoadedTripMasters] = useState(false);
+  const [hasLoadedLegacyMasters, setHasLoadedLegacyMasters] = useState(false);
+  const [hasLoadedAdvances, setHasLoadedAdvances] = useState(false);
+  const [hasLoadedPayments, setHasLoadedPayments] = useState(false);
+  const [hasLoadedLedgerEntries, setHasLoadedLedgerEntries] = useState(false);
+  const [hasLoadedAccounts, setHasLoadedAccounts] = useState(false);
+  const [hasLoadedAccountCategories, setHasLoadedAccountCategories] = useState(false);
+  const [hasLoadedMaterials, setHasLoadedMaterials] = useState(false);
+  const [hasLoadedRoyaltyStock, setHasLoadedRoyaltyStock] = useState(false);
+  const [hasLoadedSiteLocations, setHasLoadedSiteLocations] = useState(false);
+  const [hasLoadedMerchantTypes, setHasLoadedMerchantTypes] = useState(false);
+  const [hasLoadedMerchants, setHasLoadedMerchants] = useState(false);
+  const [hasLoadedMerchantBankAccounts, setHasLoadedMerchantBankAccounts] = useState(false);
+  const [hasLoadedAccountTypes, setHasLoadedAccountTypes] = useState(false);
+  const [hasLoadedVehicleMasters, setHasLoadedVehicleMasters] = useState(false);
+  const [hasLoadedMineQuarries, setHasLoadedMineQuarries] = useState(false);
+  const [hasLoadedVendorCustomers, setHasLoadedVendorCustomers] = useState(false);
+  const [hasLoadedRoyaltyOwnerProfiles, setHasLoadedRoyaltyOwnerProfiles] = useState(false);
+  const [hasLoadedTransportOwnerProfiles, setHasLoadedTransportOwnerProfiles] = useState(false);
+  const [hasLoadedTransportOwnerVehicles, setHasLoadedTransportOwnerVehicles] = useState(false);
+  const [hasLoadedMaterialTypeDefinitions, setHasLoadedMaterialTypeDefinitions] = useState(false);
+  const [hasLoadedMaterialRates, setHasLoadedMaterialRates] = useState(false);
 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
@@ -205,6 +247,32 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshData = useCallback(() => {
     setRefreshKey(oldKey => oldKey + 1);
   }, []);
+
+  useEffect(() => {
+    setHasLoadedTrips(false);
+    setHasLoadedTripMasters(false);
+    setHasLoadedLegacyMasters(false);
+    setHasLoadedAdvances(false);
+    setHasLoadedPayments(false);
+    setHasLoadedLedgerEntries(false);
+    setHasLoadedAccounts(false);
+    setHasLoadedAccountCategories(false);
+    setHasLoadedMaterials(false);
+    setHasLoadedRoyaltyStock(false);
+    setHasLoadedSiteLocations(false);
+    setHasLoadedMerchantTypes(false);
+    setHasLoadedMerchants(false);
+    setHasLoadedMerchantBankAccounts(false);
+    setHasLoadedAccountTypes(false);
+    setHasLoadedVehicleMasters(false);
+    setHasLoadedMineQuarries(false);
+    setHasLoadedVendorCustomers(false);
+    setHasLoadedRoyaltyOwnerProfiles(false);
+    setHasLoadedTransportOwnerProfiles(false);
+    setHasLoadedTransportOwnerVehicles(false);
+    setHasLoadedMaterialTypeDefinitions(false);
+    setHasLoadedMaterialRates(false);
+  }, [refreshKey]);
 
   const loadTrips = useCallback(async () => {
     if (!currentUser || hasLoadedTrips) return;
@@ -248,6 +316,169 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHasLoadedTripMasters(true);
   }, [currentUser, hasLoadedTripMasters]);
 
+  const loadLegacyMasters = useCallback(async () => {
+    if (!currentUser || hasLoadedLegacyMasters) return;
+    const [vehiclesData, quarriesData, royaltyData, customersData, customerRatesData] = await Promise.all([
+      api.getVehicleOwners(),
+      api.getQuarryOwners(),
+      api.getRoyaltyOwners(),
+      api.getCustomers(),
+      api.getCustomerRates(),
+    ]);
+    setVehicles(vehiclesData);
+    setQuarries(quarriesData);
+    setRoyaltyOwners(royaltyData);
+    setCustomers(customersData);
+    setCustomerRates(customerRatesData);
+    setHasLoadedLegacyMasters(true);
+  }, [currentUser, hasLoadedLegacyMasters]);
+
+  const loadAdvances = useCallback(async () => {
+    if (!currentUser || hasLoadedAdvances) return;
+    const advancesData = await advanceApi.getAll();
+    setAdvances(advancesData);
+    setHasLoadedAdvances(true);
+  }, [currentUser, hasLoadedAdvances]);
+
+  const loadPayments = useCallback(async () => {
+    if (!currentUser || hasLoadedPayments) return;
+    const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role);
+    if (!canReadPayments) {
+      setPayments([]);
+      setHasLoadedPayments(true);
+      return;
+    }
+    const paymentsData = await paymentApi.getAll();
+    setPayments(paymentsData);
+    setHasLoadedPayments(true);
+  }, [currentUser, hasLoadedPayments]);
+
+  const loadLedgerEntries = useCallback(async () => {
+    if (!currentUser || hasLoadedLedgerEntries) return;
+    const ledgerData = await api.getLedgerEntries();
+    setLedgerEntries(ledgerData);
+    setHasLoadedLedgerEntries(true);
+  }, [currentUser, hasLoadedLedgerEntries]);
+
+  const loadAccounts = useCallback(async () => {
+    if (!currentUser || hasLoadedAccounts) return;
+    const accountsData = await api.getAccounts();
+    setAccounts(accountsData);
+    setHasLoadedAccounts(true);
+  }, [currentUser, hasLoadedAccounts]);
+
+  const loadAccountCategories = useCallback(async () => {
+    if (!currentUser || hasLoadedAccountCategories) return;
+    const categoriesData = await api.getAccountCategories();
+    setAccountCategories(categoriesData);
+    setHasLoadedAccountCategories(true);
+  }, [currentUser, hasLoadedAccountCategories]);
+
+  const loadMaterials = useCallback(async () => {
+    if (!currentUser || hasLoadedMaterials) return;
+    const materialsData = await api.getMaterials();
+    setMaterials(materialsData);
+    setHasLoadedMaterials(true);
+  }, [currentUser, hasLoadedMaterials]);
+
+  const loadRoyaltyStock = useCallback(async () => {
+    if (!currentUser || hasLoadedRoyaltyStock) return;
+    const stockData = await api.getRoyaltyStock();
+    setRoyaltyStock(stockData);
+    setHasLoadedRoyaltyStock(true);
+  }, [currentUser, hasLoadedRoyaltyStock]);
+
+  const loadSiteLocations = useCallback(async () => {
+    if (!currentUser || hasLoadedSiteLocations) return;
+    const siteLocationsData = await siteLocationApi.getAll();
+    setSiteLocations(siteLocationsData);
+    setHasLoadedSiteLocations(true);
+  }, [currentUser, hasLoadedSiteLocations]);
+
+  const loadMerchantTypes = useCallback(async () => {
+    if (!currentUser || hasLoadedMerchantTypes) return;
+    const merchantTypesData = await merchantTypeApi.getAll();
+    setMerchantTypes(merchantTypesData);
+    setHasLoadedMerchantTypes(true);
+  }, [currentUser, hasLoadedMerchantTypes]);
+
+  const loadMerchants = useCallback(async () => {
+    if (!currentUser || hasLoadedMerchants) return;
+    const merchantsData = await merchantApi.getAll();
+    setMerchants(merchantsData);
+    setHasLoadedMerchants(true);
+  }, [currentUser, hasLoadedMerchants]);
+
+  const loadMerchantBankAccounts = useCallback(async () => {
+    if (!currentUser || hasLoadedMerchantBankAccounts) return;
+    const merchantBankAccountsData = await merchantBankApi.getAll();
+    setMerchantBankAccounts(merchantBankAccountsData);
+    setHasLoadedMerchantBankAccounts(true);
+  }, [currentUser, hasLoadedMerchantBankAccounts]);
+
+  const loadAccountTypes = useCallback(async () => {
+    if (!currentUser || hasLoadedAccountTypes) return;
+    const accountTypesData = await accountTypeApi.getAll();
+    setAccountTypes(accountTypesData);
+    setHasLoadedAccountTypes(true);
+  }, [currentUser, hasLoadedAccountTypes]);
+
+  const loadVehicleMasters = useCallback(async () => {
+    if (!currentUser || hasLoadedVehicleMasters) return;
+    const vehicleMasterData = await vehicleMasterApi.getAll();
+    setVehicleMasters(vehicleMasterData);
+    setHasLoadedVehicleMasters(true);
+  }, [currentUser, hasLoadedVehicleMasters]);
+
+  const loadMineQuarries = useCallback(async () => {
+    if (!currentUser || hasLoadedMineQuarries) return;
+    const mineQuarryData = await mineQuarryApi.getAll();
+    setMineQuarries(mineQuarryData);
+    setHasLoadedMineQuarries(true);
+  }, [currentUser, hasLoadedMineQuarries]);
+
+  const loadVendorCustomers = useCallback(async () => {
+    if (!currentUser || hasLoadedVendorCustomers) return;
+    const vendorCustomerData = await vendorCustomerApi.getAll();
+    setVendorCustomers(vendorCustomerData);
+    setHasLoadedVendorCustomers(true);
+  }, [currentUser, hasLoadedVendorCustomers]);
+
+  const loadRoyaltyOwnerProfiles = useCallback(async () => {
+    if (!currentUser || hasLoadedRoyaltyOwnerProfiles) return;
+    const royaltyOwnerData = await royaltyOwnerDataApi.getAll();
+    setRoyaltyOwnerProfiles(royaltyOwnerData);
+    setHasLoadedRoyaltyOwnerProfiles(true);
+  }, [currentUser, hasLoadedRoyaltyOwnerProfiles]);
+
+  const loadTransportOwnerProfiles = useCallback(async () => {
+    if (!currentUser || hasLoadedTransportOwnerProfiles) return;
+    const transportOwnerData = await transportOwnerApi.getAll();
+    setTransportOwnerProfiles(transportOwnerData);
+    setHasLoadedTransportOwnerProfiles(true);
+  }, [currentUser, hasLoadedTransportOwnerProfiles]);
+
+  const loadTransportOwnerVehicles = useCallback(async () => {
+    if (!currentUser || hasLoadedTransportOwnerVehicles) return;
+    const transportOwnerVehicleData = await transportOwnerVehicleApi.getAll();
+    setTransportOwnerVehicles(transportOwnerVehicleData);
+    setHasLoadedTransportOwnerVehicles(true);
+  }, [currentUser, hasLoadedTransportOwnerVehicles]);
+
+  const loadMaterialTypeDefinitions = useCallback(async () => {
+    if (!currentUser || hasLoadedMaterialTypeDefinitions) return;
+    const materialTypeDefinitionData = await materialTypeDefinitionApi.getAll();
+    setMaterialTypeDefinitions(materialTypeDefinitionData);
+    setHasLoadedMaterialTypeDefinitions(true);
+  }, [currentUser, hasLoadedMaterialTypeDefinitions]);
+
+  const loadMaterialRates = useCallback(async () => {
+    if (!currentUser || hasLoadedMaterialRates) return;
+    const materialRateData = await materialRateApi.getAll();
+    setMaterialRates(materialRateData);
+    setHasLoadedMaterialRates(true);
+  }, [currentUser, hasLoadedMaterialRates]);
+
   useEffect(() => {
     if (!currentUser) {
         setTrips([]);
@@ -279,107 +510,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLoading(false);
         setHasLoadedTrips(false);
         setHasLoadedTripMasters(false);
+        setHasLoadedLegacyMasters(false);
+        setHasLoadedAdvances(false);
+        setHasLoadedPayments(false);
+        setHasLoadedLedgerEntries(false);
+        setHasLoadedAccounts(false);
+        setHasLoadedAccountCategories(false);
+        setHasLoadedMaterials(false);
+        setHasLoadedRoyaltyStock(false);
+        setHasLoadedSiteLocations(false);
+        setHasLoadedMerchantTypes(false);
+        setHasLoadedMerchants(false);
+        setHasLoadedMerchantBankAccounts(false);
+        setHasLoadedAccountTypes(false);
+        setHasLoadedVehicleMasters(false);
+        setHasLoadedMineQuarries(false);
+        setHasLoadedVendorCustomers(false);
+        setHasLoadedRoyaltyOwnerProfiles(false);
+        setHasLoadedTransportOwnerProfiles(false);
+        setHasLoadedTransportOwnerVehicles(false);
+        setHasLoadedMaterialTypeDefinitions(false);
+        setHasLoadedMaterialRates(false);
         return;
     }
-    const fetchData = async () => {
-        setLoading(true);
-        const isSupervisor = currentUser.role === Role.PICKUP_SUPERVISOR || currentUser.role === Role.DROPOFF_SUPERVISOR || currentUser.role === Role.GUEST;
-        if (isSupervisor) {
-            const tripsData = await tripApi.getAll();
-            setTrips(tripsData);
-            setHasLoadedTrips(true);
-            setLoading(false);
-            return;
-        }
-        const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role);
-        const paymentsPromise = canReadPayments ? paymentApi.getAll() : Promise.resolve([] as Payment[]);
-        const [
-            tripsData,
-            advancesData,
-            paymentsData,
-            ledgerData,
-            vehiclesData,
-            quarriesData,
-            royaltyData,
-            customersData,
-            customerRatesData,
-            siteLocationsData,
-            merchantTypesData,
-            merchantsData,
-            merchantBankAccountsData,
-            accountTypesData,
-            vehicleMasterData,
-            mineQuarryData,
-            vendorCustomerData,
-            royaltyOwnerData,
-            transportOwnerData,
-            transportOwnerVehicleData,
-            materialTypeDefinitionData,
-            materialRateData,
-            materialsData,
-            royaltyStockData,
-            accountsData,
-            categoriesData
-        ] = await Promise.all([
-            tripApi.getAll(),
-            advanceApi.getAll(),
-            paymentsPromise,
-            api.getLedgerEntries(),
-            api.getVehicleOwners(),
-            api.getQuarryOwners(),
-            api.getRoyaltyOwners(),
-            api.getCustomers(),
-            api.getCustomerRates(),
-            siteLocationApi.getAll(),
-            merchantTypeApi.getAll(),
-            merchantApi.getAll(),
-            merchantBankApi.getAll(),
-            accountTypeApi.getAll(),
-            vehicleMasterApi.getAll(),
-            mineQuarryApi.getAll(),
-            vendorCustomerApi.getAll(),
-            royaltyOwnerDataApi.getAll(),
-            transportOwnerApi.getAll(),
-            transportOwnerVehicleApi.getAll(),
-            materialTypeDefinitionApi.getAll(),
-            materialRateApi.getAll(),
-            api.getMaterials(),
-            api.getRoyaltyStock(),
-            api.getAccounts(),
-            api.getAccountCategories(),
-        ]);
-        setTrips(tripsData);
-        setAdvances(advancesData);
-        setPayments(paymentsData);
-        setLedgerEntries(ledgerData);
-        setVehicles(vehiclesData);
-        setQuarries(quarriesData);
-        setRoyaltyOwners(royaltyData);
-        setCustomers(customersData);
-        setCustomerRates(customerRatesData);
-        setSiteLocations(siteLocationsData);
-        setMerchantTypes(merchantTypesData);
-        setMerchants(merchantsData);
-        setMerchantBankAccounts(merchantBankAccountsData);
-        setAccountTypes(accountTypesData);
-        setVehicleMasters(vehicleMasterData);
-        setMineQuarries(mineQuarryData);
-        setVendorCustomers(vendorCustomerData);
-        setRoyaltyOwnerProfiles(royaltyOwnerData);
-        setTransportOwnerProfiles(transportOwnerData);
-        setTransportOwnerVehicles(transportOwnerVehicleData);
-        setMaterialTypeDefinitions(materialTypeDefinitionData);
-        setMaterialRates(materialRateData);
-        setMaterials(materialsData);
-        setRoyaltyStock(royaltyStockData);
-        setAccounts(accountsData);
-        setAccountCategories(categoriesData);
-        setHasLoadedTrips(true);
-        setHasLoadedTripMasters(true);
-        setLoading(false);
-    }
-    fetchData();
-  }, [refreshKey, currentUser]);
+    setLoading(false);
+  }, [currentUser]);
 
   const addTrip = async (trip: Omit<NewTripData, 'createdBy'>) => {
     if (!currentUser) throw new Error("User not authenticated");
@@ -742,6 +897,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addRoyaltyStock = async (stock: Omit<RoyaltyStock, 'id'>) => { await api.addRoyaltyStock(stock); refreshData(); };
 
   const value = {
+    loadTrips,
+    loadTripMasters,
+    loadLegacyMasters,
+    loadAdvances,
+    loadPayments,
+    loadLedgerEntries,
+    loadAccounts,
+    loadAccountCategories,
+    loadMaterials,
+    loadRoyaltyStock,
+    loadSiteLocations,
+    loadMerchantTypes,
+    loadMerchants,
+    loadMerchantBankAccounts,
+    loadAccountTypes,
+    loadVehicleMasters,
+    loadMineQuarries,
+    loadVendorCustomers,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    loadTransportOwnerVehicles,
+    loadMaterialTypeDefinitions,
+    loadMaterialRates,
     trips,
     advances,
     payments,

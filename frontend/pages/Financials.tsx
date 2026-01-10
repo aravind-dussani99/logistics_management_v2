@@ -1,8 +1,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
-import { DailySummary, FinancialStatus, ChartData, DailyExpense, PaymentType } from '../types';
+import { DailySummary, FinancialStatus, DailyExpense, PaymentType } from '../types';
 import { useData } from '../contexts/DataContext';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
@@ -12,13 +12,16 @@ import { dailyExpenseApi } from '../services/dailyExpenseApi';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Financials: React.FC = () => {
-    const { trips, advances, payments } = useData();
+    const { trips, advances, payments, loadTrips, loadAdvances, loadPayments, refreshKey } = useData();
     const [filters, setFilters] = useState<Filters>({});
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
 
     useEffect(() => {
+        loadTrips();
+        loadAdvances();
+        loadPayments();
         dailyExpenseApi.getAll().then(setAllExpenses).catch(() => setAllExpenses([]));
-    }, []);
+    }, [loadTrips, loadAdvances, loadPayments, refreshKey]);
 
     const getAdvanceTotalForTrip = (tripId: number, ratePartyType: string) => {
         return advances
@@ -71,15 +74,6 @@ const Financials: React.FC = () => {
         };
     }, [trips, advances, allExpenses, payments]);
 
-    const profitData = useMemo<ChartData[]>(() => {
-        const byDate: Record<string, number> = {};
-        trips.forEach(trip => {
-            const dateKey = trip.date;
-            byDate[dateKey] = (byDate[dateKey] || 0) + (trip.profit || 0);
-        });
-        return Object.entries(byDate).map(([name, value]) => ({ name, value }));
-    }, [trips]);
-
     const costData = useMemo<ChartData[]>(() => {
         const transportCost = trips.reduce((sum, trip) => sum + (trip.transportCost || 0), 0);
         const materialCost = trips.reduce((sum, trip) => sum + (trip.materialCost || 0), 0);
@@ -100,6 +94,7 @@ const Financials: React.FC = () => {
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
+                showAddAction={false}
             />
             
             <main className="pt-6 space-y-6">
@@ -133,19 +128,6 @@ const Financials: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold mb-4">Weekly Profit</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={profitData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis tickFormatter={(value) => `₹${Number(value) / 1000}k`} />
-                            <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                            <Legend />
-                            <Bar dataKey="value" fill="#8884d8" name="Profit" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
             </main>
         </div>
     );

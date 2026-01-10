@@ -8,7 +8,7 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const SiteLocationsPage: React.FC = () => {
-  const { siteLocations, addSiteLocation, updateSiteLocation, deleteSiteLocation } = useData();
+  const { siteLocations, addSiteLocation, updateSiteLocation, deleteSiteLocation, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +51,10 @@ const SiteLocationsPage: React.FC = () => {
     if (!window.confirm('Delete this site location?')) return;
     await deleteSiteLocation(id);
   };
+
+  useEffect(() => {
+    loadSiteLocations();
+  }, [loadSiteLocations, refreshKey]);
 
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredSites.length / ITEMS_PER_PAGE) || 1;

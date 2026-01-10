@@ -23,20 +23,27 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
 };
 
 const AccountLedgerOverview: React.FC = () => {
-  const { trips, advances, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+  const { trips, advances, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadTrips, loadAdvances, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [selectedType, setSelectedType] = useState<RatePartyType | 'all'>('all');
   const [selectedParty, setSelectedParty] = useState<string>('all');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
+    loadTrips();
+    loadAdvances();
+    loadPayments();
+    loadVendorCustomers();
+    loadMineQuarries();
+    loadRoyaltyOwnerProfiles();
+    loadTransportOwnerProfiles();
     dailyExpenseApi.getAll()
       .then(setExpenses)
       .catch((error) => {
         console.warn('Failed to load daily expenses for ledger', error);
         setExpenses([]);
       });
-  }, []);
+  }, [loadTrips, loadAdvances, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
   const partyIdLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -149,6 +156,57 @@ const AccountLedgerOverview: React.FC = () => {
   }, [summaries, selectedType, selectedParty]);
 
   const selectedSummary = filteredSummaries.find(item => item.key === selectedKey) || null;
+  const selectedPartyId = useMemo(() => {
+    if (!selectedSummary) return null;
+    return partyIdLookup.get(`${selectedSummary.type}:${selectedSummary.name}`) || null;
+  }, [partyIdLookup, selectedSummary]);
+
+  const paymentRows = useMemo(() => {
+    if (!selectedSummary || !selectedPartyId) return [];
+    const rows: Array<{ id: string; date: string; source: string; direction: string; amount: number; remarks?: string }> = [];
+    advances
+      .filter(advance => advance.ratePartyType === selectedSummary.type && advance.ratePartyId === selectedPartyId)
+      .forEach(advance => {
+        rows.push({
+          id: `advance-${advance.id}`,
+          date: advance.date,
+          source: 'Advance',
+          direction: 'Paid',
+          amount: -Number(advance.amount || 0),
+          remarks: advance.remarks,
+        });
+      });
+    expenses
+      .filter(expense => expense.ratePartyType === selectedSummary.type && expense.ratePartyId === selectedPartyId)
+      .forEach(expense => {
+        const signedAmount = expense.type === 'DEBIT' ? -Number(expense.amount || 0) : Number(expense.amount || 0);
+        rows.push({
+          id: `expense-${expense.id}`,
+          date: expense.date,
+          source: 'Daily Expense',
+          direction: expense.type === 'DEBIT' ? 'Debit' : 'Credit',
+          amount: signedAmount,
+          remarks: expense.remarks,
+        });
+      });
+    payments
+      .filter(payment => payment.ratePartyType === selectedSummary.type && payment.ratePartyId === selectedPartyId)
+      .forEach(payment => {
+        const isCustomer = payment.ratePartyType === 'vendor-customer';
+        const signedAmount = payment.type === PaymentType.RECEIPT
+          ? (isCustomer ? Number(payment.amount || 0) : -Number(payment.amount || 0))
+          : (isCustomer ? -Number(payment.amount || 0) : Number(payment.amount || 0));
+        rows.push({
+          id: `payment-${payment.id}`,
+          date: payment.date,
+          source: 'Payment',
+          direction: payment.type,
+          amount: signedAmount,
+          remarks: payment.remarks,
+        });
+      });
+    return rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [advances, expenses, payments, selectedPartyId, selectedSummary]);
 
   const exportCsv = () => {
     const header = ['Rate Party Type', 'Rate Party', 'Trips', 'Net Tons', 'Total', 'Paid', 'Balance'];
@@ -171,6 +229,56 @@ const AccountLedgerOverview: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportPdf = () => {
+    const rows = filteredSummaries.map(item => [
+      item.name,
+      RATE_PARTY_LABELS[item.type],
+      item.trips.length,
+      item.totalTons.toFixed(2),
+      item.grossAmount.toFixed(2),
+      item.paidAmount.toFixed(2),
+      item.balance.toFixed(2),
+    ]);
+    const html = `
+      <html>
+        <head>
+          <title>Account Ledger Overview</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; text-align: left; }
+            th { background: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h2>Account Ledger Overview</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Rate Party</th>
+                <th>Type</th>
+                <th>Trips</th>
+                <th>Net Tons</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const popup = window.open('', '_blank', 'width=1000,height=700');
+    if (!popup) return;
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  };
+
   return (
     <div>
       <PageHeader
@@ -180,9 +288,10 @@ const AccountLedgerOverview: React.FC = () => {
         onFilterChange={() => {}}
         filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Export CSV', action: exportCsv }}
+        secondaryAction={{ label: 'Export PDF', action: exportPdf }}
       />
       <main className="pt-6 space-y-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400">Rate Party Type</label>
             <select
@@ -298,6 +407,39 @@ const AccountLedgerOverview: React.FC = () => {
                     <tr>
                       <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
                         No trips recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    {['Date', 'Source', 'Type', 'Amount', 'Remarks'].map(header => (
+                      <th key={header} className="px-4 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {paymentRows.map(row => (
+                    <tr key={row.id}>
+                      <td className="px-4 py-2 text-sm">{row.date?.split('T')[0]}</td>
+                      <td className="px-4 py-2 text-sm">{row.source}</td>
+                      <td className="px-4 py-2 text-sm">{row.direction}</td>
+                      <td className={`px-4 py-2 text-sm ${row.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {row.amount.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2 text-sm">{row.remarks || '-'}</td>
+                    </tr>
+                  ))}
+                  {paymentRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-4 text-center text-sm text-gray-500">
+                        No payments or expenses recorded yet.
                       </td>
                     </tr>
                   )}

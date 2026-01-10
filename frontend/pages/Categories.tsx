@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AccountCategory } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
@@ -8,9 +8,13 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const CategoriesPage: React.FC = () => {
-    const { accountCategories, addAccountCategory } = useData();
+    const { accountCategories, addAccountCategory, loadAccountCategories, refreshKey } = useData();
     const { openModal, closeModal } = useUI();
     const [currentPage, setCurrentPage] = useState(1);
+
+    useEffect(() => {
+        loadAccountCategories();
+    }, [loadAccountCategories, refreshKey]);
     
     const handleAddCategory = () => {
         openModal("Add New Category", <CategoryForm onSave={handleSave} onClose={closeModal} />);

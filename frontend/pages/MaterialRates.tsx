@@ -27,6 +27,14 @@ const MaterialRatesPage: React.FC = () => {
     addMaterialRate,
     updateMaterialRate,
     deleteMaterialRate,
+    loadMaterialRates,
+    loadMaterialTypeDefinitions,
+    loadSiteLocations,
+    loadMineQuarries,
+    loadVendorCustomers,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
   } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
@@ -35,6 +43,25 @@ const MaterialRatesPage: React.FC = () => {
   const [materialFilter, setMaterialFilter] = useState('');
   const [pickupFilter, setPickupFilter] = useState('');
   const [dropOffFilter, setDropOffFilter] = useState('');
+
+  useEffect(() => {
+    loadMaterialRates();
+    loadMaterialTypeDefinitions();
+    loadSiteLocations();
+    loadMineQuarries();
+    loadVendorCustomers();
+    loadRoyaltyOwnerProfiles();
+    loadTransportOwnerProfiles();
+  }, [
+    loadMaterialRates,
+    loadMaterialTypeDefinitions,
+    loadSiteLocations,
+    loadMineQuarries,
+    loadVendorCustomers,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
+  ]);
 
   const getRatePartyName = (rate: MaterialRate) => {
     if (rate.ratePartyName) return rate.ratePartyName;

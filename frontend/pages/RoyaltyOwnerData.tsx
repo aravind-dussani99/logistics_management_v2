@@ -8,10 +8,16 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const RoyaltyOwnerDataPage: React.FC = () => {
-  const { royaltyOwnerProfiles, merchantTypes, siteLocations, addRoyaltyOwnerProfile, updateRoyaltyOwnerProfile, deleteRoyaltyOwnerProfile } = useData();
+  const { royaltyOwnerProfiles, merchantTypes, siteLocations, addRoyaltyOwnerProfile, updateRoyaltyOwnerProfile, deleteRoyaltyOwnerProfile, loadRoyaltyOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    loadRoyaltyOwnerProfiles();
+    loadMerchantTypes();
+    loadSiteLocations();
+  }, [loadRoyaltyOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey]);
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

@@ -18,12 +18,16 @@ import { Navigate } from 'react-router-dom';
 const ITEMS_PER_PAGE = 10;
 
 const ReceivedTrips: React.FC = () => {
-    const { trips, refreshKey, updateTrip, deleteTrip } = useData();
+    const { trips, refreshKey, updateTrip, deleteTrip, loadTrips } = useData();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
     const canManageTrips = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [inTransitTrips, setInTransitTrips] = useState<Trip[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+
+    useEffect(() => {
+        loadTrips();
+    }, [loadTrips, refreshKey]);
 
     useEffect(() => {
         const filtered = trips.filter(t => {

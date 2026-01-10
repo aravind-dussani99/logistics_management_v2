@@ -8,7 +8,7 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const MaterialTypesPage: React.FC = () => {
-  const { materialTypeDefinitions, addMaterialTypeDefinition, updateMaterialTypeDefinition, deleteMaterialTypeDefinition } = useData();
+  const { materialTypeDefinitions, addMaterialTypeDefinition, updateMaterialTypeDefinition, deleteMaterialTypeDefinition, loadMaterialTypeDefinitions, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +50,10 @@ const MaterialTypesPage: React.FC = () => {
     if (!window.confirm('Delete this material type?')) return;
     await deleteMaterialTypeDefinition(id);
   };
+
+  useEffect(() => {
+    loadMaterialTypeDefinitions();
+  }, [loadMaterialTypeDefinitions, refreshKey]);
 
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredTypes.length / ITEMS_PER_PAGE) || 1;

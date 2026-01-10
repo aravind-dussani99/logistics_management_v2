@@ -29,7 +29,7 @@ const getMtdRange = () => {
 
 const SupervisorTripReport: React.FC = () => {
     const { currentUser } = useAuth();
-    const { trips, refreshKey, deleteTrip } = useData();
+    const { trips, refreshKey, deleteTrip, loadTrips } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [myTrips, setMyTrips] = useState<Trip[]>([]);
@@ -37,6 +37,10 @@ const SupervisorTripReport: React.FC = () => {
     const [filters, setFilters] = useState<{dateFrom?: string; dateTo?: string}>(getMtdRange());
     const [requestMessage, setRequestMessage] = useState('');
     const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
+
+    useEffect(() => {
+        loadTrips();
+    }, [loadTrips, refreshKey]);
     
     useEffect(() => {
         if (currentUser) {
