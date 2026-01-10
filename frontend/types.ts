@@ -121,6 +121,8 @@ export interface DailyExpense {
     from: string; // Supervisor name
     to: string; // Freeform text
     via?: string;
+    headAccount?: string;
+    siteExpense?: boolean;
     ratePartyType?: RatePartyType;
     ratePartyId?: string;
     counterpartyName?: string;
@@ -130,6 +132,7 @@ export interface DailyExpense {
     remarks: string;
     availableBalance: number;
     closingBalance: number;
+    voucherUploads?: unknown;
     type: 'DEBIT' | 'CREDIT'; // DEBIT = Expense, CREDIT = Top Up
 }
 
@@ -158,11 +161,20 @@ export interface Payment {
     amount: number;
     date: string;
     type: PaymentType;
+    entryType?: string;
+    headAccount?: string;
     ratePartyType?: string;
     ratePartyId?: string;
     counterpartyName?: string;
     method?: string;
     remarks?: string;
+    via?: string;
+    fromAccount?: string;
+    toAccount?: string;
+    category?: string;
+    subCategory?: string;
+    siteExpense?: boolean;
+    voucherUploads?: unknown;
     createdBy?: string;
 }
 

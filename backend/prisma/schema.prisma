@@ -424,13 +424,24 @@ model TripActivityRecord {
 model PaymentRecord {
   id              String   @id @default(uuid())
   date            DateTime
-  ratePartyType   String
-  ratePartyId     String
-  counterpartyName String
+  entryType       String   @default("PAYMENT")
+  headAccount     String?
+  ratePartyType   String?
+  ratePartyId     String?
+  counterpartyName String?
   amount          Float
   type            String
-  method          String
-  remarks         String
+  method          String?
+  remarks         String?
+  via             String?
+  fromAccount     String?
+  toAccount       String?
+  category        String?
+  subCategory     String?
+  siteExpense     Boolean  @default(false)
+  voucherUploads  Json?
+  availableBalance Float?
+  closingBalance  Float?
   createdBy       String
   tripId          Int?
   createdAt       DateTime @default(now())
@@ -439,6 +450,7 @@ model PaymentRecord {
   @@index([ratePartyType])
   @@index([ratePartyId])
   @@index([date])
+  @@index([entryType])
 }
 
 model NotificationRecord {

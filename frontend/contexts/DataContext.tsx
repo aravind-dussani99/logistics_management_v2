@@ -947,8 +947,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     accounts,
     accountCategories,
     loading,
-    loadTrips,
-    loadTripMasters,
     addTrip,
     updateTrip,
     deleteTrip,

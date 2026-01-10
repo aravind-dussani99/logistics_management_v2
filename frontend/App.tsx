@@ -126,7 +126,7 @@ const AppRoutes: React.FC = () => (
 
 const App: React.FC = () => (
   <UIProvider>
-    <HashRouter>
+    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
         <DataProvider>
           <AppRoutes />

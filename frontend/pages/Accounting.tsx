@@ -328,7 +328,7 @@ const Accounting: React.FC = () => {
     return (
         <div className="relative">
             <PageHeader
-                title="Accounting"
+                title="Total Accounts Overview"
                 subtitle={dateRangeSubtitle}
                 filters={filters}
                 onFilterChange={setFilters}

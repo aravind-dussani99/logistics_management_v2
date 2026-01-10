@@ -88,8 +88,8 @@ const Financials: React.FC = () => {
     return (
         <div className="relative">
             <PageHeader
-                title="Financials"
-                subtitle="An overview of your company's financial performance."
+                title="Logistics Accounts Overview"
+                subtitle="Overview of logistics business accounts and balances."
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}

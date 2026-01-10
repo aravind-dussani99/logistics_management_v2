@@ -23,6 +23,14 @@ const Payments: React.FC = () => {
   const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', type: 'all', query: '' });
   const [currentPage, setCurrentPage] = useState(1);
 
+  useEffect(() => {
+    loadPayments();
+    loadVendorCustomers();
+    loadMineQuarries();
+    loadRoyaltyOwnerProfiles();
+    loadTransportOwnerProfiles();
+  }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
+
   const ratePartyNameById = useMemo(() => {
     const map = new Map<string, string>();
     vendorCustomers.forEach(item => map.set(`vendor-customer:${item.id}`, item.name));
@@ -45,7 +53,16 @@ const Payments: React.FC = () => {
             ? (ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || '')
             : '';
           const counterparty = payment.counterpartyName || '';
-          if (!ratePartyName.toLowerCase().includes(query) && !counterparty.toLowerCase().includes(query)) {
+          const headAccount = payment.headAccount || '';
+          const fromAccount = payment.fromAccount || '';
+          const toAccount = payment.toAccount || '';
+          if (
+            !ratePartyName.toLowerCase().includes(query) &&
+            !counterparty.toLowerCase().includes(query) &&
+            !headAccount.toLowerCase().includes(query) &&
+            !fromAccount.toLowerCase().includes(query) &&
+            !toAccount.toLowerCase().includes(query)
+          ) {
             return false;
           }
         }
@@ -105,7 +122,7 @@ const Payments: React.FC = () => {
     <div className="relative">
       <PageHeader
         title="Payments"
-        subtitle="Track payment and receipt entries by rate party."
+        subtitle="Track payment and receipt entries by head account and rate party."
         filters={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
         onFilterChange={(next) => setFilters(prev => ({ ...prev, ...next }))}
         filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
@@ -127,7 +144,7 @@ const Payments: React.FC = () => {
             </select>
           </div>
           <div className="min-w-[260px] flex-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Rate Party / Counterparty</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Head Account / Rate Party</label>
             <input
               type="text"
               value={filters.query}
@@ -146,7 +163,7 @@ const Payments: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {['S. No.', 'Date', 'Type', 'Rate Party Type', 'Rate Party', 'Amount', 'Method', 'Remarks', 'Actions'].map(header => (
+                  {['S. No.', 'Date', 'Type', 'Head Account', 'From/To', 'Rate Party Type', 'Rate Party', 'Amount', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
                     </th>
@@ -163,12 +180,17 @@ const Payments: React.FC = () => {
                         {payment.type === PaymentType.PAYMENT ? 'Payment' : 'Receipt'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.headAccount || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {payment.type === PaymentType.PAYMENT
+                        ? `To: ${payment.toAccount || '-'}` 
+                        : `From: ${payment.fromAccount || '-'}`}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.ratePartyType ? RATE_PARTY_LABELS[payment.ratePartyType as RatePartyType] : '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{getRatePartyName(payment)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${payment.type === PaymentType.PAYMENT ? 'text-red-500' : 'text-green-500'}`}>
                       {payment.type === PaymentType.PAYMENT ? '-' : '+'} {formatCurrency(payment.amount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.method || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs truncate">{payment.remarks || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button onClick={() => handleView(payment)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
@@ -179,7 +201,7 @@ const Payments: React.FC = () => {
                 ))}
                 {paginatedPayments.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={10} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                       No payments found for the selected filters.
                     </td>
                   </tr>
@@ -194,10 +216,3 @@ const Payments: React.FC = () => {
 };
 
 export default Payments;
-  useEffect(() => {
-    loadPayments();
-    loadVendorCustomers();
-    loadMineQuarries();
-    loadRoyaltyOwnerProfiles();
-    loadTransportOwnerProfiles();
-  }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);

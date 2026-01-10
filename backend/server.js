@@ -1556,6 +1556,7 @@ app.get('/api/payments', async (req, res) => {
   const { ratePartyType, ratePartyId, tripId } = req.query;
   try {
     const where = {
+      entryType: 'PAYMENT',
       ...(ratePartyType ? { ratePartyType: String(ratePartyType) } : {}),
       ...(ratePartyId ? { ratePartyId: String(ratePartyId) } : {}),
       ...(tripId ? { tripId: Number(tripId) } : {}),
@@ -1577,6 +1578,7 @@ app.post('/api/payments', async (req, res) => {
   }
   const {
     date,
+    headAccount = '',
     ratePartyType,
     ratePartyId,
     counterpartyName = '',
@@ -1584,22 +1586,38 @@ app.post('/api/payments', async (req, res) => {
     type = 'PAYMENT',
     method = '',
     remarks = '',
+    via = '',
+    fromAccount = '',
+    toAccount = '',
+    category = '',
+    subCategory = '',
+    siteExpense = false,
+    voucherUploads = null,
     tripId = null,
   } = req.body || {};
-  if (!date || !ratePartyType || !ratePartyId) {
-    return res.status(400).json({ error: 'Date, rate party type, and rate party are required.' });
+  if (!date || !headAccount || !toAccount) {
+    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
   }
   try {
     const payment = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
+        entryType: 'PAYMENT',
+        headAccount,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        counterpartyName: counterpartyName || null,
         amount: Number(amount) || 0,
         type,
         method,
         remarks,
+        via,
+        fromAccount,
+        toAccount,
+        category,
+        subCategory,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
         createdBy: getUserDisplayName(req.user),
         tripId: tripId ? Number(tripId) : null,
       },
@@ -1618,6 +1636,7 @@ app.put('/api/payments/:id', async (req, res) => {
   const { id } = req.params;
   const {
     date,
+    headAccount = '',
     ratePartyType,
     ratePartyId,
     counterpartyName = '',
@@ -1625,23 +1644,39 @@ app.put('/api/payments/:id', async (req, res) => {
     type = 'PAYMENT',
     method = '',
     remarks = '',
+    via = '',
+    fromAccount = '',
+    toAccount = '',
+    category = '',
+    subCategory = '',
+    siteExpense = false,
+    voucherUploads = null,
     tripId = null,
   } = req.body || {};
-  if (!date || !ratePartyType || !ratePartyId) {
-    return res.status(400).json({ error: 'Date, rate party type, and rate party are required.' });
+  if (!date || !headAccount || !toAccount) {
+    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
   }
   try {
     const payment = await prisma.paymentRecord.update({
       where: { id },
       data: {
         date: new Date(date),
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
+        entryType: 'PAYMENT',
+        headAccount,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        counterpartyName: counterpartyName || null,
         amount: Number(amount) || 0,
         type,
         method,
         remarks,
+        via,
+        fromAccount,
+        toAccount,
+        category,
+        subCategory,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
         tripId: tripId ? Number(tripId) : null,
       },
     });
@@ -1676,11 +1711,33 @@ app.get('/api/daily-expenses', async (req, res) => {
   try {
     await recalculateDailyExpenseBalances(supervisorName);
     const openingBalance = await getOrCreateOpeningBalance(supervisorName);
-    const expenses = await prisma.dailyExpenseRecord.findMany({
-      where: { from: supervisorName },
+    const expenses = await prisma.paymentRecord.findMany({
+      where: { entryType: 'EXPENSE', fromAccount: supervisorName },
       orderBy: { date: 'desc' },
     });
-    res.json({ openingBalance, expenses });
+    res.json({
+      openingBalance,
+      expenses: expenses.map(expense => ({
+        id: expense.id,
+        date: expense.date,
+        from: expense.fromAccount || supervisorName,
+        to: expense.toAccount || '',
+        via: expense.via || '',
+        headAccount: expense.headAccount || '',
+        ratePartyType: expense.ratePartyType || undefined,
+        ratePartyId: expense.ratePartyId || undefined,
+        counterpartyName: expense.counterpartyName || '',
+        amount: expense.amount,
+        category: expense.category || '',
+        subCategory: expense.subCategory || '',
+        remarks: expense.remarks || '',
+        availableBalance: expense.availableBalance ?? 0,
+        closingBalance: expense.closingBalance ?? 0,
+        type: expense.type,
+        siteExpense: Boolean(expense.siteExpense),
+        voucherUploads: expense.voucherUploads,
+      })),
+    });
   } catch (error) {
     console.error('Failed to list daily expenses', error);
     res.status(500).json({ error: 'Failed to list daily expenses' });
@@ -1692,10 +1749,30 @@ app.get('/api/daily-expenses/all', async (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
-    const expenses = await prisma.dailyExpenseRecord.findMany({
+    const expenses = await prisma.paymentRecord.findMany({
+      where: { entryType: 'EXPENSE' },
       orderBy: { date: 'desc' },
     });
-    res.json(expenses);
+    res.json(expenses.map(expense => ({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || '',
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    })));
   } catch (error) {
     console.error('Failed to list daily expenses', error);
     res.status(500).json({ error: 'Failed to list daily expenses' });
@@ -1719,6 +1796,9 @@ app.post('/api/daily-expenses', async (req, res) => {
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
+    headAccount = '',
+    siteExpense = false,
+    voucherUploads = null,
   } = req.body || {};
 
   if (!date || !from || !to) {
@@ -1727,8 +1807,8 @@ app.post('/api/daily-expenses', async (req, res) => {
 
   try {
     const openingBalance = await recalculateDailyExpenseBalances(from);
-    const latestEntry = await prisma.dailyExpenseRecord.findFirst({
-      where: { from },
+    const latestEntry = await prisma.paymentRecord.findFirst({
+      where: { entryType: 'EXPENSE', fromAccount: from },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
     const availableBalance = latestEntry?.closingBalance ?? openingBalance;
@@ -1736,14 +1816,16 @@ app.post('/api/daily-expenses', async (req, res) => {
       ? availableBalance - Number(amount || 0)
       : availableBalance + Number(amount || 0);
 
-    const expense = await prisma.dailyExpenseRecord.create({
+    const expense = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
-        from,
-        to,
+        entryType: 'EXPENSE',
+        headAccount,
+        fromAccount: from,
+        toAccount: to,
         via,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
         counterpartyName,
         amount: Number(amount) || 0,
         category,
@@ -1752,10 +1834,32 @@ app.post('/api/daily-expenses', async (req, res) => {
         availableBalance,
         closingBalance,
         type,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
+        createdBy: getUserDisplayName(req.user),
       },
     });
     await recalculateDailyExpenseBalances(from);
-    res.status(201).json(expense);
+    res.status(201).json({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || from,
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    });
   } catch (error) {
     console.error('Failed to create daily expense', error);
     res.status(500).json({ error: 'Failed to create daily expense' });
@@ -1780,6 +1884,9 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
+    headAccount = '',
+    siteExpense = false,
+    voucherUploads = null,
   } = req.body || {};
 
   if (!date || !from || !to) {
@@ -1787,25 +1894,48 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
   }
 
   try {
-    const expense = await prisma.dailyExpenseRecord.update({
+    const expense = await prisma.paymentRecord.update({
       where: { id },
       data: {
         date: new Date(date),
-        from,
-        to,
+        entryType: 'EXPENSE',
+        headAccount,
+        fromAccount: from,
+        toAccount: to,
         via,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
         counterpartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
         remarks,
         type,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
       },
     });
     await recalculateDailyExpenseBalances(from);
-    res.json(expense);
+    res.json({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || from,
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    });
   } catch (error) {
     console.error('Failed to update daily expense', error);
     res.status(500).json({ error: 'Failed to update daily expense' });
@@ -1818,10 +1948,10 @@ app.delete('/api/daily-expenses/:id', async (req, res) => {
   }
   const { id } = req.params;
   try {
-    const expense = await prisma.dailyExpenseRecord.findUnique({ where: { id } });
+    const expense = await prisma.paymentRecord.findUnique({ where: { id } });
     if (!expense) return res.status(404).json({ error: 'Daily expense not found.' });
-    await prisma.dailyExpenseRecord.delete({ where: { id } });
-    await recalculateDailyExpenseBalances(expense.from);
+    await prisma.paymentRecord.delete({ where: { id } });
+    await recalculateDailyExpenseBalances(expense.fromAccount || '');
     res.status(204).end();
   } catch (error) {
     console.error('Failed to delete daily expense', error);
@@ -1834,23 +1964,26 @@ app.get('/api/daily-expenses/export', async (req, res) => {
   const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
   const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   try {
-    const where = supervisorName ? { from: supervisorName } : {};
-    const expenses = await prisma.dailyExpenseRecord.findMany({
+    const where = {
+      entryType: 'EXPENSE',
+      ...(supervisorName ? { fromAccount: supervisorName } : {}),
+    };
+    const expenses = await prisma.paymentRecord.findMany({
       where,
       orderBy: { date: 'desc' },
     });
     const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Counterparty'];
     const rows = expenses.map(item => ([
       item.date.toISOString().split('T')[0],
-      item.from,
-      item.to,
+      item.fromAccount || '',
+      item.toAccount || '',
       item.via || '',
       item.amount,
       item.type,
       item.category || '',
       item.subCategory || '',
       item.remarks || '',
-      item.closingBalance,
+      item.closingBalance ?? '',
       item.ratePartyType || '',
       item.ratePartyId || '',
       item.counterpartyName || '',
@@ -2486,8 +2619,8 @@ const getOrCreateOpeningBalance = async (supervisorName) => {
 
 const recalculateDailyExpenseBalances = async (supervisorName) => {
   const openingBalance = await getOrCreateOpeningBalance(supervisorName);
-  const expenses = await prisma.dailyExpenseRecord.findMany({
-    where: { from: supervisorName },
+  const expenses = await prisma.paymentRecord.findMany({
+    where: { entryType: 'EXPENSE', fromAccount: supervisorName },
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
   });
   let runningBalance = openingBalance;
@@ -2496,7 +2629,7 @@ const recalculateDailyExpenseBalances = async (supervisorName) => {
     const nextBalance = entry.type === 'DEBIT'
       ? runningBalance - entry.amount
       : runningBalance + entry.amount;
-    await prisma.dailyExpenseRecord.update({
+    await prisma.paymentRecord.update({
       where: { id: entry.id },
       data: {
         availableBalance,

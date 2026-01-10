@@ -82,7 +82,7 @@ const Capital: React.FC = () => {
     return (
         <div className="relative">
             <PageHeader
-                title="Capital & Loans"
+                title="Total Accounts Reports"
                 subtitle="Track your investments, loans, bank balances, and other capital accounts."
                 filters={{}}
                 onFilterChange={() => {}}

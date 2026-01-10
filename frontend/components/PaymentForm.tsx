@@ -13,11 +13,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
   const { vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles } = useData();
   const [date, setDate] = useState(initialData?.date?.split('T')[0] || '');
   const [type, setType] = useState<PaymentType>(initialData?.type || PaymentType.PAYMENT);
+  const [headAccount, setHeadAccount] = useState(initialData?.headAccount || '');
   const [ratePartyType, setRatePartyType] = useState<RatePartyType | ''>((initialData?.ratePartyType as RatePartyType) || '');
   const [ratePartyId, setRatePartyId] = useState(initialData?.ratePartyId || '');
   const [counterpartyName, setCounterpartyName] = useState(initialData?.counterpartyName || '');
   const [amount, setAmount] = useState(initialData?.amount || 0);
   const [method, setMethod] = useState(initialData?.method || '');
+  const [via, setVia] = useState(initialData?.via || '');
+  const [fromAccount, setFromAccount] = useState(initialData?.fromAccount || '');
+  const [toAccount, setToAccount] = useState(initialData?.toAccount || '');
+  const [category, setCategory] = useState(initialData?.category || '');
+  const [subCategory, setSubCategory] = useState(initialData?.subCategory || '');
+  const [siteExpense, setSiteExpense] = useState(Boolean(initialData?.siteExpense));
   const [remarks, setRemarks] = useState(initialData?.remarks || '');
   const [tripId, setTripId] = useState(initialData?.tripId ? String(initialData.tripId) : '');
 
@@ -42,11 +49,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     const payload: Omit<Payment, 'id'> = {
       date,
       type,
+      headAccount,
       amount: Number(amount) || 0,
       ratePartyType: ratePartyType || undefined,
       ratePartyId: ratePartyId || undefined,
       counterpartyName: counterpartyName || undefined,
       method: method || undefined,
+      via: via || undefined,
+      fromAccount: fromAccount || undefined,
+      toAccount: toAccount || undefined,
+      category: category || undefined,
+      subCategory: subCategory || undefined,
+      siteExpense,
       remarks: remarks || undefined,
       tripId: tripId ? Number(tripId) : undefined,
     };
@@ -55,7 +69,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
 
   return (
     <form onSubmit={handleSubmit} className="p-8 space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div>
           <label htmlFor="payment-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
           <input
@@ -69,7 +83,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
           />
         </div>
         <div>
-          <label htmlFor="payment-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
+          <label htmlFor="payment-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transaction Type</label>
           <select
             id="payment-type"
             value={type}
@@ -77,56 +91,9 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             disabled={isViewMode}
             className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value={PaymentType.PAYMENT}>Payment</option>
-            <option value={PaymentType.RECEIPT}>Receipt</option>
+            <option value={PaymentType.PAYMENT}>Payment Out</option>
+            <option value={PaymentType.RECEIPT}>Payment In</option>
           </select>
-        </div>
-        <div>
-          <label htmlFor="rate-party-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rate Party Type</label>
-          <select
-            id="rate-party-type"
-            value={ratePartyType}
-            onChange={(e) => {
-              setRatePartyType(e.target.value as RatePartyType);
-              setRatePartyId('');
-            }}
-            required
-            disabled={isViewMode}
-            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="">Select type</option>
-            <option value="vendor-customer">Vendor & Customer</option>
-            <option value="mine-quarry">Mine & Quarry</option>
-            <option value="transport-owner">Transport & Owner</option>
-            <option value="royalty-owner">Royalty Owner</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="rate-party" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rate Party</label>
-          <select
-            id="rate-party"
-            value={ratePartyId}
-            onChange={(e) => setRatePartyId(e.target.value)}
-            required
-            disabled={isViewMode || !ratePartyType}
-            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="">Select rate party</option>
-            {partyOptions.map(option => (
-              <option key={option.id} value={option.id}>{option.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="counterparty" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty Name</label>
-          <input
-            id="counterparty"
-            type="text"
-            value={counterpartyName}
-            onChange={(e) => setCounterpartyName(e.target.value)}
-            disabled={isViewMode}
-            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
-          />
         </div>
         <div>
           <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
@@ -140,19 +107,123 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
+
         <div>
-          <label htmlFor="method" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Method</label>
+          <label htmlFor="head-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Head Account</label>
           <input
-            id="method"
+            id="head-account"
             type="text"
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
+            value={headAccount}
+            onChange={(e) => setHeadAccount(e.target.value)}
+            required
             disabled={isViewMode}
             className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
         <div>
-          <label htmlFor="trip-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Trip ID (optional)</label>
+          <label htmlFor="via" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Via (Optional)</label>
+          <input
+            id="via"
+            type="text"
+            value={via}
+            onChange={(e) => setVia(e.target.value)}
+            disabled={isViewMode}
+            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div>
+          <label htmlFor="counterparty" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{type === PaymentType.PAYMENT ? 'To (Destination)' : 'From (Source)'}</label>
+          <input
+            id="counterparty"
+            type="text"
+            value={type === PaymentType.PAYMENT ? toAccount : fromAccount}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (type === PaymentType.PAYMENT) {
+                setToAccount(value);
+              } else {
+                setFromAccount(value);
+              }
+            }}
+            required
+            disabled={isViewMode}
+            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
+        <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
+          <div className="rounded-md border border-gray-200 dark:border-gray-700 px-4 py-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={siteExpense}
+                onChange={(e) => setSiteExpense(e.target.checked)}
+                disabled={isViewMode}
+              />
+              Site Expense
+            </label>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Check this box to link this transaction to a rate party.</p>
+          </div>
+          <div>
+            <label htmlFor="rate-party-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rate Party Type (Optional)</label>
+            <select
+              id="rate-party-type"
+              value={ratePartyType}
+              onChange={(e) => {
+                setRatePartyType(e.target.value as RatePartyType);
+                setRatePartyId('');
+              }}
+              disabled={isViewMode}
+              className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Select type</option>
+              <option value="vendor-customer">Vendor & Customer</option>
+              <option value="mine-quarry">Mine & Quarry</option>
+              <option value="transport-owner">Transport & Owner</option>
+              <option value="royalty-owner">Royalty Owner</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="rate-party" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rate Party (Optional)</label>
+            <select
+              id="rate-party"
+              value={ratePartyId}
+              onChange={(e) => setRatePartyId(e.target.value)}
+              disabled={isViewMode || !ratePartyType}
+              className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Select rate party</option>
+              {partyOptions.map(option => (
+                <option key={option.id} value={option.id}>{option.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+          <input
+            id="category"
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={isViewMode}
+            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div>
+          <label htmlFor="sub-category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sub-Category</label>
+          <input
+            id="sub-category"
+            type="text"
+            value={subCategory}
+            onChange={(e) => setSubCategory(e.target.value)}
+            disabled={isViewMode}
+            className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div>
+          <label htmlFor="trip-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Trip ID (Optional)</label>
           <input
             id="trip-id"
             type="number"

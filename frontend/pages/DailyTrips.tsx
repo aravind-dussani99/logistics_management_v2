@@ -28,7 +28,7 @@ const getMtdRange = () => {
 
 const DailyTrips: React.FC = () => {
     const { currentUser } = useAuth();
-    const { refreshKey, customers, trips, quarries, vehicles, updateTrip, deleteTrip, loadTrips, loadLegacyMasters } = useData();
+    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
@@ -41,8 +41,7 @@ const DailyTrips: React.FC = () => {
 
     useEffect(() => {
         loadTrips();
-        loadLegacyMasters();
-    }, [loadTrips, loadLegacyMasters, refreshKey]);
+    }, [loadTrips, refreshKey]);
 
     const handleValidate = (trip: Trip) => {
         openModal('Validate Trip', (
@@ -119,10 +118,50 @@ const DailyTrips: React.FC = () => {
 
     useEffect(() => {
         setAllTrips(trips);
-        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName)));
-        const customerRates = customers.map(c => ({ customer: c.name, id: c.id, material: '', rate: '', from: '', to: '', active: false, rejectionPercent: '', rejectionRemarks: '', locationFrom: '', locationTo: '' }));
-        setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners });
-    }, [refreshKey, trips, customers, quarries, vehicles]);
+        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
+        const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
+        const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
+        const uniqueCustomers = Array.from(new Set(trips.map(t => t.customer).filter(Boolean)));
+
+        const vehicles = uniqueVehicles.map((vehicleNumber, index) => ({
+            id: `vehicle-${index}-${vehicleNumber}`,
+            ownerName: '',
+            vehicleNumber,
+            vehicleType: '',
+            vehicleCapacity: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+
+        const quarries = uniqueQuarries.map((quarryName, index) => ({
+            id: `quarry-${index}-${quarryName}`,
+            ownerName: quarryName,
+            quarryName,
+            quarryArea: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+
+        const customerRates = uniqueCustomers.map((customer, index) => ({
+            customer,
+            id: `customer-${index}-${customer}`,
+            material: '',
+            rate: '',
+            from: '',
+            to: '',
+            active: false,
+            rejectionPercent: '',
+            rejectionRemarks: '',
+            locationFrom: '',
+            locationTo: '',
+        }));
+
+        setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners as string[] });
+    }, [refreshKey, trips]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);

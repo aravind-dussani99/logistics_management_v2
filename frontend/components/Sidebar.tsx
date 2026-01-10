@@ -27,13 +27,13 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     {
       title: 'Financial Operations',
       items: [
-        { to: '/financials', icon: 'analytics-outline', name: 'Financials', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Account Ledger', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/accounting', icon: 'calculator-outline', name: 'Accounting', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/accounting', icon: 'calculator-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/capital', icon: 'wallet-outline', name: 'Capital & Loans', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/capital', icon: 'wallet-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {

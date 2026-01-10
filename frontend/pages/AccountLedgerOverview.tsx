@@ -224,7 +224,7 @@ const AccountLedgerOverview: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'account_ledger_overview.csv';
+    link.download = 'logistics_accounts_reports.csv';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -292,7 +292,7 @@ const AccountLedgerOverview: React.FC = () => {
     const html = `
       <html>
         <head>
-          <title>Account Ledger Overview</title>
+          <title>Logistics Accounts Reports</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; }
@@ -302,7 +302,7 @@ const AccountLedgerOverview: React.FC = () => {
           </style>
         </head>
         <body>
-          <h2>Account Ledger Overview</h2>
+          <h2>Logistics Accounts Reports</h2>
           <table>
             <thead>
               <tr>
@@ -335,7 +335,7 @@ const AccountLedgerOverview: React.FC = () => {
   return (
     <div>
       <PageHeader
-        title="Account Ledger Overview"
+        title="Logistics Accounts Reports"
         subtitle="Rate party balances, trips, and payments summary"
         filters={[]}
         onFilterChange={() => {}}

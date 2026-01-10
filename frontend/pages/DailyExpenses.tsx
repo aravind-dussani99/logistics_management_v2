@@ -31,7 +31,7 @@ const getMtdRange = () => {
 
 const DailyExpenses: React.FC = () => {
     const { currentUser } = useAuth();
-    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey, refreshData } = useData();
+    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, refreshKey, refreshData } = useData();
     const { openModal, closeModal } = useUI();
 
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
@@ -64,13 +64,6 @@ const DailyExpenses: React.FC = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData, refreshKey]);
-
-    useEffect(() => {
-        loadMineQuarries();
-        loadVendorCustomers();
-        loadRoyaltyOwnerProfiles();
-        loadTransportOwnerProfiles();
-    }, [loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
     const handleAddExpense = () => {
         openModal('Add New Transaction', <ExpenseForm onSave={handleSave} onClose={closeModal} expenses={expenses} openingBalance={openingBalance} />);
@@ -122,7 +115,23 @@ const DailyExpenses: React.FC = () => {
     };
 
     const filteredExpenses = useMemo(() => {
-        const openingBalanceEntry = { id: 'opening', date: '---', from: 'System', to: 'Opening Balance', amount: 0, remarks: '', availableBalance: 0, closingBalance: 0, type: 'CREDIT' as const, via: '', category: '', subCategory: '', counterpartyName: '' };
+        const openingBalanceEntry = {
+            id: 'opening',
+            date: '---',
+            from: 'System',
+            to: 'Opening Balance',
+            amount: 0,
+            remarks: '',
+            availableBalance: 0,
+            closingBalance: 0,
+            type: 'CREDIT' as const,
+            via: '',
+            headAccount: '',
+            category: '',
+            subCategory: '',
+            counterpartyName: '',
+            siteExpense: false,
+        };
         
         const allEntries = [...expenses].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
@@ -190,13 +199,16 @@ const DailyExpenses: React.FC = () => {
     }, [filteredExpenses, currentPage]);
 
     const exportToCsv = () => {
-        const headers = ["Date", "From", "To", "Amount", "Type", "Remarks", "Closing Balance"];
+        const headers = ["Date", "Head Account", "From", "To", "Amount", "Type", "Category", "Sub-Category", "Remarks", "Closing Balance"];
         const rows = filteredExpenses.map(e => [
             e.date,
+            `"${(e.headAccount || '').replace(/"/g, '""')}"`,
             e.from,
             `"${e.to.replace(/"/g, '""')}"`,
             e.amount,
             e.type,
+            `"${(e.category || '').replace(/"/g, '""')}"`,
+            `"${(e.subCategory || '').replace(/"/g, '""')}"`,
             `"${e.remarks.replace(/"/g, '""')}"`,
             e.closingBalance
         ]);
@@ -279,8 +291,8 @@ const DailyExpenses: React.FC = () => {
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
                                     {(canViewAll
-                                        ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
-                                        : ['S. No.', 'Date', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                        ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'Head Account', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                        : ['S. No.', 'Date', 'Opening Balance', 'Head Account', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
                                     ).map(h => (
                                         <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>
                                     ))}
@@ -290,7 +302,7 @@ const DailyExpenses: React.FC = () => {
                                 {(() => {
                                     const rows: React.ReactNode[] = [];
                                     let lastDate = '';
-                                    const colSpan = canViewAll ? 11 : 10;
+                                    const colSpan = canViewAll ? 12 : 11;
                                     paginatedExpenses.forEach((expense, index) => {
                                         const dateLabel = formatDateDisplay(expense.date);
                                         if (canViewAll && dateLabel !== lastDate) {
@@ -311,6 +323,7 @@ const DailyExpenses: React.FC = () => {
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.from || '-'}</td>
                                                 )}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{formatCurrency(expense.availableBalance || 0)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.headAccount || '-'}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     {expense.type === 'CREDIT' ? `From: ${expense.to}` : `To: ${expense.to}`}
                                                 </td>
@@ -523,12 +536,22 @@ interface ExpenseFormProps {
 
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData, expenses, openingBalance, isViewMode = false }) => {
     const { currentUser } = useAuth();
-    const { mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+    const {
+        mineQuarries,
+        vendorCustomers,
+        royaltyOwnerProfiles,
+        transportOwnerProfiles,
+        loadMineQuarries,
+        loadVendorCustomers,
+        loadRoyaltyOwnerProfiles,
+        loadTransportOwnerProfiles,
+    } = useData();
     const [formData, setFormData] = useState({
         date: initialData?.date || new Date().toISOString().split('T')[0],
         from: currentUser?.name || '',
         to: initialData?.to || '',
         via: initialData?.via || '',
+        headAccount: initialData?.headAccount || '',
         ratePartyType: initialData?.ratePartyType || '',
         ratePartyId: initialData?.ratePartyId || '',
         amount: initialData?.amount || 0,
@@ -537,7 +560,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
         remarks: initialData?.remarks || '',
         type: initialData?.type || 'DEBIT',
     });
-    const [isBusinessExpense, setIsBusinessExpense] = useState(Boolean(initialData?.ratePartyType || initialData?.ratePartyId));
+    const [isBusinessExpense, setIsBusinessExpense] = useState(Boolean(initialData?.siteExpense || initialData?.ratePartyType || initialData?.ratePartyId));
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
     const ratePartyOptions = useMemo(() => {
@@ -563,6 +586,33 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
         }
     }, [currentUser, formData.from]);
 
+    useEffect(() => {
+        if (!isBusinessExpense || !formData.ratePartyType) return;
+        switch (formData.ratePartyType) {
+            case 'mine-quarry':
+                loadMineQuarries();
+                break;
+            case 'vendor-customer':
+                loadVendorCustomers();
+                break;
+            case 'royalty-owner':
+                loadRoyaltyOwnerProfiles();
+                break;
+            case 'transport-owner':
+                loadTransportOwnerProfiles();
+                break;
+            default:
+                break;
+        }
+    }, [
+        isBusinessExpense,
+        formData.ratePartyType,
+        loadMineQuarries,
+        loadVendorCustomers,
+        loadRoyaltyOwnerProfiles,
+        loadTransportOwnerProfiles,
+    ]);
+
     const handleToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setFormData(p => ({...p, to: value}));
@@ -587,7 +637,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({ ...formData, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
+        onSave({ ...formData, siteExpense: isBusinessExpense, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
     };
 
     const getAvailableBalance = () => {
@@ -673,7 +723,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
                         </>
                     )}
                 </div>
-                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <InputField label="Head Account" id="headAccount" name="headAccount" type="text" value={formData.headAccount} onChange={e => setFormData(p => ({...p, headAccount: e.target.value }))} isReadOnly={isViewMode} required />
                     <InputField label="Category" id="category" name="category" type="text" value={formData.category} onChange={e => setFormData(p => ({...p, category: e.target.value }))} isReadOnly={isViewMode} />
                     <InputField label="Sub-Category" id="subCategory" name="subCategory" type="text" value={formData.subCategory} onChange={e => setFormData(p => ({...p, subCategory: e.target.value }))} isReadOnly={isViewMode} />
                 </div>

@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
         return <SupervisorTripReport />;
     }
     
-    const { trips, quarries, vehicles, customers, refreshKey, loadTrips, loadLegacyMasters } = useData();
+    const { trips, refreshKey, loadTrips } = useData();
 
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
     const [allData, setAllData] = useState<{ quarries: QuarryOwner[]; vehicles: VehicleOwner[]; customers: CustomerRate[]; royaltyOwners: string[] }>({ quarries: [], vehicles: [], customers: [], royaltyOwners: [] });
@@ -55,28 +55,58 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         loadTrips();
-        loadLegacyMasters();
-    }, [loadTrips, loadLegacyMasters, refreshKey]);
+    }, [loadTrips, refreshKey]);
 
     useEffect(() => {
         setAllTrips(trips);
 
-        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName)));
-        const customerRatesForFilter = customers.map(c => ({ 
-            customer: c.name, 
-            id: c.id, 
-            material: '', rate: '', from: '', to: '', active: false, 
-            rejectionPercent: '', rejectionRemarks: '', 
-            locationFrom: '', locationTo: '' 
+        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
+        const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
+        const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
+        const uniqueCustomers = Array.from(new Set(trips.map(t => t.customer).filter(Boolean)));
+
+        const vehicles = uniqueVehicles.map((vehicleNumber, index) => ({
+            id: `vehicle-${index}-${vehicleNumber}`,
+            ownerName: '',
+            vehicleNumber,
+            vehicleType: '',
+            vehicleCapacity: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
         }));
-        
-        setAllData({ 
-            quarries, 
-            vehicles, 
-            customers: customerRatesForFilter, 
-            royaltyOwners: uniqueRoyaltyOwners 
+        const quarries = uniqueQuarries.map((quarryName, index) => ({
+            id: `quarry-${index}-${quarryName}`,
+            ownerName: quarryName,
+            quarryName,
+            quarryArea: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+        const customerRatesForFilter = uniqueCustomers.map((customer, index) => ({
+            customer,
+            id: `customer-${index}-${customer}`,
+            material: '',
+            rate: '',
+            from: '',
+            to: '',
+            active: false,
+            rejectionPercent: '',
+            rejectionRemarks: '',
+            locationFrom: '',
+            locationTo: '',
+        }));
+
+        setAllData({
+            quarries,
+            vehicles,
+            customers: customerRatesForFilter,
+            royaltyOwners: uniqueRoyaltyOwners as string[],
         });
-    }, [trips, quarries, vehicles, customers, refreshKey]);
+    }, [trips, refreshKey]);
 
     const calculateStatsForPeriod = (trips: Trip[]): Stats => {
          return trips.reduce((acc, trip) => {
