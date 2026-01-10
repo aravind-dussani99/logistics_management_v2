@@ -239,6 +239,56 @@ const AccountLedgerOverview: React.FC = () => {
       item.paidAmount.toFixed(2),
       item.balance.toFixed(2),
     ]);
+    const selectedTripsTable = selectedSummary ? `
+          <h3>Trip Details - ${selectedSummary.name}</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Vehicle</th>
+                <th>Material</th>
+                <th>Net Tons</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${selectedSummary.trips.map(trip => `
+                <tr>
+                  <td>${trip.date?.split('T')[0] || ''}</td>
+                  <td>${trip.vehicleNumber || ''}</td>
+                  <td>${trip.material || ''}</td>
+                  <td>${Number(trip.netWeight || 0).toFixed(2)}</td>
+                  <td>${trip.status || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+    ` : '';
+    const paymentsTable = selectedSummary ? `
+          <h3>Payments & Expenses - ${selectedSummary.name}</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Source</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${paymentRows.map(row => `
+                <tr>
+                  <td>${row.date?.split('T')[0] || ''}</td>
+                  <td>${row.source}</td>
+                  <td>${row.direction}</td>
+                  <td>${row.amount.toFixed(2)}</td>
+                  <td>${row.remarks || ''}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+    ` : '';
     const html = `
       <html>
         <head>
@@ -248,6 +298,7 @@ const AccountLedgerOverview: React.FC = () => {
             table { width: 100%; border-collapse: collapse; margin-top: 16px; }
             th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; text-align: left; }
             th { background: #f2f2f2; }
+            h3 { margin-top: 24px; }
           </style>
         </head>
         <body>
@@ -268,6 +319,8 @@ const AccountLedgerOverview: React.FC = () => {
               ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
             </tbody>
           </table>
+          ${selectedTripsTable}
+          ${paymentsTable}
         </body>
       </html>
     `;

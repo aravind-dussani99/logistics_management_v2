@@ -31,14 +31,13 @@ const getMtdRange = () => {
 
 const DailyExpenses: React.FC = () => {
     const { currentUser } = useAuth();
-    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
+    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey, refreshData } = useData();
     const { openModal, closeModal } = useUI();
 
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [openingBalance, setOpeningBalance] = useState(0);
     const [filters, setFilters] = useState<{ dateFrom?: string; dateTo?: string; destination?: string; supervisor?: string }>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
-    const [refreshKey, setRefreshKey] = useState(0);
     const [supervisors, setSupervisors] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'transactions' | 'insights'>('transactions');
     const [insightFilters, setInsightFilters] = useState<{ category?: string; subCategory?: string; type?: string }>({});
@@ -94,7 +93,7 @@ const DailyExpenses: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async () => {
                     await deleteDailyExpense(id);
-                    setRefreshKey(k => k + 1);
+                    refreshData();
                     closeModal();
                 }}
             />
@@ -112,7 +111,7 @@ const DailyExpenses: React.FC = () => {
             } else {
                 await addDailyExpense(payload);
             }
-            setRefreshKey(k => k + 1); // Trigger re-fetch
+            refreshData(); // Trigger re-fetch
             closeModal();
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unable to save transaction.';
