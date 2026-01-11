@@ -1,8 +1,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
-import { DailySummary, FinancialStatus, ChartData, DailyExpense } from '../types';
+import { DailySummary, FinancialStatus, DailyExpense, PaymentType } from '../types';
 import { useData } from '../contexts/DataContext';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
@@ -12,13 +12,16 @@ import { dailyExpenseApi } from '../services/dailyExpenseApi';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Financials: React.FC = () => {
-    const { trips, advances } = useData();
+    const { trips, advances, payments, loadTrips, loadAdvances, loadPayments, refreshKey } = useData();
     const [filters, setFilters] = useState<Filters>({});
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
 
     useEffect(() => {
+        loadTrips();
+        loadAdvances();
+        loadPayments();
         dailyExpenseApi.getAll().then(setAllExpenses).catch(() => setAllExpenses([]));
-    }, []);
+    }, [loadTrips, loadAdvances, loadPayments, refreshKey]);
 
     const getAdvanceTotalForTrip = (tripId: number, ratePartyType: string) => {
         return advances
@@ -42,6 +45,16 @@ const Financials: React.FC = () => {
             return acc;
         }, {} as Record<string, number>);
 
+        const paymentAdjustments = payments.reduce((acc, item) => {
+            if (!item.ratePartyType) return acc;
+            const isCustomer = item.ratePartyType === 'vendor-customer';
+            const amount = item.type === PaymentType.RECEIPT
+                ? (isCustomer ? item.amount : -item.amount)
+                : (isCustomer ? -item.amount : item.amount);
+            acc[item.ratePartyType] = (acc[item.ratePartyType] || 0) + amount;
+            return acc;
+        }, {} as Record<string, number>);
+
         const outstandingCustomer = trips.reduce((sum, trip) => {
             const advancesForCustomer = getAdvanceTotalForTrip(trip.id, 'vendor-customer');
             return sum + Math.max(0, (trip.revenue || 0) - advancesForCustomer);
@@ -55,20 +68,11 @@ const Financials: React.FC = () => {
             return sum + Math.max(0, (trip.materialCost || 0) - advancesForQuarry);
         }, 0);
         return {
-            outstandingCustomer: Math.max(0, outstandingCustomer - (expenseAdjustments['vendor-customer'] || 0)),
-            outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0)),
-            outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0)),
+            outstandingCustomer: Math.max(0, outstandingCustomer - (expenseAdjustments['vendor-customer'] || 0) - (paymentAdjustments['vendor-customer'] || 0)),
+            outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0) - (paymentAdjustments['transport-owner'] || 0)),
+            outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0) - (paymentAdjustments['mine-quarry'] || 0)),
         };
-    }, [trips, advances, allExpenses]);
-
-    const profitData = useMemo<ChartData[]>(() => {
-        const byDate: Record<string, number> = {};
-        trips.forEach(trip => {
-            const dateKey = trip.date;
-            byDate[dateKey] = (byDate[dateKey] || 0) + (trip.profit || 0);
-        });
-        return Object.entries(byDate).map(([name, value]) => ({ name, value }));
-    }, [trips]);
+    }, [trips, advances, allExpenses, payments]);
 
     const costData = useMemo<ChartData[]>(() => {
         const transportCost = trips.reduce((sum, trip) => sum + (trip.transportCost || 0), 0);
@@ -84,12 +88,13 @@ const Financials: React.FC = () => {
     return (
         <div className="relative">
             <PageHeader
-                title="Financials"
-                subtitle="An overview of your company's financial performance."
+                title="Logistics Accounts Overview"
+                subtitle="Overview of logistics business accounts and balances."
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
+                showAddAction={false}
             />
             
             <main className="pt-6 space-y-6">
@@ -123,19 +128,6 @@ const Financials: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold mb-4">Weekly Profit</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={profitData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis tickFormatter={(value) => `₹${Number(value) / 1000}k`} />
-                            <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                            <Legend />
-                            <Bar dataKey="value" fill="#8884d8" name="Profit" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
             </main>
         </div>
     );

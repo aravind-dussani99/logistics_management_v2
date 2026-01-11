@@ -1,7 +1,7 @@
 import { SiteLocation } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/site-locations');
+const basePath = '/api/site-locations';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,27 +17,25 @@ const handleResponse = async (response: Response) => {
 
 export const siteLocationApi = {
   getAll: async (): Promise<SiteLocation[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<SiteLocation[]>;
   },
   create: async (site: Omit<SiteLocation, 'id'>): Promise<SiteLocation> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(site),
     });
     return handleResponse(response) as Promise<SiteLocation>;
   },
   update: async (id: string, site: Omit<SiteLocation, 'id'>): Promise<SiteLocation> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(site),
     });
     return handleResponse(response) as Promise<SiteLocation>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
 };

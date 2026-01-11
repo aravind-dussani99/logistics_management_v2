@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Modal from './Modal';
@@ -11,6 +12,13 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const { isModalOpen, modalContent, closeModal } = useUI();
+  const location = useLocation();
+
+  React.useEffect(() => {
+    if (modalContent) {
+      closeModal();
+    }
+  }, [location.pathname, location.search, closeModal]);
 
   return (
     <div className="flex h-screen bg-light dark:bg-dark text-gray-800 dark:text-gray-200">

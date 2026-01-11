@@ -28,6 +28,10 @@ interface PageHeaderProps {
         label: string;
         action: () => void;
     };
+    secondaryAction?: {
+        label: string;
+        action: () => void;
+    };
     showAddAction?: boolean;
 }
 
@@ -44,7 +48,7 @@ const supervisorActions = [
     { name: 'Enter Trip', icon: 'document-text-outline', action: 'enterTrip' },
 ];
 
-const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = [], showMoreFilters = [], filters, onFilterChange, filterData, pageAction, showAddAction = true }) => {
+const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = [], showMoreFilters = [], filters, onFilterChange, filterData, pageAction, secondaryAction, showAddAction = true }) => {
     const { openModal, closeModal } = useUI();
     const { currentUser } = useAuth();
     const filterPopoverRef = useRef<HTMLDivElement>(null);
@@ -53,7 +57,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
     const [isFilterPopoverOpen, setFilterPopoverOpen] = useState(false);
     const [isAddMenuOpen, setAddMenuOpen] = useState(false);
 
-    const isSupervisor = currentUser?.role === Role.SUPERVISOR;
+    const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const addActions = isSupervisor ? supervisorActions : adminActions;
 
     useEffect(() => {
@@ -146,11 +150,21 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
                             {isFilterPopoverOpen && <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-20 border dark:border-gray-600"><FilterPanel filters={filters} setFilters={onFilterChange} data={filterData} /></div>}
                         </div>
                     }
-                    {pageAction ? (
-                         <button onClick={pageAction.action} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">
-                            <ion-icon name="add-outline" className="text-xl"></ion-icon>
-                            <span className="hidden md:inline">{pageAction.label}</span>
-                        </button>
+                    {(pageAction || secondaryAction) ? (
+                        <div className="flex items-center space-x-2">
+                            {secondaryAction && (
+                                <button onClick={secondaryAction.action} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-600 hover:bg-gray-700">
+                                    <span className="hidden md:inline">{secondaryAction.label}</span>
+                                    <span className="md:hidden">{secondaryAction.label}</span>
+                                </button>
+                            )}
+                            {pageAction && (
+                                <button onClick={pageAction.action} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">
+                                    <ion-icon name="add-outline" className="text-xl"></ion-icon>
+                                    <span className="hidden md:inline">{pageAction.label}</span>
+                                </button>
+                            )}
+                        </div>
                     ) : (showAddAction && (
                         <div className="relative" ref={addMenuRef}>
                             <button onClick={() => setAddMenuOpen(!isAddMenuOpen)} className="flex items-center space-x-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">

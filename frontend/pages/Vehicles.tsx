@@ -8,7 +8,7 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const VehiclesPage: React.FC = () => {
-  const { vehicleMasters, addVehicleMaster, updateVehicleMaster, deleteVehicleMaster } = useData();
+  const { vehicleMasters, addVehicleMaster, updateVehicleMaster, deleteVehicleMaster, loadVehicleMasters, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +51,10 @@ const VehiclesPage: React.FC = () => {
     if (!window.confirm('Delete this vehicle?')) return;
     await deleteVehicleMaster(id);
   };
+
+  useEffect(() => {
+    loadVehicleMasters();
+  }, [loadVehicleMasters, refreshKey]);
 
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredVehicles.length / ITEMS_PER_PAGE) || 1;

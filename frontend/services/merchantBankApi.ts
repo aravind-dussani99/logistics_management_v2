@@ -1,7 +1,7 @@
 import { MerchantBankAccount } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/merchant-bank-accounts');
+const basePath = '/api/merchant-bank-accounts';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,27 +17,25 @@ const handleResponse = async (response: Response) => {
 
 export const merchantBankApi = {
   getAll: async (): Promise<MerchantBankAccount[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<MerchantBankAccount[]>;
   },
   create: async (data: Omit<MerchantBankAccount, 'id' | 'merchantName'>): Promise<MerchantBankAccount> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<MerchantBankAccount>;
   },
   update: async (id: string, data: Omit<MerchantBankAccount, 'id' | 'merchantName'>): Promise<MerchantBankAccount> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<MerchantBankAccount>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
 };

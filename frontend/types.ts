@@ -20,13 +20,18 @@ export interface Trip {
   pickupPlace?: string;
   dropOffPlace?: string;
   vendorName: string;
+  vendorCustomerIsOneOff?: boolean;
   customer: string;
   invoiceDCNumber: string;
   quarryName: string;
+  mineQuarryIsOneOff?: boolean;
   royaltyOwnerName: string;
+  royaltyOwnerIsOneOff?: boolean;
   material: string;
   vehicleNumber: string;
+  vehicleIsOneOff?: boolean;
   transporterName:string;
+  transportOwnerIsOneOff?: boolean;
   transportOwnerMobileNumber?: string;
   emptyWeight: number;
   grossWeight: number;
@@ -56,16 +61,41 @@ export interface Trip {
 
   // New fields for received trips
   receivedDate?: string;
+  receivedBy?: string;
+  receivedByRole?: string;
   endEmptyWeight?: number;
   endGrossWeight?: number;
   endNetWeight?: number;
   endWaymentSlipUpload?: TripUploadPayload;
   weightDifferenceReason?: string;
+  validatedBy?: string;
+  validatedAt?: string;
+  validationComments?: string;
   pendingRequestType?: 'delete' | 'update' | 'sent-back' | string;
   pendingRequestMessage?: string;
   pendingRequestBy?: string;
   pendingRequestRole?: string;
   pendingRequestAt?: string;
+  rateOverrideEnabled?: boolean;
+  rateOverride?: TripRateOverride | null;
+}
+
+export interface TripRateOverride {
+  materialTypeId: string;
+  ratePartyType: RatePartyType;
+  ratePartyId: string;
+  pickupLocationId: string;
+  dropOffLocationId: string;
+  totalKm: number;
+  ratePerKm: number;
+  ratePerTon: number;
+  gstChargeable: boolean;
+  gstPercentage: number;
+  gstAmount: number;
+  totalRatePerTon: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  remarks: string;
 }
 
 export interface TripUploadFile {
@@ -75,12 +105,24 @@ export interface TripUploadFile {
 
 export type TripUploadPayload = string | TripUploadFile[];
 
+export interface TripActivity {
+  id: string;
+  tripId: number;
+  action: string;
+  message: string;
+  actorName: string;
+  actorRole: string;
+  createdAt: string;
+}
+
 export interface DailyExpense {
     id: string;
     date: string;
     from: string; // Supervisor name
     to: string; // Freeform text
     via?: string;
+    headAccount?: string;
+    siteExpense?: boolean;
     ratePartyType?: RatePartyType;
     ratePartyId?: string;
     counterpartyName?: string;
@@ -90,6 +132,7 @@ export interface DailyExpense {
     remarks: string;
     availableBalance: number;
     closingBalance: number;
+    voucherUploads?: unknown;
     type: 'DEBIT' | 'CREDIT'; // DEBIT = Expense, CREDIT = Top Up
 }
 
@@ -113,31 +156,59 @@ export interface Advance {
 }
 
 export interface Payment {
-    id: number;
-    tripId: number;
+    id: string;
+    tripId?: number | null;
     amount: number;
     date: string;
     type: PaymentType;
+    entryType?: string;
+    headAccount?: string;
+    ratePartyType?: string;
+    ratePartyId?: string;
+    counterpartyName?: string;
+    method?: string;
+    remarks?: string;
+    via?: string;
+    fromAccount?: string;
+    toAccount?: string;
+    category?: string;
+    subCategory?: string;
+    siteExpense?: boolean;
+    voucherUploads?: unknown;
+    createdBy?: string;
 }
 
 export enum PaymentType {
-    INCOME = 'income',
-    EXPENSE = 'expense',
+    PAYMENT = 'PAYMENT',
+    RECEIPT = 'RECEIPT',
 }
 
 export enum Role {
-    ADMIN = 'Admin',
-    MANAGER = 'Manager',
-    DRIVER = 'Driver',
-    SUPERVISOR = 'Supervisor',
+    ADMIN = 'ADMIN',
+    MANAGER = 'MANAGER',
+    ACCOUNTANT = 'ACCOUNTANT',
+    PICKUP_SUPERVISOR = 'PICKUP_SUPERVISOR',
+    DROPOFF_SUPERVISOR = 'DROPOFF_SUPERVISOR',
+    GUEST = 'GUEST',
 }
 
 export interface User {
-    id: number;
+    id: string;
+    username?: string;
     name: string;
     role: Role;
-    avatar: string;
+    avatarUrl?: string;
     password?: string;
+    mobileNumber?: string;
+    email?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    pickupLocationId?: string | null;
+    dropOffLocationId?: string | null;
+    pickupLocationName?: string | null;
     dropOffLocationName?: string;
 }
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Material } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
@@ -9,9 +9,13 @@ import { formatCurrency } from '../utils';
 const ITEMS_PER_PAGE = 10;
 
 const MaterialsPage: React.FC = () => {
-  const { materials, addMaterial, updateMaterial, deleteMaterial } = useData();
+  const { materials, addMaterial, updateMaterial, deleteMaterial, loadMaterials, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    loadMaterials();
+  }, [loadMaterials, refreshKey]);
 
   const totalPages = Math.ceil(materials.length / ITEMS_PER_PAGE) || 1;
   const paginatedMaterials = useMemo(() => {

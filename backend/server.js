@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { PrismaClient } from '@prisma/client';
 import { Storage } from '@google-cloud/storage';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -11,9 +13,84 @@ const prisma = new PrismaClient();
 const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const storage = new Storage();
 const CONFIG_BUCKET = process.env.CONFIG_BUCKET || '';
+const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET || '';
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isSqlite = (process.env.DATABASE_URL || '').startsWith('file:');
+const UPLOADS_ROOT = path.resolve(__dirname, '..', 'uploads');
+const UPLOAD_FIELDS = new Set([
+  'ewayBillUpload',
+  'invoiceDCUpload',
+  'waymentSlipUpload',
+  'royaltyUpload',
+  'taxInvoiceUpload',
+  'endWaymentSlipUpload',
+]);
+const UPLOAD_FIELD_LABELS = {
+  ewayBillUpload: 'eway_bill',
+  invoiceDCUpload: 'invoice_dc',
+  waymentSlipUpload: 'wayment_slip',
+  royaltyUpload: 'royalty_slip',
+  taxInvoiceUpload: 'tax_invoice',
+  endWaymentSlipUpload: 'end_wayment_slip',
+};
+
+const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login', '/api/auth/reset-admin-password']);
+
+const signToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
+
+const sanitizeUser = (user) => {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    avatarUrl: user.avatarUrl || '',
+    mobileNumber: user.mobileNumber || '',
+    email: user.email || '',
+    addressLine1: user.addressLine1 || '',
+    addressLine2: user.addressLine2 || '',
+    city: user.city || '',
+    state: user.state || '',
+    postalCode: user.postalCode || '',
+    pickupLocationId: user.pickupLocationId,
+    dropOffLocationId: user.dropOffLocationId,
+    pickupLocationName: user.pickupLocation?.name || null,
+    dropOffLocationName: user.dropOffLocation?.name || null,
+  };
+};
+
+const loadUserForRequest = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { pickupLocation: true, dropOffLocation: true },
+  });
+  return sanitizeUser(user);
+};
+
+const hasRole = (user, roles) => Boolean(user && roles.includes(user.role));
+const getUserDisplayName = (user) => user?.name || user?.username || '';
+const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
+const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
+
+const logTripActivity = async ({ tripId, action, message, user }) => {
+  if (!tripId) return;
+  try {
+    await prisma.tripActivityRecord.create({
+      data: {
+        tripId: Number(tripId),
+        action,
+        message,
+        actorName: getUserDisplayName(user) || 'System',
+        actorRole: user?.role || 'SYSTEM',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to log trip activity', error);
+  }
+};
 
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
@@ -30,6 +107,44 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.use(async (req, res, next) => {
+  if (PUBLIC_PATHS.has(req.path)) {
+    next();
+    return;
+  }
+  if (!req.path.startsWith('/api')) {
+    next();
+    return;
+  }
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await loadUserForRequest(payload.id);
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') && req.user?.role === 'GUEST' && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  next();
+});
+if (!ATTACHMENTS_BUCKET) {
+  app.use('/uploads', express.static(UPLOADS_ROOT));
+}
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
@@ -38,7 +153,83 @@ app.get('/', (_req, res) => {
   res.status(200).json({ status: 'ok', message: 'LogiTrack API is running' });
 });
 
-app.get('/api/admin/config', async (_req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password are required' });
+    return;
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: String(username) },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    if (!user) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+    const ok = await bcrypt.compare(String(password), user.passwordHash);
+    if (!ok) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
+    const safeUser = sanitizeUser(user);
+    const token = signToken({ id: user.id, role: user.role });
+    res.json({ token, user: safeUser });
+  } catch (error) {
+    console.error('Failed to login', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+app.post('/api/auth/reset-admin-password', async (req, res) => {
+  const { username, resetToken, newPassword } = req.body || {};
+  const adminUsername = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+  const resetSecret = process.env.ADMIN_RESET_TOKEN || '';
+
+  if (!resetSecret) {
+    res.status(400).json({ error: 'Admin reset is not configured' });
+    return;
+  }
+  if (!username || !resetToken || !newPassword) {
+    res.status(400).json({ error: 'username, resetToken, newPassword are required' });
+    return;
+  }
+  if (String(username) !== adminUsername || String(resetToken) !== resetSecret) {
+    res.status(403).json({ error: 'Invalid reset credentials' });
+    return;
+  }
+  try {
+    const adminUser = await prisma.user.findUnique({ where: { username: adminUsername } });
+    if (!adminUser || adminUser.role !== 'ADMIN') {
+      res.status(404).json({ error: 'Admin user not found' });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(String(newPassword), 10);
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { passwordHash },
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Failed to reset admin password', error);
+    res.status(500).json({ error: 'Failed to reset admin password' });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  res.json({ user: req.user });
+});
+
+app.get('/api/admin/config', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
   if (!CONFIG_BUCKET) {
     res.status(400).json({ error: 'CONFIG_BUCKET is not configured' });
     return;
@@ -58,7 +249,171 @@ app.get('/api/admin/config', async (_req, res) => {
   }
 });
 
+const slugify = (value = '') =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'unknown';
+
+const formatDateFolder = (value) => {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.valueOf())) return 'unknown-date';
+  return date.toISOString().slice(0, 10);
+};
+
+const parseUploadList = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item) => item && typeof item.name === 'string');
+    }
+  } catch (error) {
+    console.warn('Failed to parse upload payload', error);
+  }
+  return [{ name: String(value), url: '' }];
+};
+
+const parseDataUrl = (value) => {
+  if (typeof value !== 'string' || !value.startsWith('data:')) return null;
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  return { mime: match[1], buffer: Buffer.from(match[2], 'base64') };
+};
+
+const extensionFromMime = (mime = '') => {
+  if (mime.includes('pdf')) return '.pdf';
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('jpeg')) return '.jpg';
+  if (mime.includes('jpg')) return '.jpg';
+  if (mime.includes('gif')) return '.gif';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('bmp')) return '.bmp';
+  if (mime.includes('svg')) return '.svg';
+  return '';
+};
+
+const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) => {
+  const dateFolder = formatDateFolder(trip.date);
+  const transporter = slugify(trip.transporterName);
+  const quarry = slugify(trip.quarryName);
+  const royalty = slugify(trip.royaltyOwnerName);
+  const ext = extensionFromMime(mime) || '.bin';
+  const label = UPLOAD_FIELD_LABELS[fieldKey] || slugify(fieldKey);
+  const suffix = sequence ? `_${sequence}` : '';
+  const fileName = `${dateFolder}_${transporter}_${quarry}_${royalty}_${label}${suffix}${ext}`;
+  const objectPath = path.posix.join(dateFolder, fileName);
+
+  if (!ATTACHMENTS_BUCKET) {
+    const targetPath = path.join(UPLOADS_ROOT, objectPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, buffer);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return `${baseUrl}/uploads/${objectPath}`;
+  }
+
+  const file = storage.bucket(ATTACHMENTS_BUCKET).file(objectPath);
+  await file.save(buffer, {
+    contentType: mime || undefined,
+    resumable: false,
+    metadata: {
+      cacheControl: 'public, max-age=31536000',
+    },
+  });
+  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
+const toPublicUrl = (value) => {
+  if (typeof value !== 'string') return value;
+  const extracted = extractGsPath(value);
+  if (!extracted) return value;
+  return `https://storage.googleapis.com/${extracted.bucket}/${extracted.object}`;
+};
+
+const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
+  const list = parseUploadList(fieldValue);
+  if (list.length === 0) return '';
+
+  const updated = [];
+  let sequence = 0;
+  for (const item of list) {
+    const parsed = parseDataUrl(item.url);
+    if (!parsed) {
+      updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
+      continue;
+    }
+    sequence += 1;
+    const storedUrl = await storeAttachment({
+      buffer: parsed.buffer,
+      mime: parsed.mime,
+      trip,
+      req,
+      sequence,
+      fieldKey,
+    });
+    updated.push({ name: item.name, url: storedUrl });
+  }
+
+  return JSON.stringify(updated);
+};
+
+const isGsUrl = (value) => typeof value === 'string' && value.startsWith('gs://');
+const extractGsPath = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  if (value.startsWith('gs://')) {
+    const trimmed = value.replace('gs://', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  if (value.startsWith('https://storage.googleapis.com/')) {
+    const trimmed = value.replace('https://storage.googleapis.com/', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  if (value.startsWith('https://storage.cloud.google.com/')) {
+    const trimmed = value.replace('https://storage.cloud.google.com/', '');
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) return null;
+    return { bucket: trimmed.slice(0, slashIndex), object: trimmed.slice(slashIndex + 1) };
+  }
+  return null;
+};
+
+const signGsUrl = async (value) => {
+  const extracted = extractGsPath(value);
+  if (!extracted) return value;
+  const { bucket: bucketName, object: objectPath } = extracted;
+  try {
+    const [signedUrl] = await storage.bucket(bucketName).file(objectPath).getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+    return signedUrl;
+  } catch (error) {
+    console.warn('Failed to sign attachment URL', error);
+    return value;
+  }
+};
+
+const resolveUploadList = async (value) => {
+  const list = parseUploadList(value);
+  if (list.length === 0) return list;
+  const resolved = [];
+  for (const item of list) {
+    const nextUrl = await signGsUrl(item.url || '');
+    resolved.push({ name: item.name, url: nextUrl });
+  }
+  return resolved;
+};
+
 app.put('/api/admin/config', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
   if (!CONFIG_BUCKET) {
     res.status(400).json({ error: 'CONFIG_BUCKET is not configured' });
     return;
@@ -84,12 +439,169 @@ app.put('/api/admin/config', async (req, res) => {
   }
 });
 
-const seedSiteLocations = [
-  { name: "Rock Quarry", type: "pickup", address: "Quarry Road", pointOfContact: "Ravi", remarks: "" },
-  { name: "Riverbed Mining", type: "pickup", address: "River Bank", pointOfContact: "Suresh", remarks: "" },
-  { name: "Site A", type: "drop-off", address: "Construction Site A", pointOfContact: "Anita", remarks: "" },
-  { name: "Site B", type: "drop-off", address: "Infra Project B", pointOfContact: "Deepak", remarks: "" },
-];
+app.get('/api/users', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  try {
+    const { role } = req.query;
+    const where = role ? { role: String(role) } : {};
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.json(users.map(sanitizeUser));
+  } catch (error) {
+    console.error('Failed to list users', error);
+    res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN'])) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const {
+    username,
+    name,
+    password,
+    role,
+    avatarUrl = '',
+    mobileNumber = '',
+    email = '',
+    addressLine1 = '',
+    addressLine2 = '',
+    city = '',
+    state = '',
+    postalCode = '',
+    pickupLocationId = null,
+    dropOffLocationId = null,
+  } = req.body || {};
+  if (!username || !name || !password || !role || !mobileNumber) {
+    res.status(400).json({ error: 'username, name, password, role, mobileNumber are required' });
+    return;
+  }
+  if (!USER_ROLES.includes(String(role))) {
+    res.status(400).json({ error: 'Invalid role.' });
+    return;
+  }
+  if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
+    res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
+    return;
+  }
+  if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
+    res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
+    return;
+  }
+  try {
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const user = await prisma.user.create({
+      data: {
+        username: String(username),
+        name: String(name),
+        passwordHash,
+        role: String(role),
+        avatarUrl: String(avatarUrl || ''),
+        mobileNumber: String(mobileNumber || ''),
+        email: email ? String(email) : null,
+        addressLine1: addressLine1 ? String(addressLine1) : null,
+        addressLine2: addressLine2 ? String(addressLine2) : null,
+        city: city ? String(city) : null,
+        state: state ? String(state) : null,
+        postalCode: postalCode ? String(postalCode) : null,
+        pickupLocationId: pickupLocationId || null,
+        dropOffLocationId: dropOffLocationId || null,
+      },
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.status(201).json(sanitizeUser(user));
+  } catch (error) {
+    console.error('Failed to create user', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  const isSelf = req.user && req.user.id === req.params.id;
+  if (!hasRole(req.user, ['ADMIN']) && !isSelf) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+  const { id } = req.params;
+  const {
+    name,
+    password,
+    role,
+    avatarUrl,
+    mobileNumber,
+    email,
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    postalCode,
+    pickupLocationId,
+    dropOffLocationId,
+  } = req.body || {};
+  try {
+    if (role && !USER_ROLES.includes(String(role))) {
+      res.status(400).json({ error: 'Invalid role.' });
+      return;
+    }
+    const data = {
+      ...(name ? { name: String(name) } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl: String(avatarUrl || '') } : {}),
+      ...(mobileNumber !== undefined ? { mobileNumber: String(mobileNumber || '') } : {}),
+      ...(email !== undefined ? { email: email ? String(email) : null } : {}),
+      ...(addressLine1 !== undefined ? { addressLine1: addressLine1 ? String(addressLine1) : null } : {}),
+      ...(addressLine2 !== undefined ? { addressLine2: addressLine2 ? String(addressLine2) : null } : {}),
+      ...(city !== undefined ? { city: city ? String(city) : null } : {}),
+      ...(state !== undefined ? { state: state ? String(state) : null } : {}),
+      ...(postalCode !== undefined ? { postalCode: postalCode ? String(postalCode) : null } : {}),
+    };
+
+    if (!isSelf) {
+      if (role) {
+        data.role = String(role);
+      }
+      if (pickupLocationId !== undefined) {
+        data.pickupLocationId = pickupLocationId || null;
+      }
+      if (dropOffLocationId !== undefined) {
+        data.dropOffLocationId = dropOffLocationId || null;
+      }
+      if (role && !isSupervisorRole(String(role))) {
+        data.pickupLocationId = null;
+        data.dropOffLocationId = null;
+      }
+      if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
+        res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
+        return;
+      }
+      if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
+        res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
+        return;
+      }
+      if (password) {
+        data.passwordHash = await bcrypt.hash(String(password), 10);
+      }
+    }
+    const user = await prisma.user.update({
+      where: { id },
+      data,
+      include: { pickupLocation: true, dropOffLocation: true },
+    });
+    res.json(sanitizeUser(user));
+  } catch (error) {
+    console.error('Failed to update user', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+const seedSiteLocations = [];
 
 const seedAccountTypes = [
   { name: "Savings", remarks: "" },
@@ -449,13 +961,35 @@ const ensureSeedData = async () => {
   await ensureSiteLocationTable();
   await ensureMerchantTables();
   const count = await prisma.siteLocation.count();
-  if (count === 0) {
+  if (count === 0 && seedSiteLocations.length > 0) {
     await prisma.siteLocation.createMany({ data: seedSiteLocations });
   }
   const accountTypeCount = await prisma.accountType.count();
   if (accountTypeCount === 0) {
     await prisma.accountType.createMany({ data: seedAccountTypes });
   }
+  await ensureAdminUser();
+};
+
+const ensureAdminUser = async () => {
+  const userCount = await prisma.user.count();
+  if (userCount > 0) return;
+  const username = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+  const name = process.env.DEFAULT_ADMIN_NAME || 'Admin User';
+  const password = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+  const mobileNumber = process.env.DEFAULT_ADMIN_MOBILE || '0000000000';
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({
+    data: {
+      username,
+      name,
+      passwordHash,
+      role: 'ADMIN',
+      avatarUrl: '',
+      mobileNumber,
+    },
+  });
+  console.log(`Created default admin user: ${username}`);
 };
 
 const getDatabasePath = () => {
@@ -627,8 +1161,8 @@ app.post('/api/merchants', async (req, res) => {
     gstDetails = '',
     remarks = '',
   } = req.body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return res.status(400).json({ error: 'Merchant type, name, contact number, and site location are required.' });
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return res.status(400).json({ error: 'Merchant type, name, and site location are required.' });
   }
   try {
     const merchant = await prisma.merchant.create({
@@ -671,8 +1205,8 @@ app.put('/api/merchants/:id', async (req, res) => {
     gstDetails = '',
     remarks = '',
   } = req.body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return res.status(400).json({ error: 'Merchant type, name, contact number, and site location are required.' });
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return res.status(400).json({ error: 'Merchant type, name, and site location are required.' });
   }
   try {
     const merchant = await prisma.merchant.update({
@@ -867,6 +1401,9 @@ app.get('/api/advances', async (req, res) => {
 });
 
 app.post('/api/advances', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const {
     date,
     tripId = null,
@@ -916,6 +1453,9 @@ app.post('/api/advances', async (req, res) => {
 });
 
 app.put('/api/advances/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   const {
     date,
@@ -967,6 +1507,9 @@ app.put('/api/advances/:id', async (req, res) => {
 });
 
 app.delete('/api/advances/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
     await prisma.advanceRecord.delete({ where: { id } });
@@ -978,6 +1521,9 @@ app.delete('/api/advances/:id', async (req, res) => {
 });
 
 app.get('/api/advances/export', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
     const advances = await prisma.advanceRecord.findMany({ orderBy: { date: 'desc' } });
     const header = ['Date', 'From', 'To', 'Purpose', 'Amount', 'Trip Id', 'Rate Party Type', 'Rate Party Id', 'Counterparty', 'Remarks'];
@@ -1003,19 +1549,195 @@ app.get('/api/advances/export', async (req, res) => {
   }
 });
 
+app.get('/api/payments', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { ratePartyType, ratePartyId, tripId } = req.query;
+  try {
+    const where = {
+      entryType: 'PAYMENT',
+      ...(ratePartyType ? { ratePartyType: String(ratePartyType) } : {}),
+      ...(ratePartyId ? { ratePartyId: String(ratePartyId) } : {}),
+      ...(tripId ? { tripId: Number(tripId) } : {}),
+    };
+    const payments = await prisma.paymentRecord.findMany({
+      where,
+      orderBy: { date: 'desc' },
+    });
+    res.json(payments);
+  } catch (error) {
+    console.error('Failed to list payments', error);
+    res.status(500).json({ error: 'Failed to list payments' });
+  }
+});
+
+app.post('/api/payments', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const {
+    date,
+    headAccount = '',
+    ratePartyType,
+    ratePartyId,
+    counterpartyName = '',
+    amount = 0,
+    type = 'PAYMENT',
+    method = '',
+    remarks = '',
+    via = '',
+    fromAccount = '',
+    toAccount = '',
+    category = '',
+    subCategory = '',
+    siteExpense = false,
+    voucherUploads = null,
+    tripId = null,
+  } = req.body || {};
+  if (!date || !headAccount || !toAccount) {
+    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  }
+  try {
+    const payment = await prisma.paymentRecord.create({
+      data: {
+        date: new Date(date),
+        entryType: 'PAYMENT',
+        headAccount,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        counterpartyName: counterpartyName || null,
+        amount: Number(amount) || 0,
+        type,
+        method,
+        remarks,
+        via,
+        fromAccount,
+        toAccount,
+        category,
+        subCategory,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
+        createdBy: getUserDisplayName(req.user),
+        tripId: tripId ? Number(tripId) : null,
+      },
+    });
+    res.status(201).json(payment);
+  } catch (error) {
+    console.error('Failed to create payment', error);
+    res.status(500).json({ error: 'Failed to create payment' });
+  }
+});
+
+app.put('/api/payments/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const {
+    date,
+    headAccount = '',
+    ratePartyType,
+    ratePartyId,
+    counterpartyName = '',
+    amount = 0,
+    type = 'PAYMENT',
+    method = '',
+    remarks = '',
+    via = '',
+    fromAccount = '',
+    toAccount = '',
+    category = '',
+    subCategory = '',
+    siteExpense = false,
+    voucherUploads = null,
+    tripId = null,
+  } = req.body || {};
+  if (!date || !headAccount || !toAccount) {
+    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  }
+  try {
+    const payment = await prisma.paymentRecord.update({
+      where: { id },
+      data: {
+        date: new Date(date),
+        entryType: 'PAYMENT',
+        headAccount,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        counterpartyName: counterpartyName || null,
+        amount: Number(amount) || 0,
+        type,
+        method,
+        remarks,
+        via,
+        fromAccount,
+        toAccount,
+        category,
+        subCategory,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
+        tripId: tripId ? Number(tripId) : null,
+      },
+    });
+    res.json(payment);
+  } catch (error) {
+    console.error('Failed to update payment', error);
+    res.status(500).json({ error: 'Failed to update payment' });
+  }
+});
+
+app.delete('/api/payments/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  try {
+    await prisma.paymentRecord.delete({ where: { id } });
+    res.status(204).end();
+  } catch (error) {
+    console.error('Failed to delete payment', error);
+    res.status(500).json({ error: 'Failed to delete payment' });
+  }
+});
+
 app.get('/api/daily-expenses', async (req, res) => {
-  const supervisorName = req.query.supervisor;
+  const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   if (!supervisorName) {
     return res.status(400).json({ error: 'Supervisor name is required.' });
   }
   try {
     await recalculateDailyExpenseBalances(supervisorName);
     const openingBalance = await getOrCreateOpeningBalance(supervisorName);
-    const expenses = await prisma.dailyExpenseRecord.findMany({
-      where: { from: supervisorName },
+    const expenses = await prisma.paymentRecord.findMany({
+      where: { entryType: 'EXPENSE', fromAccount: supervisorName },
       orderBy: { date: 'desc' },
     });
-    res.json({ openingBalance, expenses });
+    res.json({
+      openingBalance,
+      expenses: expenses.map(expense => ({
+        id: expense.id,
+        date: expense.date,
+        from: expense.fromAccount || supervisorName,
+        to: expense.toAccount || '',
+        via: expense.via || '',
+        headAccount: expense.headAccount || '',
+        ratePartyType: expense.ratePartyType || undefined,
+        ratePartyId: expense.ratePartyId || undefined,
+        counterpartyName: expense.counterpartyName || '',
+        amount: expense.amount,
+        category: expense.category || '',
+        subCategory: expense.subCategory || '',
+        remarks: expense.remarks || '',
+        availableBalance: expense.availableBalance ?? 0,
+        closingBalance: expense.closingBalance ?? 0,
+        type: expense.type,
+        siteExpense: Boolean(expense.siteExpense),
+        voucherUploads: expense.voucherUploads,
+      })),
+    });
   } catch (error) {
     console.error('Failed to list daily expenses', error);
     res.status(500).json({ error: 'Failed to list daily expenses' });
@@ -1023,11 +1745,34 @@ app.get('/api/daily-expenses', async (req, res) => {
 });
 
 app.get('/api/daily-expenses/all', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
-    const expenses = await prisma.dailyExpenseRecord.findMany({
+    const expenses = await prisma.paymentRecord.findMany({
+      where: { entryType: 'EXPENSE' },
       orderBy: { date: 'desc' },
     });
-    res.json(expenses);
+    res.json(expenses.map(expense => ({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || '',
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    })));
   } catch (error) {
     console.error('Failed to list daily expenses', error);
     res.status(500).json({ error: 'Failed to list daily expenses' });
@@ -1035,6 +1780,9 @@ app.get('/api/daily-expenses/all', async (req, res) => {
 });
 
 app.post('/api/daily-expenses', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const {
     date,
     from,
@@ -1048,6 +1796,9 @@ app.post('/api/daily-expenses', async (req, res) => {
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
+    headAccount = '',
+    siteExpense = false,
+    voucherUploads = null,
   } = req.body || {};
 
   if (!date || !from || !to) {
@@ -1056,8 +1807,8 @@ app.post('/api/daily-expenses', async (req, res) => {
 
   try {
     const openingBalance = await recalculateDailyExpenseBalances(from);
-    const latestEntry = await prisma.dailyExpenseRecord.findFirst({
-      where: { from },
+    const latestEntry = await prisma.paymentRecord.findFirst({
+      where: { entryType: 'EXPENSE', fromAccount: from },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
     const availableBalance = latestEntry?.closingBalance ?? openingBalance;
@@ -1065,14 +1816,16 @@ app.post('/api/daily-expenses', async (req, res) => {
       ? availableBalance - Number(amount || 0)
       : availableBalance + Number(amount || 0);
 
-    const expense = await prisma.dailyExpenseRecord.create({
+    const expense = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
-        from,
-        to,
+        entryType: 'EXPENSE',
+        headAccount,
+        fromAccount: from,
+        toAccount: to,
         via,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
         counterpartyName,
         amount: Number(amount) || 0,
         category,
@@ -1081,10 +1834,32 @@ app.post('/api/daily-expenses', async (req, res) => {
         availableBalance,
         closingBalance,
         type,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
+        createdBy: getUserDisplayName(req.user),
       },
     });
     await recalculateDailyExpenseBalances(from);
-    res.status(201).json(expense);
+    res.status(201).json({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || from,
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    });
   } catch (error) {
     console.error('Failed to create daily expense', error);
     res.status(500).json({ error: 'Failed to create daily expense' });
@@ -1092,6 +1867,9 @@ app.post('/api/daily-expenses', async (req, res) => {
 });
 
 app.put('/api/daily-expenses/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   const {
     date,
@@ -1106,6 +1884,9 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
+    headAccount = '',
+    siteExpense = false,
+    voucherUploads = null,
   } = req.body || {};
 
   if (!date || !from || !to) {
@@ -1113,25 +1894,48 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
   }
 
   try {
-    const expense = await prisma.dailyExpenseRecord.update({
+    const expense = await prisma.paymentRecord.update({
       where: { id },
       data: {
         date: new Date(date),
-        from,
-        to,
+        entryType: 'EXPENSE',
+        headAccount,
+        fromAccount: from,
+        toAccount: to,
         via,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
         counterpartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
         remarks,
         type,
+        siteExpense: Boolean(siteExpense),
+        voucherUploads,
       },
     });
     await recalculateDailyExpenseBalances(from);
-    res.json(expense);
+    res.json({
+      id: expense.id,
+      date: expense.date,
+      from: expense.fromAccount || from,
+      to: expense.toAccount || '',
+      via: expense.via || '',
+      headAccount: expense.headAccount || '',
+      ratePartyType: expense.ratePartyType || undefined,
+      ratePartyId: expense.ratePartyId || undefined,
+      counterpartyName: expense.counterpartyName || '',
+      amount: expense.amount,
+      category: expense.category || '',
+      subCategory: expense.subCategory || '',
+      remarks: expense.remarks || '',
+      availableBalance: expense.availableBalance ?? 0,
+      closingBalance: expense.closingBalance ?? 0,
+      type: expense.type,
+      siteExpense: Boolean(expense.siteExpense),
+      voucherUploads: expense.voucherUploads,
+    });
   } catch (error) {
     console.error('Failed to update daily expense', error);
     res.status(500).json({ error: 'Failed to update daily expense' });
@@ -1139,12 +1943,15 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
 });
 
 app.delete('/api/daily-expenses/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
-    const expense = await prisma.dailyExpenseRecord.findUnique({ where: { id } });
+    const expense = await prisma.paymentRecord.findUnique({ where: { id } });
     if (!expense) return res.status(404).json({ error: 'Daily expense not found.' });
-    await prisma.dailyExpenseRecord.delete({ where: { id } });
-    await recalculateDailyExpenseBalances(expense.from);
+    await prisma.paymentRecord.delete({ where: { id } });
+    await recalculateDailyExpenseBalances(expense.fromAccount || '');
     res.status(204).end();
   } catch (error) {
     console.error('Failed to delete daily expense', error);
@@ -1153,25 +1960,30 @@ app.delete('/api/daily-expenses/:id', async (req, res) => {
 });
 
 app.get('/api/daily-expenses/export', async (req, res) => {
-  const supervisorName = req.query.supervisor;
+  const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   try {
-    const where = supervisorName ? { from: supervisorName } : {};
-    const expenses = await prisma.dailyExpenseRecord.findMany({
+    const where = {
+      entryType: 'EXPENSE',
+      ...(supervisorName ? { fromAccount: supervisorName } : {}),
+    };
+    const expenses = await prisma.paymentRecord.findMany({
       where,
       orderBy: { date: 'desc' },
     });
     const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Counterparty'];
     const rows = expenses.map(item => ([
       item.date.toISOString().split('T')[0],
-      item.from,
-      item.to,
+      item.fromAccount || '',
+      item.toAccount || '',
       item.via || '',
       item.amount,
       item.type,
       item.category || '',
       item.subCategory || '',
       item.remarks || '',
-      item.closingBalance,
+      item.closingBalance ?? '',
       item.ratePartyType || '',
       item.ratePartyId || '',
       item.counterpartyName || '',
@@ -1188,20 +2000,66 @@ app.get('/api/daily-expenses/export', async (req, res) => {
 
 app.get('/api/trips', async (req, res) => {
   try {
-    const trips = await prisma.tripRecord.findMany({ orderBy: { date: 'desc' } });
-    res.json(trips);
+    const where = {};
+    if (req.user?.role === 'PICKUP_SUPERVISOR') {
+      if (!req.user.pickupLocationName) {
+        return res.json([]);
+      }
+      where.pickupPlace = req.user.pickupLocationName;
+    }
+    if (req.user?.role === 'DROPOFF_SUPERVISOR') {
+      if (!req.user.dropOffLocationName) {
+        return res.json([]);
+      }
+      where.dropOffPlace = req.user.dropOffLocationName;
+    }
+    const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
+    const hydrated = await Promise.all(trips.map(async (trip) => {
+      const updated = { ...trip };
+      for (const field of UPLOAD_FIELDS) {
+        if (trip[field]) {
+          updated[field] = await resolveUploadList(trip[field]);
+        }
+      }
+      return updated;
+    }));
+    res.json(hydrated);
   } catch (error) {
     console.error('Failed to list trips', error);
     res.status(500).json({ error: 'Failed to list trips' });
   }
 });
 
+app.get('/api/trips/:id/activity', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  try {
+    const entries = await prisma.tripActivityRecord.findMany({
+      where: { tripId: Number(id) },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(entries);
+  } catch (error) {
+    console.error('Failed to list trip activity', error);
+    res.status(500).json({ error: 'Failed to list trip activity' });
+  }
+});
+
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
+    const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER']);
+    const effectiveRole = isAdmin ? role : (req.user?.role || role);
+    const effectiveUser = isAdmin ? user : (getUserDisplayName(req.user) || user);
     const where = {
-      ...(role ? { targetRole: String(role) } : {}),
-      ...(user ? { OR: [{ targetUser: null }, { targetUser: String(user) }] } : {}),
+      ...(effectiveRole
+        ? {
+          targetRole: effectiveRole === 'ADMIN' ? { in: ['ADMIN', 'Admin'] } : String(effectiveRole),
+        }
+        : {}),
+      ...(effectiveUser ? { OR: [{ targetUser: null }, { targetUser: String(effectiveUser) }] } : {}),
     };
     const notifications = await prisma.notificationRecord.findMany({
       where,
@@ -1280,24 +2138,39 @@ app.get('/api/notifications/:id', async (req, res) => {
 
 app.post('/api/trips', async (req, res) => {
   const data = req.body || {};
-  if (!data.date || !data.customer || !data.vehicleNumber) {
-    return res.status(400).json({ error: 'Date, customer, and vehicle number are required.' });
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName) {
+    if (data.pickupPlace && data.pickupPlace !== req.user.pickupLocationName) {
+      return res.status(403).json({ error: 'Pickup location mismatch.' });
+    }
+  }
+  if (!data.date || !data.customer) {
+    return res.status(400).json({ error: 'Date and customer are required.' });
   }
   try {
     const trip = await prisma.tripRecord.create({
       data: {
         date: new Date(data.date),
         place: data.place || '',
-        pickupPlace: data.pickupPlace || '',
+        pickupPlace: req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName
+          ? req.user.pickupLocationName
+          : (data.pickupPlace || ''),
         dropOffPlace: data.dropOffPlace || '',
         vendorName: data.vendorName || '',
+        vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
         customer: data.customer || '',
         invoiceDCNumber: data.invoiceDCNumber || '',
         quarryName: data.quarryName || '',
+        mineQuarryIsOneOff: Boolean(data.mineQuarryIsOneOff),
         royaltyOwnerName: data.royaltyOwnerName || '',
+        royaltyOwnerIsOneOff: Boolean(data.royaltyOwnerIsOneOff),
         material: data.material || '',
         vehicleNumber: data.vehicleNumber || '',
+        vehicleIsOneOff: Boolean(data.vehicleIsOneOff),
         transporterName: data.transporterName || '',
+        transportOwnerIsOneOff: Boolean(data.transportOwnerIsOneOff),
         transportOwnerMobileNumber: data.transportOwnerMobileNumber || '',
         emptyWeight: Number(data.emptyWeight || 0),
         grossWeight: Number(data.grossWeight || 0),
@@ -1316,18 +2189,25 @@ app.post('/api/trips', async (req, res) => {
         paymentStatus: data.paymentStatus || 'unpaid',
         agent: data.agent || '',
         status: data.status || 'pending upload',
-        createdBy: data.createdBy || '',
+        createdBy: data.createdBy || getUserDisplayName(req.user),
         ewayBillUpload: data.ewayBillUpload || '',
         invoiceDCUpload: data.invoiceDCUpload || '',
         waymentSlipUpload: data.waymentSlipUpload || '',
         royaltyUpload: data.royaltyUpload || '',
         taxInvoiceUpload: data.taxInvoiceUpload || '',
         receivedDate: data.receivedDate ? new Date(data.receivedDate) : null,
+        receivedBy: data.receivedBy || null,
+        receivedByRole: data.receivedByRole || null,
         endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : null,
         endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : null,
         endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : null,
         endWaymentSlipUpload: data.endWaymentSlipUpload || null,
         weightDifferenceReason: data.weightDifferenceReason || null,
+        validatedBy: data.validatedBy || null,
+        validatedAt: data.validatedAt ? new Date(data.validatedAt) : null,
+        validationComments: data.validationComments || null,
+        rateOverrideEnabled: Boolean(data.rateOverrideEnabled),
+        rateOverride: data.rateOverride || null,
       },
     });
     res.status(201).json(trip);
@@ -1341,6 +2221,36 @@ app.put('/api/trips/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body || {};
   try {
+    const existingTrip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!existingTrip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+    if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName && existingTrip.pickupPlace !== req.user.pickupLocationName) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (req.user?.role === 'DROPOFF_SUPERVISOR' && req.user.dropOffLocationName && existingTrip.dropOffPlace !== req.user.dropOffLocationName) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const tripForUploads = {
+      ...existingTrip,
+      ...data,
+      date: data.date ? new Date(data.date) : existingTrip.date,
+    };
+    const uploadUpdates = {};
+    for (const field of UPLOAD_FIELDS) {
+      if (data[field] !== undefined) {
+        uploadUpdates[field] = await normalizeUploadField({
+          fieldValue: data[field],
+          trip: tripForUploads,
+          req,
+          fieldKey: field,
+        });
+      }
+    }
     const trip = await prisma.tripRecord.update({
       where: { id: Number(id) },
       data: {
@@ -1349,13 +2259,18 @@ app.put('/api/trips/:id', async (req, res) => {
         pickupPlace: data.pickupPlace,
         dropOffPlace: data.dropOffPlace,
         vendorName: data.vendorName,
+        vendorCustomerIsOneOff: data.vendorCustomerIsOneOff !== undefined ? Boolean(data.vendorCustomerIsOneOff) : undefined,
         customer: data.customer,
         invoiceDCNumber: data.invoiceDCNumber,
         quarryName: data.quarryName,
+        mineQuarryIsOneOff: data.mineQuarryIsOneOff !== undefined ? Boolean(data.mineQuarryIsOneOff) : undefined,
         royaltyOwnerName: data.royaltyOwnerName,
+        royaltyOwnerIsOneOff: data.royaltyOwnerIsOneOff !== undefined ? Boolean(data.royaltyOwnerIsOneOff) : undefined,
         material: data.material,
         vehicleNumber: data.vehicleNumber,
+        vehicleIsOneOff: data.vehicleIsOneOff !== undefined ? Boolean(data.vehicleIsOneOff) : undefined,
         transporterName: data.transporterName,
+        transportOwnerIsOneOff: data.transportOwnerIsOneOff !== undefined ? Boolean(data.transportOwnerIsOneOff) : undefined,
         transportOwnerMobileNumber: data.transportOwnerMobileNumber,
         emptyWeight: data.emptyWeight !== undefined ? Number(data.emptyWeight) : undefined,
         grossWeight: data.grossWeight !== undefined ? Number(data.grossWeight) : undefined,
@@ -1375,24 +2290,51 @@ app.put('/api/trips/:id', async (req, res) => {
         agent: data.agent,
         status: data.status,
         createdBy: data.createdBy,
-        ewayBillUpload: data.ewayBillUpload,
-        invoiceDCUpload: data.invoiceDCUpload,
-        waymentSlipUpload: data.waymentSlipUpload,
-        royaltyUpload: data.royaltyUpload,
-        taxInvoiceUpload: data.taxInvoiceUpload,
+        ...uploadUpdates,
         receivedDate: data.receivedDate ? new Date(data.receivedDate) : data.receivedDate,
+        receivedBy: data.receivedBy,
+        receivedByRole: data.receivedByRole,
         endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : undefined,
         endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : undefined,
         endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : undefined,
-        endWaymentSlipUpload: data.endWaymentSlipUpload,
+        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? data.endWaymentSlipUpload,
         weightDifferenceReason: data.weightDifferenceReason,
+        validatedBy: data.validatedBy,
+        validatedAt: data.validatedAt ? new Date(data.validatedAt) : data.validatedAt,
+        validationComments: data.validationComments,
         pendingRequestType: data.pendingRequestType,
         pendingRequestMessage: data.pendingRequestMessage,
         pendingRequestBy: data.pendingRequestBy,
         pendingRequestRole: data.pendingRequestRole,
         pendingRequestAt: data.pendingRequestAt ? new Date(data.pendingRequestAt) : data.pendingRequestAt,
+        rateOverrideEnabled: data.rateOverrideEnabled !== undefined ? Boolean(data.rateOverrideEnabled) : undefined,
+        rateOverride: data.rateOverride,
       },
     });
+    if (data.status && data.status !== existingTrip.status) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'status_change',
+        message: `Status changed from ${existingTrip.status || 'unknown'} to ${data.status}.`,
+        user: req.user,
+      });
+    }
+    if (data.pendingRequestType && data.pendingRequestType !== existingTrip.pendingRequestType) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'request',
+        message: `Request ${data.pendingRequestType}${data.pendingRequestMessage ? `: ${data.pendingRequestMessage}` : ''}`,
+        user: req.user,
+      });
+    }
+    if (data.validationComments) {
+      await logTripActivity({
+        tripId: trip.id,
+        action: 'validation',
+        message: `Validation comments added.`,
+        user: req.user,
+      });
+    }
     res.json(trip);
   } catch (error) {
     console.error('Failed to update trip', error);
@@ -1413,7 +2355,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         type: 'alert',
         timestamp: new Date(),
         read: false,
-        targetRole: 'Admin',
+        targetRole: 'ADMIN',
         targetUser: null,
         tripId: trip.id,
         requestType: 'delete',
@@ -1431,6 +2373,12 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         pendingRequestRole: requestedByRole,
         pendingRequestAt: new Date(),
       },
+    });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'request_delete',
+      message: reason || '',
+      user: req.user,
     });
     res.status(201).json(notification);
   } catch (error) {
@@ -1452,7 +2400,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         type: 'alert',
         timestamp: new Date(),
         read: false,
-        targetRole: 'Admin',
+        targetRole: 'ADMIN',
         targetUser: null,
         tripId: trip.id,
         requestType: 'update',
@@ -1471,6 +2419,12 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         pendingRequestAt: new Date(),
       },
     });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'request_update',
+      message: reason || '',
+      user: req.user,
+    });
     res.status(201).json(notification);
   } catch (error) {
     console.error('Failed to request trip update', error);
@@ -1478,7 +2432,56 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
   }
 });
 
+app.post('/api/trips/:id/raise-issue', async (req, res) => {
+  const { id } = req.params;
+  const { requestedBy = 'User', requestedByRole = 'User', reason = '' } = req.body || {};
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const message = `Issue raised for Trip #${trip.id} (${trip.invoiceDCNumber || 'No Invoice'}) by ${requestedBy}.${reason ? ` Reason: ${reason}` : ''}`;
+    const targets = ['ADMIN', 'MANAGER', 'ACCOUNTANT'];
+    const notifications = await Promise.all(targets.map(targetRole => prisma.notificationRecord.create({
+      data: {
+        message,
+        type: 'alert',
+        timestamp: new Date(),
+        read: false,
+        targetRole,
+        targetUser: null,
+        tripId: trip.id,
+        requestType: 'issue',
+        requesterName: requestedBy,
+        requesterRole: requestedByRole,
+        requestMessage: reason,
+      },
+    })));
+    await prisma.tripRecord.update({
+      where: { id: trip.id },
+      data: {
+        pendingRequestType: 'issue',
+        pendingRequestMessage: reason || '',
+        pendingRequestBy: requestedBy,
+        pendingRequestRole: requestedByRole,
+        pendingRequestAt: new Date(),
+      },
+    });
+    await logTripActivity({
+      tripId: trip.id,
+      action: 'raise_issue',
+      message: reason || '',
+      user: req.user,
+    });
+    res.status(201).json(notifications);
+  } catch (error) {
+    console.error('Failed to raise issue', error);
+    res.status(500).json({ error: 'Failed to raise issue' });
+  }
+});
+
 app.delete('/api/trips/:id', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   const { id } = req.params;
   try {
     await prisma.tripRecord.delete({ where: { id: Number(id) } });
@@ -1508,8 +2511,8 @@ app.post('/api/vehicle-masters', async (req, res) => {
     contactNumber,
     remarks = '',
   } = req.body || {};
-  if (!vehicleNumber || !vehicleType || !ownerName || !contactNumber) {
-    return res.status(400).json({ error: 'Vehicle number, type, owner name, and contact number are required.' });
+  if (!vehicleNumber) {
+    return res.status(400).json({ error: 'Vehicle number is required.' });
   }
   try {
     const vehicle = await prisma.vehicleMaster.create({
@@ -1539,8 +2542,8 @@ app.put('/api/vehicle-masters/:id', async (req, res) => {
     contactNumber,
     remarks = '',
   } = req.body || {};
-  if (!vehicleNumber || !vehicleType || !ownerName || !contactNumber) {
-    return res.status(400).json({ error: 'Vehicle number, type, owner name, and contact number are required.' });
+  if (!vehicleNumber) {
+    return res.status(400).json({ error: 'Vehicle number is required.' });
   }
   try {
     const vehicle = await prisma.vehicleMaster.update({
@@ -1616,8 +2619,8 @@ const getOrCreateOpeningBalance = async (supervisorName) => {
 
 const recalculateDailyExpenseBalances = async (supervisorName) => {
   const openingBalance = await getOrCreateOpeningBalance(supervisorName);
-  const expenses = await prisma.dailyExpenseRecord.findMany({
-    where: { from: supervisorName },
+  const expenses = await prisma.paymentRecord.findMany({
+    where: { entryType: 'EXPENSE', fromAccount: supervisorName },
     orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
   });
   let runningBalance = openingBalance;
@@ -1626,7 +2629,7 @@ const recalculateDailyExpenseBalances = async (supervisorName) => {
     const nextBalance = entry.type === 'DEBIT'
       ? runningBalance - entry.amount
       : runningBalance + entry.amount;
-    await prisma.dailyExpenseRecord.update({
+    await prisma.paymentRecord.update({
       where: { id: entry.id },
       data: {
         availableBalance,
@@ -1667,11 +2670,10 @@ const validateMerchantProfile = (body) => {
   const {
     merchantTypeId,
     name,
-    contactNumber,
     siteLocationId,
   } = body || {};
-  if (!merchantTypeId || !name || !contactNumber || !siteLocationId) {
-    return 'Merchant type, name, contact number, and site location are required.';
+  if (!merchantTypeId || !name || !siteLocationId) {
+    return 'Merchant type, name, and site location are required.';
   }
   return '';
 };

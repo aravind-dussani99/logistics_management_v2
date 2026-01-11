@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Trip } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { Trip, TripUploadFile } from '../types';
 import { formatDateDisplay, safeToFixed } from '../utils';
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string, isReadOnly?: boolean }> = ({ label, isReadOnly, ...props }) => {
@@ -43,6 +44,7 @@ interface ReceiveTripFormProps {
 
 const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
     const { updateTrip } = useData();
+    const { currentUser } = useAuth();
     const [formData, setFormData] = useState({
         receivedDate: new Date().toISOString().split('T')[0],
         endEmptyWeight: '',
@@ -50,7 +52,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
         endNetWeight: 0,
         weightDifferenceReason: '',
     });
-    const [fileName, setFileName] = useState<string | undefined>();
+    const [endSlipFiles, setEndSlipFiles] = useState<TripUploadFile[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -65,22 +67,32 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
         setFormData(p => ({ ...p, [id]: type === 'number' ? value : value }));
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            setFileName(e.target.files[0].name);
-        }
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const fileList = Array.from(e.target.files);
+        const entries = await Promise.all(fileList.map(file => new Promise<TripUploadFile>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name, url: String(reader.result || '') });
+            reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
+            reader.readAsDataURL(file);
+        })));
+        setEndSlipFiles(entries);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
+            const endWaymentSlipUpload = endSlipFiles.length > 0 ? JSON.stringify(endSlipFiles) : '';
             await updateTrip(trip.id, {
                 ...formData,
                 endEmptyWeight: Number(formData.endEmptyWeight || 0),
                 endGrossWeight: Number(formData.endGrossWeight || 0),
                 endNetWeight: Number(formData.endNetWeight || 0),
-                endWaymentSlipUpload: fileName,
+                endWaymentSlipUpload,
+                receivedBy: currentUser?.name || currentUser?.username || '',
+                receivedByRole: currentUser?.role || '',
+                status: 'pending validation',
             });
             onClose();
         } catch (error) {
@@ -112,7 +124,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                         <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight} onChange={handleInputChange} />
                         <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly />
                          <div className="lg:col-span-4">
-                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} fileName={fileName} />
+                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} fileName={endSlipFiles.length ? `${endSlipFiles.length} file(s)` : ''} multiple />
                          </div>
                          <div className="lg:col-span-2">
                              <InputField label="Weight Difference (T)" value={`${safeToFixed(weightDifference)} T`} isReadOnly />

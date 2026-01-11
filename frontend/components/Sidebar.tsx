@@ -10,67 +10,59 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const { currentUser, logout } = useAuth();
-  const isSupervisor = currentUser?.role === Role.SUPERVISOR;
+  const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   
   const sections = [
     {
       title: 'Core Operations',
       items: [
-        { to: '/dashboard', icon: isSupervisor ? 'enter-outline' : 'speedometer-outline', name: isSupervisor ? 'Enter Trips' : 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.DRIVER, Role.SUPERVISOR] },
-        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
-        { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
-        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
-        { to: '/trips', icon: 'bus-outline', name: 'Daily Trips', roles: [Role.ADMIN, Role.MANAGER] },
+        { to: '/dashboard', icon: isSupervisor ? 'enter-outline' : 'speedometer-outline', name: isSupervisor ? 'Enter Trips' : 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST] },
+        { to: '/trips', icon: 'bus-outline', name: 'Trip Management', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.DROPOFF_SUPERVISOR] },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
-      title: 'Finance & Reporting',
+      title: 'Financial Operations',
       items: [
-        { to: '/accounting', icon: 'calculator-outline', name: 'Accounting', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/financials', icon: 'analytics-outline', name: 'Financials', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/ledger', icon: 'book-outline', name: 'Main Ledger', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/capital', icon: 'wallet-outline', name: 'Capital & Loans', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.SUPERVISOR, Role.ADMIN, Role.MANAGER] },
+        { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/accounting', icon: 'calculator-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/capital', icon: 'wallet-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
       title: 'Master Data',
       items: [
-        { to: '/sites', icon: 'map-outline', name: 'Site Locations', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/mine-quarry-data', icon: 'business-outline', name: 'Mine & Quarry Data', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/vendor-customer-data', icon: 'people-outline', name: 'Vendor & Customer Data', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/royalty-owner-data', icon: 'document-text-outline', name: 'Royalty Owner Data', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/transport-owner-data', icon: 'bus-outline', name: 'Transport & Owner Data', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/transport-owner-vehicles', icon: 'git-compare-outline', name: 'Transport Owner Vehicles', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/vehicles', icon: 'car-sport-outline', name: 'Vehicles', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/material-types', icon: 'cube-outline', name: 'Material Types', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/material-rates', icon: 'pricetag-outline', name: 'Material Rates', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/merchant-accounts', icon: 'card-outline', name: 'Merchant Bank Accounts', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/account-types', icon: 'list-outline', name: 'Account Types', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/trip-data', icon: 'albums-outline', name: 'Trip Data', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.ADMIN, Role.MANAGER] },
+        { to: '/sites', icon: 'map-outline', name: 'Site Locations', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/merchant-types', icon: 'pricetags-outline', name: 'Merchant Types', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/mine-quarry-data', icon: 'business-outline', name: 'Mine & Quarry Data', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/vendor-customer-data', icon: 'people-outline', name: 'Vendor & Customer Data', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/royalty-owner-data', icon: 'document-text-outline', name: 'Royalty Owner Data', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/transport-owner-data', icon: 'bus-outline', name: 'Transport & Owner Data', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/transport-owner-vehicles', icon: 'git-compare-outline', name: 'Transport Owner Vehicles', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/vehicles', icon: 'car-sport-outline', name: 'Vehicles', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/material-types', icon: 'cube-outline', name: 'Material Types', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/material-rates', icon: 'pricetag-outline', name: 'Material Rates', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/merchant-accounts', icon: 'card-outline', name: 'Merchant Bank Accounts', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/account-types', icon: 'list-outline', name: 'Account Types', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
       title: 'Legacy Master Data',
       items: [
-        { to: '/customers', icon: 'people-circle-outline', name: 'Customers', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/quarries', icon: 'server-outline', name: 'Quarries', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/transport', icon: 'boat-outline', name: 'Transport', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/royalty', icon: 'document-text-outline', name: 'Royalty', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/materials', icon: 'layers-outline', name: 'Materials', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/accounts', icon: 'card-outline', name: 'Accounts', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/categories', icon: 'copy-outline', name: 'Categories', roles: [Role.ADMIN, Role.MANAGER] },
-      ],
-    },
-    {
-      title: 'Merchant Reference',
-      items: [
-        { to: '/merchant-types', icon: 'pricetags-outline', name: 'Merchant Types', roles: [Role.ADMIN, Role.MANAGER] },
-        { to: '/merchants', icon: 'storefront-outline', name: 'Merchant Data', roles: [Role.ADMIN, Role.MANAGER] },
+        { to: '/customers', icon: 'people-circle-outline', name: 'Customers', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/quarries', icon: 'server-outline', name: 'Quarries', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/transport', icon: 'boat-outline', name: 'Transport', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/royalty', icon: 'document-text-outline', name: 'Royalty', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/materials', icon: 'layers-outline', name: 'Materials', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/accounts', icon: 'card-outline', name: 'Accounts', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/categories', icon: 'copy-outline', name: 'Categories', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
@@ -81,6 +73,21 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       ],
     },
   ];
+
+  const isDropOffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  const supervisorItems = isDropOffSupervisor
+    ? [
+        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips' },
+        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+      ]
+    : [
+        { to: '/dashboard', icon: 'enter-outline', name: 'Enter Trips' },
+        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+      ];
 
   const NavItem: React.FC<{ to: string; icon: string; name: string; }> = ({ to, icon, name }) => {
     return (
@@ -124,24 +131,26 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           </div>
         </div>
         <nav className="flex-grow mt-10 px-2 space-y-4 overflow-y-auto pr-2">
-          {sections.map(section => {
-            const visibleItems = section.items.filter(item => currentUser && item.roles.includes(currentUser.role));
-            if (visibleItems.length === 0) return null;
-            const isOpen = openSections[section.title] ?? false;
-            return (
-              <div key={section.title}>
-                <button
-                  type="button"
-                  onClick={() => setOpenSections(prev => ({ ...prev, [section.title]: !prev[section.title] }))}
-                  className="w-full px-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                >
-                  <span>{section.title}</span>
-                  <ion-icon name={isOpen ? 'chevron-up-outline' : 'chevron-down-outline'} className="text-base"></ion-icon>
-                </button>
-                {isOpen && visibleItems.map(item => <NavItem key={item.name} {...item} />)}
-              </div>
-            );
-          })}
+          {isSupervisor
+            ? supervisorItems.map(item => <NavItem key={item.name} {...item} />)
+            : sections.map(section => {
+                const visibleItems = section.items.filter(item => currentUser && item.roles.includes(currentUser.role));
+                if (visibleItems.length === 0) return null;
+                const isOpen = openSections[section.title] ?? false;
+                return (
+                  <div key={section.title}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenSections(prev => ({ ...prev, [section.title]: !prev[section.title] }))}
+                      className="w-full px-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                      <span>{section.title}</span>
+                      <ion-icon name={isOpen ? 'chevron-up-outline' : 'chevron-down-outline'} className="text-base"></ion-icon>
+                    </button>
+                    {isOpen && visibleItems.map(item => <NavItem key={item.name} {...item} />)}
+                  </div>
+                );
+              })}
         </nav>
         <div className="px-4 pb-4">
            <button

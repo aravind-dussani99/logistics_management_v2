@@ -1,7 +1,7 @@
-import { Trip } from '../types';
-import { apiUrl } from './apiBase';
+import { Trip, TripActivity } from '../types';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/trips');
+const basePath = '/api/trips';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -15,41 +15,48 @@ const handleResponse = async (response: Response) => {
 
 export const tripApi = {
   getAll: async (): Promise<Trip[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<Trip[]>;
   },
   create: async (data: Omit<Trip, 'id'>): Promise<Trip> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<Trip>;
   },
   update: async (id: number, data: Partial<Trip>): Promise<Trip> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<Trip>;
   },
+  getActivity: async (id: number): Promise<TripActivity[]> => {
+    const response = await authFetch(`${basePath}/${id}/activity`);
+    return handleResponse(response) as Promise<TripActivity[]>;
+  },
   remove: async (id: number): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
   requestDelete: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}/request-delete`, {
+    const response = await authFetch(`${basePath}/${id}/request-delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     await handleResponse(response);
   },
   requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}/request-update`, {
+    const response = await authFetch(`${basePath}/${id}/request-update`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    await handleResponse(response);
+  },
+  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+    const response = await authFetch(`${basePath}/${id}/raise-issue`, {
+      method: 'POST',
       body: JSON.stringify(data),
     });
     await handleResponse(response);

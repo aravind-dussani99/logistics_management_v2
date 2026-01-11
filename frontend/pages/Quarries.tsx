@@ -10,11 +10,17 @@ import { formatCurrency, safeToFixed } from '../utils';
 const getActiveRate = (rates: RateEntry[]): RateEntry | undefined => rates.find(r => r.active === 'active');
 
 const QuarriesPage: React.FC = () => {
-    const { quarries, addQuarryRate, updateQuarryRate, deleteQuarryRate, materials, siteLocations } = useData();
+    const { quarries, addQuarryRate, updateQuarryRate, deleteQuarryRate, materials, siteLocations, loadLegacyMasters, loadMaterials, loadSiteLocations, refreshKey } = useData();
     const { openModal, closeModal } = useUI();
     const [filters, setFilters] = useState<Filters>({});
     const [activePopover, setActivePopover] = useState<string | null>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        loadLegacyMasters();
+        loadMaterials();
+        loadSiteLocations();
+    }, [loadLegacyMasters, loadMaterials, loadSiteLocations, refreshKey]);
 
     const flatData = useMemo(() => quarries.map(q => ({
         ...q,

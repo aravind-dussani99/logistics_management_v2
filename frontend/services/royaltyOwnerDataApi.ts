@@ -1,7 +1,7 @@
 import { RoyaltyOwnerData } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/royalty-owners');
+const basePath = '/api/royalty-owners';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,27 +17,25 @@ const handleResponse = async (response: Response) => {
 
 export const royaltyOwnerDataApi = {
   getAll: async (): Promise<RoyaltyOwnerData[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<RoyaltyOwnerData[]>;
   },
   create: async (data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>): Promise<RoyaltyOwnerData> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<RoyaltyOwnerData>;
   },
   update: async (id: string, data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>): Promise<RoyaltyOwnerData> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<RoyaltyOwnerData>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
 };

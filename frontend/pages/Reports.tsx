@@ -12,11 +12,16 @@ type ReportType = 'trips' | 'advances' | 'expenses';
 const ITEMS_PER_PAGE = 20;
 
 const Reports: React.FC = () => {
-    const { trips, advances, getDailyExpenses, getSupervisorAccounts, refreshKey } = useData();
+    const { trips, advances, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadAdvances } = useData();
     const [reportType, setReportType] = useState<ReportType>('trips');
     const [filters, setFilters] = useState<Filters>({});
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
+
+    useEffect(() => {
+        loadTrips();
+        loadAdvances();
+    }, [loadTrips, loadAdvances, refreshKey]);
 
     useEffect(() => {
         const fetchAllExpenses = async () => {

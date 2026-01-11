@@ -1,7 +1,7 @@
 import { Notification } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/notifications');
+const basePath = '/api/notifications';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -15,17 +15,17 @@ const handleResponse = async (response: Response) => {
 
 export const notificationApi = {
   getAll: async (role?: string): Promise<Notification[]> => {
-    const url = role ? `${baseUrl}?role=${encodeURIComponent(role)}` : baseUrl;
-    const response = await fetch(url);
+    const url = role ? `${basePath}?role=${encodeURIComponent(role)}` : basePath;
+    const response = await authFetch(url);
     return handleResponse(response) as Promise<Notification[]>;
   },
   getAllForUser: async (role: string, user: string): Promise<Notification[]> => {
-    const url = `${baseUrl}?role=${encodeURIComponent(role)}&user=${encodeURIComponent(user)}`;
-    const response = await fetch(url);
+    const url = `${basePath}?role=${encodeURIComponent(role)}&user=${encodeURIComponent(user)}`;
+    const response = await authFetch(url);
     return handleResponse(response) as Promise<Notification[]>;
   },
   getById: async (id: string): Promise<Notification> => {
-    const response = await fetch(`${baseUrl}/${id}`);
+    const response = await authFetch(`${basePath}/${id}`);
     return handleResponse(response) as Promise<Notification>;
   },
   create: async (data: {
@@ -39,15 +39,14 @@ export const notificationApi = {
     requesterRole?: string | null;
     requestMessage?: string | null;
   }): Promise<Notification> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<Notification>;
   },
   markRead: async (id: string): Promise<Notification> => {
-    const response = await fetch(`${baseUrl}/${id}/read`, { method: 'PUT' });
+    const response = await authFetch(`${basePath}/${id}/read`, { method: 'PUT' });
     return handleResponse(response) as Promise<Notification>;
   },
 };

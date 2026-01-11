@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { api } from '../services/mockApi';
+import { authApi } from '../services/authApi';
+import { usersApi } from '../services/usersApi';
 import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
@@ -8,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password_provided: string) => Promise<boolean>;
   logout: () => void;
-  updateProfile: (userId: number, profileData: Partial<User>) => Promise<void>;
+  updateProfile: (userId: string, profileData: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,46 +20,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
 
   useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem('currentUser');
-      if (storedUser) {
-        setCurrentUser(JSON.parse(storedUser));
+    const boot = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          setCurrentUser(null);
+          return;
+        }
+        const user = await authApi.me();
+        setCurrentUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+      } catch (error) {
+        console.error('Failed to restore session', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        setCurrentUser(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Failed to parse user from localStorage", error);
-      localStorage.removeItem('currentUser');
-    } finally {
-      setLoading(false);
-    }
+    };
+    boot();
   }, []);
 
   const login = async (username: string, password_provided: string): Promise<boolean> => {
-    const user = await api.login(username, password_provided);
-    if (user) {
+    try {
+      const { token, user } = await authApi.login(username, password_provided);
+      localStorage.setItem('authToken', token);
       setCurrentUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
-      navigate('/dashboard');
+      if (user.role === 'DROPOFF_SUPERVISOR') {
+        navigate('/received');
+      } else {
+        navigate('/dashboard');
+      }
       return true;
+    } catch (error) {
+      console.error('Login failed', error);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('authToken');
     navigate('/login');
   };
 
-  const updateProfile = async (userId: number, profileData: Partial<User>) => {
-    await api.updateUser(userId, profileData);
-    if (currentUser && currentUser.id === userId) {
-      const updatedUser = { ...currentUser, ...profileData };
-      // The API mock simulates avatar change based on name
-      if (profileData.name && profileData.name !== currentUser.name) {
-          updatedUser.avatar = `https://i.pravatar.cc/150?u=${encodeURIComponent(profileData.name)}`;
-      }
-      setCurrentUser(updatedUser);
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  const updateProfile = async (userId: string, profileData: Partial<User>) => {
+    const updated = await usersApi.updateUser(String(userId), profileData);
+    if (currentUser && currentUser.id === updated.id) {
+      setCurrentUser(updated);
+      localStorage.setItem('currentUser', JSON.stringify(updated));
     }
   };
 

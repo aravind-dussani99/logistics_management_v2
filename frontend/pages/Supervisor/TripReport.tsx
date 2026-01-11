@@ -29,7 +29,7 @@ const getMtdRange = () => {
 
 const SupervisorTripReport: React.FC = () => {
     const { currentUser } = useAuth();
-    const { trips, refreshKey, deleteTrip } = useData();
+    const { trips, refreshKey, deleteTrip, loadTrips } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [myTrips, setMyTrips] = useState<Trip[]>([]);
@@ -37,6 +37,10 @@ const SupervisorTripReport: React.FC = () => {
     const [filters, setFilters] = useState<{dateFrom?: string; dateTo?: string}>(getMtdRange());
     const [requestMessage, setRequestMessage] = useState('');
     const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
+
+    useEffect(() => {
+        loadTrips();
+    }, [loadTrips, refreshKey]);
     
     useEffect(() => {
         if (currentUser) {
@@ -116,6 +120,31 @@ const SupervisorTripReport: React.FC = () => {
                     } catch (error) {
                         console.error('Failed to request delete', error);
                         setRequestMessage('Failed to send delete request. Please try again.');
+                        setTimeout(() => setRequestMessage(''), 4000);
+                    } finally {
+                        closeModal();
+                    }
+                }}
+            />
+        ));
+    };
+
+    const handleRaiseIssue = async (trip: Trip) => {
+        if (!currentUser) return;
+        openModal('Raise Issue', (
+            <RequestDialog
+                title={`Raise issue for Trip #${trip.id}`}
+                label="Raise Issue Comments"
+                confirmLabel="Submit Issue"
+                onCancel={closeModal}
+                onConfirm={async (reason) => {
+                    try {
+                        await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        setRequestMessage('Issue sent to admin for review.');
+                        setTimeout(() => setRequestMessage(''), 4000);
+                    } catch (error) {
+                        console.error('Failed to raise issue', error);
+                        setRequestMessage('Failed to raise issue. Please try again.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } finally {
                         closeModal();
@@ -213,6 +242,11 @@ const SupervisorTripReport: React.FC = () => {
                                         >
                                             {trip.pendingRequestType === 'delete' ? 'Delete Requested' : 'Request Delete'}
                                         </button>
+                                    </>
+                                ) : trip.status === 'completed' ? (
+                                    <>
+                                        <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                        <button onClick={() => handleRaiseIssue(trip)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
                                     </>
                                 ) : (
                                      <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>

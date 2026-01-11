@@ -4,10 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 // --- MOCK DATA ---
 
 const mockUsers: User[] = [
-    { id: 1, name: 'Admin User', role: Role.ADMIN, avatar: 'https://i.pravatar.cc/150?u=admin', password: 'malli275' },
-    { id: 2, name: 'Manager User', role: Role.MANAGER, avatar: 'https://i.pravatar.cc/150?u=manager', password: 'password' },
-    { id: 3, name: 'Driver User', role: Role.DRIVER, avatar: 'https://i.pravatar.cc/150?u=driver', password: 'password' },
-    { id: 4, name: 'Malli', role: Role.SUPERVISOR, avatar: 'https://i.pravatar.cc/150?u=malli', password: 'password', dropOffLocationName: 'Site A' },
+    { id: '1', name: 'Admin User', role: Role.ADMIN, avatarUrl: 'https://i.pravatar.cc/150?u=admin', password: 'malli275' },
+    { id: '2', name: 'Manager User', role: Role.MANAGER, avatarUrl: 'https://i.pravatar.cc/150?u=manager', password: 'password' },
+    { id: '3', name: 'Accountant User', role: Role.ACCOUNTANT, avatarUrl: 'https://i.pravatar.cc/150?u=accountant', password: 'password' },
+    { id: '4', name: 'Pickup Supervisor', role: Role.PICKUP_SUPERVISOR, avatarUrl: 'https://i.pravatar.cc/150?u=pickup', password: 'pickup123', pickupLocationName: 'Site A' },
+    { id: '5', name: 'Dropoff Supervisor', role: Role.DROPOFF_SUPERVISOR, avatarUrl: 'https://i.pravatar.cc/150?u=dropoff', password: 'dropoff123', dropOffLocationName: 'Site A' },
+    { id: '6', name: 'Guest User', role: Role.GUEST, avatarUrl: 'https://i.pravatar.cc/150?u=guest', password: 'guest' },
 ];
 
 const mockNotifications: Notification[] = [
@@ -175,13 +177,13 @@ export const api = {
         await delay(100);
         return mockUsers.map(({ password, ...user }) => user); // Don't send passwords to client
     },
-    updateUser: async (userId: number, userData: Partial<User>): Promise<void> => {
+    updateUser: async (userId: string, userData: Partial<User>): Promise<void> => {
         await delay(300);
         const userIndex = mockUsers.findIndex(u => u.id === userId);
         if (userIndex !== -1) {
              // Simulate avatar change if name changes
             if (userData.name && userData.name !== mockUsers[userIndex].name) {
-                mockUsers[userIndex].avatar = `https://i.pravatar.cc/150?u=${encodeURIComponent(userData.name)}`;
+                mockUsers[userIndex].avatarUrl = `https://i.pravatar.cc/150?u=${encodeURIComponent(userData.name)}`;
             }
             mockUsers[userIndex] = { ...mockUsers[userIndex], ...userData };
         }

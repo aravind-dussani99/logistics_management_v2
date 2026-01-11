@@ -1,7 +1,7 @@
 import { TransportOwnerVehicle } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/transport-owner-vehicles');
+const basePath = '/api/transport-owner-vehicles';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,27 +17,25 @@ const handleResponse = async (response: Response) => {
 
 export const transportOwnerVehicleApi = {
   getAll: async (): Promise<TransportOwnerVehicle[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<TransportOwnerVehicle[]>;
   },
   create: async (data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>): Promise<TransportOwnerVehicle> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<TransportOwnerVehicle>;
   },
   update: async (id: string, data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>): Promise<TransportOwnerVehicle> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<TransportOwnerVehicle>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
 };

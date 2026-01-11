@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
-import { Trip, Role, QuarryOwner, VehicleOwner, Customer, CustomerRate } from '../types';
-import { api } from '../services/mockApi';
+import { Trip, Role, QuarryOwner, VehicleOwner, CustomerRate } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { Filters } from '../components/FilterPanel';
@@ -36,11 +35,14 @@ const getMtdRange = () => {
 const Dashboard: React.FC = () => {
     const { currentUser } = useAuth();
     
-    if (currentUser?.role === Role.SUPERVISOR) {
+    if (currentUser?.role === Role.DROPOFF_SUPERVISOR) {
+        return <Navigate to="/received" replace />;
+    }
+    if (currentUser?.role === Role.PICKUP_SUPERVISOR) {
         return <SupervisorTripReport />;
     }
     
-    const { trips, quarries, vehicles, customers, refreshKey } = useData();
+    const { trips, refreshKey, loadTrips } = useData();
 
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
     const [allData, setAllData] = useState<{ quarries: QuarryOwner[]; vehicles: VehicleOwner[]; customers: CustomerRate[]; royaltyOwners: string[] }>({ quarries: [], vehicles: [], customers: [], royaltyOwners: [] });
@@ -52,29 +54,64 @@ const Dashboard: React.FC = () => {
     const [pieDimension, setPieDimension] = useState<'transporter' | 'quarry' | 'customer'>('transporter');
 
     useEffect(() => {
+        loadTrips();
+    }, [loadTrips, refreshKey]);
+
+    useEffect(() => {
         setAllTrips(trips);
 
-        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName)));
-        const customerRatesForFilter = customers.map(c => ({ 
-            customer: c.name, 
-            id: c.id, 
-            material: '', rate: '', from: '', to: '', active: false, 
-            rejectionPercent: '', rejectionRemarks: '', 
-            locationFrom: '', locationTo: '' 
+        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
+        const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
+        const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
+        const uniqueCustomers = Array.from(new Set(trips.map(t => t.customer).filter(Boolean)));
+
+        const vehicles = uniqueVehicles.map((vehicleNumber, index) => ({
+            id: `vehicle-${index}-${vehicleNumber}`,
+            ownerName: '',
+            vehicleNumber,
+            vehicleType: '',
+            vehicleCapacity: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
         }));
-        
-        setAllData({ 
-            quarries, 
-            vehicles, 
-            customers: customerRatesForFilter, 
-            royaltyOwners: uniqueRoyaltyOwners 
+        const quarries = uniqueQuarries.map((quarryName, index) => ({
+            id: `quarry-${index}-${quarryName}`,
+            ownerName: quarryName,
+            quarryName,
+            quarryArea: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+        const customerRatesForFilter = uniqueCustomers.map((customer, index) => ({
+            customer,
+            id: `customer-${index}-${customer}`,
+            material: '',
+            rate: '',
+            from: '',
+            to: '',
+            active: false,
+            rejectionPercent: '',
+            rejectionRemarks: '',
+            locationFrom: '',
+            locationTo: '',
+        }));
+
+        setAllData({
+            quarries,
+            vehicles,
+            customers: customerRatesForFilter,
+            royaltyOwners: uniqueRoyaltyOwners as string[],
         });
-    }, [trips, quarries, vehicles, customers, refreshKey]);
+    }, [trips, refreshKey]);
 
     const calculateStatsForPeriod = (trips: Trip[]): Stats => {
          return trips.reduce((acc, trip) => {
-            acc.totalTonnage += trip.tonnage;
-            acc.totalRoyaltyUsed += trip.royaltyTons;
+            acc.totalTonnage += Number(trip.netWeight || 0);
+            acc.totalRoyaltyUsed += Number(trip.royaltyM3 || trip.royaltyTons || 0);
             acc.totalReduction += (trip.grossWeight - trip.netWeight);
             return acc;
         }, { totalTrips: trips.length, totalTonnage: 0, totalRoyaltyUsed: 0, totalReduction: 0 });
@@ -85,9 +122,12 @@ const Dashboard: React.FC = () => {
             return { filteredTrips: [], previousPeriodTrips: [], dateRangeSubtitle: 'Loading...' };
         }
 
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
         const currentPeriodTrips = allTrips.filter(trip => {
-            if (filters.dateFrom && trip.date < filters.dateFrom) return false;
-            if (filters.dateTo && trip.date > filters.dateTo) return false;
+            const tripDate = new Date(trip.date);
+            if (fromDate && tripDate < fromDate) return false;
+            if (toDate && tripDate > toDate) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
@@ -118,7 +158,10 @@ const Dashboard: React.FC = () => {
         const prevEndDateStr = formatDate(prevEndDate);
 
         const prevPeriodTrips = allTrips.filter(trip => {
-            if (trip.date < prevStartDateStr || trip.date > prevEndDateStr) return false;
+            const tripDate = new Date(trip.date);
+            const prevStartDateObj = new Date(prevStartDateStr + 'T00:00:00');
+            const prevEndDateObj = new Date(prevEndDateStr + 'T23:59:59');
+            if (tripDate < prevStartDateObj || tripDate > prevEndDateObj) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
@@ -187,11 +230,11 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => { setCurrentPage(1); }, [filters]);
     
-    if (currentUser?.role === Role.DRIVER) return <div>Driver Dashboard Coming Soon...</div>;
+    if (currentUser?.role === Role.GUEST) return <div>Guest Dashboard Coming Soon...</div>;
 
     return (
         <div className="relative">
-             <PageHeader
+            <PageHeader
                 title="Dashboard"
                 subtitle={dateRangeSubtitle}
                 filters={filters}
@@ -199,6 +242,7 @@ const Dashboard: React.FC = () => {
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
                 showMoreFilters={['vehicle', 'customer', 'royalty']}
+                showAddAction={false}
             />
             
             <main className="pt-6 space-y-6">
@@ -219,7 +263,7 @@ const Dashboard: React.FC = () => {
                             <Link to="/trips" className="text-sm font-medium text-primary hover:underline flex-shrink-0">Show All</Link>
                         </div>
                     </div>
-                    <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.tonnage)} T</td></tr>))}</tbody></table></div>
+                        <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-gray-50 dark:bg-gray-700"><tr>{['Date', 'Vehicle', 'Material', 'Customer', 'Tonnage'].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>)}</tr></thead><tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">{paginatedRecentTrips.map((trip) => (<tr key={trip.id}><td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.vehicleNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material}</td><td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-semibold">{safeToFixed(trip.netWeight)} T</td></tr>))}</tbody></table></div>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">

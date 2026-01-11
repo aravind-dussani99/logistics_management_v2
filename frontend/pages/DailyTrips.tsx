@@ -28,7 +28,7 @@ const getMtdRange = () => {
 
 const DailyTrips: React.FC = () => {
     const { currentUser } = useAuth();
-    const { refreshKey, customers, trips, quarries, vehicles, updateTrip, deleteTrip } = useData();
+    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
@@ -37,13 +37,131 @@ const DailyTrips: React.FC = () => {
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
+    const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed'>('all');
+
+    useEffect(() => {
+        loadTrips();
+    }, [loadTrips, refreshKey]);
+
+    const handleValidate = (trip: Trip) => {
+        openModal('Validate Trip', (
+            <RequestDialog
+                title={`Validate Trip #${trip.id}`}
+                label="Validation comments"
+                confirmLabel="Validate"
+                onCancel={closeModal}
+                onConfirm={async (message) => {
+                    await updateTrip(trip.id, {
+                        status: 'completed',
+                        validationComments: message || '',
+                        validatedBy: currentUser?.name || currentUser?.username || '',
+                        validatedAt: new Date().toISOString(),
+                        pendingRequestType: null,
+                        pendingRequestMessage: null,
+                        pendingRequestBy: null,
+                        pendingRequestRole: null,
+                        pendingRequestAt: null,
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} validated. ${message || ''}`.trim(),
+                        type: 'info',
+                        targetRole: Role.ADMIN,
+                        targetUser: null,
+                        tripId: trip.id,
+                        requestType: 'validated',
+                        requesterName: currentUser?.name || 'Admin',
+                        requesterRole: currentUser?.role || Role.ADMIN,
+                        requestMessage: message || '',
+                    });
+                    closeModal();
+                }}
+            />
+        ));
+    };
+
+    const handleSendBack = (trip: Trip, target: 'pickup' | 'dropoff') => {
+        const targetRole = target === 'pickup' ? Role.PICKUP_SUPERVISOR : Role.DROPOFF_SUPERVISOR;
+        const targetUser = target === 'pickup' ? (trip.createdBy || null) : (trip.receivedBy || null);
+        const newStatus = target === 'pickup' ? 'pending upload' : 'in transit';
+        const requestType = target === 'pickup' ? 'sent-back-pickup' : 'sent-back-dropoff';
+        openModal(`Send Back to ${target === 'pickup' ? 'Pick-up Supervisor' : 'Drop-off Supervisor'}`, (
+            <RequestDialog
+                title={`Send back to ${target === 'pickup' ? 'Pick-up Supervisor' : 'Drop-off Supervisor'}`}
+                label="Reason"
+                confirmLabel="Send Back"
+                onCancel={closeModal}
+                onConfirm={async (message) => {
+                    await updateTrip(trip.id, {
+                        status: newStatus,
+                        pendingRequestType: requestType,
+                        pendingRequestMessage: message || '',
+                        pendingRequestBy: currentUser?.name || currentUser?.username || '',
+                        pendingRequestRole: currentUser?.role || '',
+                        pendingRequestAt: new Date().toISOString(),
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} sent back to ${target === 'pickup' ? 'Pick-up' : 'Drop-off'} Supervisor. ${message || ''}`.trim(),
+                        type: 'alert',
+                        targetRole,
+                        targetUser,
+                        tripId: trip.id,
+                        requestType,
+                        requesterName: currentUser?.name || 'Admin',
+                        requesterRole: currentUser?.role || Role.ADMIN,
+                        requestMessage: message || '',
+                    });
+                    closeModal();
+                }}
+            />
+        ));
+    };
 
     useEffect(() => {
         setAllTrips(trips);
-        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName)));
-        const customerRates = customers.map(c => ({ customer: c.name, id: c.id, material: '', rate: '', from: '', to: '', active: false, rejectionPercent: '', rejectionRemarks: '', locationFrom: '', locationTo: '' }));
-        setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners });
-    }, [refreshKey, trips, customers, quarries, vehicles]);
+        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
+        const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
+        const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
+        const uniqueCustomers = Array.from(new Set(trips.map(t => t.customer).filter(Boolean)));
+
+        const vehicles = uniqueVehicles.map((vehicleNumber, index) => ({
+            id: `vehicle-${index}-${vehicleNumber}`,
+            ownerName: '',
+            vehicleNumber,
+            vehicleType: '',
+            vehicleCapacity: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+
+        const quarries = uniqueQuarries.map((quarryName, index) => ({
+            id: `quarry-${index}-${quarryName}`,
+            ownerName: quarryName,
+            quarryName,
+            quarryArea: 0,
+            contactNumber: '',
+            address: '',
+            openingBalance: 0,
+            rates: [],
+        }));
+
+        const customerRates = uniqueCustomers.map((customer, index) => ({
+            customer,
+            id: `customer-${index}-${customer}`,
+            material: '',
+            rate: '',
+            from: '',
+            to: '',
+            active: false,
+            rejectionPercent: '',
+            rejectionRemarks: '',
+            locationFrom: '',
+            locationTo: '',
+        }));
+
+        setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners as string[] });
+    }, [refreshKey, trips]);
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -63,10 +181,8 @@ const DailyTrips: React.FC = () => {
     }, [location.search, trips, openModal, closeModal]);
 
     const filteredTrips = useMemo(() => {
-        const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null;
-        const toDate = filters.dateTo ? new Date(filters.dateTo) : null;
-
-        if (toDate) toDate.setHours(23, 59, 59, 999);
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
         
         const filtered = allTrips.filter(trip => {
             const tripDate = new Date(trip.date);
@@ -78,6 +194,7 @@ const DailyTrips: React.FC = () => {
             if (filters.customer && trip.customer !== filters.customer) return false;
             if (filters.quarry && trip.quarryName !== filters.quarry) return false;
             if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
+            if (statusFilter !== 'all' && (trip.status || '').toLowerCase() !== statusFilter) return false;
             return true;
         });
 
@@ -85,7 +202,7 @@ const DailyTrips: React.FC = () => {
             setCurrentPage(1);
         }
         return filtered;
-    }, [allTrips, filters]);
+    }, [allTrips, filters, statusFilter]);
 
     const paginatedTrips = useMemo(() => {
         const startIndex = (currentPage - 1) * TRIPS_PER_PAGE;
@@ -103,19 +220,37 @@ const DailyTrips: React.FC = () => {
         return `Showing data from ${from} to ${to}`;
     }, [filters.dateFrom, filters.dateTo]);
 
+    const openTripEntry = () => {
+        openModal('Enter New Trip', <SupervisorTripForm mode="enter" onClose={closeModal} />);
+    };
+
     return (
         <div className="relative">
             <PageHeader
-                title="Daily Trips"
+                title="Trip Management"
                 subtitle={dateRangeSubtitle}
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
                 showMoreFilters={['vehicle', 'customer', 'royalty']}
+                pageAction={{ label: 'Enter Trip', action: openTripEntry }}
             />
 
             <main className="pt-6">
+                <div className="mb-4 flex items-center gap-3">
+                    <label className="text-sm text-gray-500 dark:text-gray-400">Status</label>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                        className="px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                        <option value="all">All</option>
+                        <option value="in transit">In Transit</option>
+                        <option value="pending validation">Pending Validation</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
                 {activeRequest && (
                     <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                         <div className="font-semibold">Trip request from {activeRequest.requesterName || 'Supervisor'}</div>
@@ -176,12 +311,12 @@ const DailyTrips: React.FC = () => {
                                                     await notificationApi.create({
                                                         message: `Trip #${trip.id} deleted by Admin.`,
                                                         type: 'info',
-                                                        targetRole: 'Supervisor',
+                                                        targetRole: Role.PICKUP_SUPERVISOR,
                                                         targetUser: trip.createdBy || null,
                                                         tripId: trip.id,
                                                         requestType: 'delete',
                                                         requesterName: currentUser?.name || 'Admin',
-                                                        requesterRole: currentUser?.role || 'Admin',
+                                                        requesterRole: currentUser?.role || Role.ADMIN,
                                                     });
                                                     await deleteTrip(trip.id);
                                                     closeModal();
@@ -193,44 +328,28 @@ const DailyTrips: React.FC = () => {
                                 >
                                     Delete
                                 </button>
-                                <button
-                                    onClick={() => {
-                                        openModal('Send Back to Enter Trips', (
-                                            <RequestDialog
-                                                title="Send back to Enter Trips"
-                                                label="Message to supervisor"
-                                                confirmLabel="Send Back"
-                                                onCancel={closeModal}
-                                                onConfirm={async (message) => {
-                                                    await updateTrip(trip.id, {
-                                                        status: 'pending upload',
-                                                        pendingRequestType: null,
-                                                        pendingRequestMessage: null,
-                                                        pendingRequestBy: null,
-                                                        pendingRequestRole: null,
-                                                        pendingRequestAt: null,
-                                                    });
-                                                    await notificationApi.create({
-                                                        message: `Trip #${trip.id} sent back to Enter Trips. ${message || ''}`.trim(),
-                                                        type: 'info',
-                                                        targetRole: 'Supervisor',
-                                                        targetUser: trip.createdBy || null,
-                                                        tripId: trip.id,
-                                                        requestType: 'sent-back',
-                                                        requesterName: currentUser?.name || 'Admin',
-                                                        requesterRole: currentUser?.role || 'Admin',
-                                                        requestMessage: message || '',
-                                                    });
-                                                    closeModal();
-                                                }}
-                                            />
-                                        ));
-                                    }}
-                                    className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                    disabled={Boolean(trip.pendingRequestType)}
-                                >
-                                    {trip.pendingRequestType ? 'Request Pending' : 'Send Back'}
-                                </button>
+                                {(trip.status || '').toLowerCase() === 'pending validation' && (
+                                    <>
+                                        <button
+                                            onClick={() => handleValidate(trip)}
+                                            className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+                                        >
+                                            Validate
+                                        </button>
+                                        <button
+                                            onClick={() => handleSendBack(trip, 'dropoff')}
+                                            className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                        >
+                                            Send Back to Drop-off
+                                        </button>
+                                        <button
+                                            onClick={() => handleSendBack(trip, 'pickup')}
+                                            className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                        >
+                                            Send Back to Pick-up
+                                        </button>
+                                    </>
+                                )}
                             </td>
                         </tr>
                     )}}

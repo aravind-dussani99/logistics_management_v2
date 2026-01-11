@@ -13,10 +13,19 @@ import { Filters } from '../components/FilterPanel';
 const ITEMS_PER_PAGE = 10;
 
 const AdvancesPage: React.FC = () => {
-    const { advances, deleteAdvance } = useData();
+    const { advances, deleteAdvance, loadAdvances, loadAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
     const { openModal, closeModal } = useUI();
     const [currentPage, setCurrentPage] = useState(1);
     const [filters, setFilters] = useState<Filters>({});
+
+    useEffect(() => {
+        loadAdvances();
+        loadAccounts();
+        loadMineQuarries();
+        loadVendorCustomers();
+        loadRoyaltyOwnerProfiles();
+        loadTransportOwnerProfiles();
+    }, [loadAdvances, loadAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
     const handleAddAdvance = () => {
         openModal('Add New Advance', <AdvanceForm onClose={closeModal} />);

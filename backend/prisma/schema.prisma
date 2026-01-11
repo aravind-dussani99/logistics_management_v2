@@ -7,6 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  MANAGER
+  ACCOUNTANT
+  PICKUP_SUPERVISOR
+  DROPOFF_SUPERVISOR
+  GUEST
+}
+
+model User {
+  id               String    @id @default(uuid())
+  username         String    @unique
+  name             String
+  passwordHash     String
+  role             UserRole
+  avatarUrl        String?
+  mobileNumber     String    @default("")
+  email            String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  postalCode       String?
+  pickupLocationId String?
+  dropOffLocationId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  pickupLocation   SiteLocation? @relation("PickupSupervisorLocation", fields: [pickupLocationId], references: [id])
+  dropOffLocation  SiteLocation? @relation("DropoffSupervisorLocation", fields: [dropOffLocationId], references: [id])
+
+  @@index([role])
+}
+
 model SiteLocation {
   id             String @id @default(uuid())
   name           String
@@ -17,13 +51,15 @@ model SiteLocation {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  merchants      Merchant[]
-  mineQuarries   MineQuarry[]
-  vendorCustomers VendorCustomer[]
-  royaltyOwners  RoyaltyOwnerProfile[]
-  transportOwners TransportOwnerProfile[]
+  merchants         Merchant[]
+  mineQuarries      MineQuarry[]
+  vendorCustomers   VendorCustomer[]
+  royaltyOwners     RoyaltyOwnerProfile[]
+  transportOwners   TransportOwnerProfile[]
   materialRatesPickup MaterialRate[] @relation("PickupLocation")
   materialRatesDropOff MaterialRate[] @relation("DropOffLocation")
+  pickupSupervisors User[] @relation("PickupSupervisorLocation")
+  dropOffSupervisors User[] @relation("DropoffSupervisorLocation")
 
   @@index([name])
 }
@@ -311,13 +347,18 @@ model TripRecord {
   pickupPlace           String
   dropOffPlace          String
   vendorName            String
+  vendorCustomerIsOneOff Boolean  @default(false)
   customer              String
   invoiceDCNumber       String
   quarryName            String
+  mineQuarryIsOneOff     Boolean  @default(false)
   royaltyOwnerName      String
+  royaltyOwnerIsOneOff   Boolean  @default(false)
   material              String
   vehicleNumber         String
+  vehicleIsOneOff        Boolean  @default(false)
   transporterName       String
+  transportOwnerIsOneOff Boolean  @default(false)
   transportOwnerMobileNumber String
   emptyWeight           Float
   grossWeight           Float
@@ -343,21 +384,73 @@ model TripRecord {
   royaltyUpload         String
   taxInvoiceUpload      String
   receivedDate          DateTime?
+  receivedBy            String?
+  receivedByRole        String?
   endEmptyWeight        Float?
   endGrossWeight        Float?
   endNetWeight          Float?
   endWaymentSlipUpload  String?
   weightDifferenceReason String?
+  validatedBy           String?
+  validatedAt           DateTime?
+  validationComments    String?
   pendingRequestType    String?
   pendingRequestMessage String?
   pendingRequestBy      String?
   pendingRequestRole    String?
   pendingRequestAt      DateTime?
+  rateOverrideEnabled   Boolean  @default(false)
+  rateOverride          Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   @@index([date])
   @@index([vehicleNumber])
+}
+
+model TripActivityRecord {
+  id        String   @id @default(uuid())
+  tripId    Int
+  action    String
+  message   String
+  actorName String
+  actorRole String
+  createdAt DateTime @default(now())
+
+  @@index([tripId])
+  @@index([createdAt])
+}
+
+model PaymentRecord {
+  id              String   @id @default(uuid())
+  date            DateTime
+  entryType       String   @default("PAYMENT")
+  headAccount     String?
+  ratePartyType   String?
+  ratePartyId     String?
+  counterpartyName String?
+  amount          Float
+  type            String
+  method          String?
+  remarks         String?
+  via             String?
+  fromAccount     String?
+  toAccount       String?
+  category        String?
+  subCategory     String?
+  siteExpense     Boolean  @default(false)
+  voucherUploads  Json?
+  availableBalance Float?
+  closingBalance  Float?
+  createdBy       String
+  tripId          Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([ratePartyType])
+  @@index([ratePartyId])
+  @@index([date])
+  @@index([entryType])
 }
 
 model NotificationRecord {

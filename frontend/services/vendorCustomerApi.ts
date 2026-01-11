@@ -1,7 +1,7 @@
 import { VendorCustomerData } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/vendor-customers');
+const basePath = '/api/vendor-customers';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,27 +17,25 @@ const handleResponse = async (response: Response) => {
 
 export const vendorCustomerApi = {
   getAll: async (): Promise<VendorCustomerData[]> => {
-    const response = await fetch(baseUrl);
+    const response = await authFetch(basePath);
     return handleResponse(response) as Promise<VendorCustomerData[]>;
   },
   create: async (data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>): Promise<VendorCustomerData> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<VendorCustomerData>;
   },
   update: async (id: string, data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>): Promise<VendorCustomerData> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<VendorCustomerData>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
 };

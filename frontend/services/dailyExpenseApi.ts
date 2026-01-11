@@ -1,7 +1,7 @@
 import { DailyExpense } from '../types';
-import { apiUrl } from './apiBase';
+import { authFetch } from './apiBase';
 
-const baseUrl = apiUrl('/api/daily-expenses');
+const basePath = '/api/daily-expenses';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -17,36 +17,34 @@ const handleResponse = async (response: Response) => {
 
 export const dailyExpenseApi = {
   getBySupervisor: async (supervisorName: string): Promise<{ expenses: DailyExpense[]; openingBalance: number }> => {
-    const response = await fetch(`${baseUrl}?supervisor=${encodeURIComponent(supervisorName)}`);
+    const response = await authFetch(`${basePath}?supervisor=${encodeURIComponent(supervisorName)}`);
     return handleResponse(response) as Promise<{ expenses: DailyExpense[]; openingBalance: number }>;
   },
   getAll: async (): Promise<DailyExpense[]> => {
-    const response = await fetch(`${baseUrl}/all`);
+    const response = await authFetch(`${basePath}/all`);
     return handleResponse(response) as Promise<DailyExpense[]>;
   },
   create: async (data: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>): Promise<DailyExpense> => {
-    const response = await fetch(baseUrl, {
+    const response = await authFetch(basePath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<DailyExpense>;
   },
   update: async (id: string, data: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>): Promise<DailyExpense> => {
-    const response = await fetch(`${baseUrl}/${id}`, {
+    const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     return handleResponse(response) as Promise<DailyExpense>;
   },
   remove: async (id: string): Promise<void> => {
-    const response = await fetch(`${baseUrl}/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
   exportCsv: async (supervisorName?: string): Promise<Blob> => {
-    const url = supervisorName ? `${baseUrl}/export?supervisor=${encodeURIComponent(supervisorName)}` : `${baseUrl}/export`;
-    const response = await fetch(url);
+    const url = supervisorName ? `${basePath}/export?supervisor=${encodeURIComponent(supervisorName)}` : `${basePath}/export`;
+    const response = await authFetch(url);
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
       const message = errorBody.error || 'Request failed';

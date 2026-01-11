@@ -31,21 +31,21 @@ const getMtdRange = () => {
 
 const DailyExpenses: React.FC = () => {
     const { currentUser } = useAuth();
-    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts } = useData();
+    const { getDailyExpenses, addDailyExpense, updateDailyExpense, deleteDailyExpense, getSupervisorAccounts, refreshKey, refreshData } = useData();
     const { openModal, closeModal } = useUI();
 
     const [expenses, setExpenses] = useState<DailyExpense[]>([]);
     const [openingBalance, setOpeningBalance] = useState(0);
     const [filters, setFilters] = useState<{ dateFrom?: string; dateTo?: string; destination?: string; supervisor?: string }>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
-    const [refreshKey, setRefreshKey] = useState(0);
     const [supervisors, setSupervisors] = useState<string[]>([]);
     const [activeTab, setActiveTab] = useState<'transactions' | 'insights'>('transactions');
     const [insightFilters, setInsightFilters] = useState<{ category?: string; subCategory?: string; type?: string }>({});
+    const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
 
     const fetchData = useCallback(() => {
         if (!currentUser) return;
-        if (currentUser.role === Role.ADMIN) {
+        if (canViewAll) {
             dailyExpenseApi.getAll().then((allExpenses) => {
                 setExpenses(allExpenses);
                 setOpeningBalance(0);
@@ -59,7 +59,7 @@ const DailyExpenses: React.FC = () => {
                 setOpeningBalance(openingBalance);
             });
         }
-    }, [currentUser, getDailyExpenses, getSupervisorAccounts]);
+    }, [currentUser, getDailyExpenses, getSupervisorAccounts, canViewAll]);
     
     useEffect(() => {
         fetchData();
@@ -86,7 +86,7 @@ const DailyExpenses: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async () => {
                     await deleteDailyExpense(id);
-                    setRefreshKey(k => k + 1);
+                    refreshData();
                     closeModal();
                 }}
             />
@@ -104,7 +104,7 @@ const DailyExpenses: React.FC = () => {
             } else {
                 await addDailyExpense(payload);
             }
-            setRefreshKey(k => k + 1); // Trigger re-fetch
+            refreshData(); // Trigger re-fetch
             closeModal();
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unable to save transaction.';
@@ -115,11 +115,27 @@ const DailyExpenses: React.FC = () => {
     };
 
     const filteredExpenses = useMemo(() => {
-        const openingBalanceEntry = { id: 'opening', date: '---', from: 'System', to: 'Opening Balance', amount: 0, remarks: '', availableBalance: 0, closingBalance: 0, type: 'CREDIT' as const, via: '', category: '', subCategory: '', counterpartyName: '' };
+        const openingBalanceEntry = {
+            id: 'opening',
+            date: '---',
+            from: 'System',
+            to: 'Opening Balance',
+            amount: 0,
+            remarks: '',
+            availableBalance: 0,
+            closingBalance: 0,
+            type: 'CREDIT' as const,
+            via: '',
+            headAccount: '',
+            category: '',
+            subCategory: '',
+            counterpartyName: '',
+            siteExpense: false,
+        };
         
         const allEntries = [...expenses].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
-        const chronologicalEntries = currentUser?.role === Role.ADMIN ? allEntries : [openingBalanceEntry, ...allEntries];
+        const chronologicalEntries = canViewAll ? allEntries : [openingBalanceEntry, ...allEntries];
 
         return chronologicalEntries
             .filter(e => {
@@ -128,7 +144,7 @@ const DailyExpenses: React.FC = () => {
                 if (filters.dateFrom && entryDate < filters.dateFrom) return false;
                 if (filters.dateTo && entryDate > filters.dateTo) return false;
                 if (filters.destination && !(e.to || '').toLowerCase().includes(filters.destination.toLowerCase())) return false;
-                if (currentUser?.role === Role.ADMIN && filters.supervisor && e.from !== filters.supervisor) return false;
+                if (canViewAll && filters.supervisor && e.from !== filters.supervisor) return false;
                 return true;
             });
     }, [expenses, filters, openingBalance, currentUser]);
@@ -183,13 +199,16 @@ const DailyExpenses: React.FC = () => {
     }, [filteredExpenses, currentPage]);
 
     const exportToCsv = () => {
-        const headers = ["Date", "From", "To", "Amount", "Type", "Remarks", "Closing Balance"];
+        const headers = ["Date", "Head Account", "From", "To", "Amount", "Type", "Category", "Sub-Category", "Remarks", "Closing Balance"];
         const rows = filteredExpenses.map(e => [
             e.date,
+            `"${(e.headAccount || '').replace(/"/g, '""')}"`,
             e.from,
             `"${e.to.replace(/"/g, '""')}"`,
             e.amount,
             e.type,
+            `"${(e.category || '').replace(/"/g, '""')}"`,
+            `"${(e.subCategory || '').replace(/"/g, '""')}"`,
             `"${e.remarks.replace(/"/g, '""')}"`,
             e.closingBalance
         ]);
@@ -249,7 +268,7 @@ const DailyExpenses: React.FC = () => {
                                 onChange={e => setFilters(f => ({...f, destination: e.target.value }))}
                                 className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
                             />
-                            {currentUser?.role === Role.ADMIN && (
+                            {canViewAll && (
                                 <select
                                     value={filters.supervisor || ''}
                                     onChange={e => setFilters(f => ({ ...f, supervisor: e.target.value || undefined }))}
@@ -271,10 +290,10 @@ const DailyExpenses: React.FC = () => {
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    {currentUser?.role === Role.ADMIN
-                                        ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
-                                        : ['S. No.', 'Date', 'Opening Balance', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
-                                    .map(h => (
+                                    {(canViewAll
+                                        ? ['S. No.', 'Date', 'Supervisor', 'Opening Balance', 'Head Account', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                        : ['S. No.', 'Date', 'Opening Balance', 'Head Account', 'From/To', 'Amount', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Actions']
+                                    ).map(h => (
                                         <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{h}</th>
                                     ))}
                                 </tr>
@@ -283,10 +302,10 @@ const DailyExpenses: React.FC = () => {
                                 {(() => {
                                     const rows: React.ReactNode[] = [];
                                     let lastDate = '';
-                                    const colSpan = currentUser?.role === Role.ADMIN ? 11 : 10;
+                                    const colSpan = canViewAll ? 12 : 11;
                                     paginatedExpenses.forEach((expense, index) => {
                                         const dateLabel = formatDateDisplay(expense.date);
-                                        if (currentUser?.role === Role.ADMIN && dateLabel !== lastDate) {
+                                        if (canViewAll && dateLabel !== lastDate) {
                                             rows.push(
                                                 <tr key={`group-${dateLabel}`} className="bg-gray-50 dark:bg-gray-700">
                                                     <td colSpan={colSpan} className="px-6 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -300,10 +319,11 @@ const DailyExpenses: React.FC = () => {
                                             <tr key={expense.id}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{dateLabel}</td>
-                                                {currentUser?.role === Role.ADMIN && (
+                                                {canViewAll && (
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.from || '-'}</td>
                                                 )}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{formatCurrency(expense.availableBalance || 0)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">{expense.headAccount || '-'}</td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     {expense.type === 'CREDIT' ? `From: ${expense.to}` : `To: ${expense.to}`}
                                                 </td>
@@ -516,12 +536,22 @@ interface ExpenseFormProps {
 
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData, expenses, openingBalance, isViewMode = false }) => {
     const { currentUser } = useAuth();
-    const { mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+    const {
+        mineQuarries,
+        vendorCustomers,
+        royaltyOwnerProfiles,
+        transportOwnerProfiles,
+        loadMineQuarries,
+        loadVendorCustomers,
+        loadRoyaltyOwnerProfiles,
+        loadTransportOwnerProfiles,
+    } = useData();
     const [formData, setFormData] = useState({
         date: initialData?.date || new Date().toISOString().split('T')[0],
         from: currentUser?.name || '',
         to: initialData?.to || '',
         via: initialData?.via || '',
+        headAccount: initialData?.headAccount || '',
         ratePartyType: initialData?.ratePartyType || '',
         ratePartyId: initialData?.ratePartyId || '',
         amount: initialData?.amount || 0,
@@ -530,7 +560,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
         remarks: initialData?.remarks || '',
         type: initialData?.type || 'DEBIT',
     });
-    const [isBusinessExpense, setIsBusinessExpense] = useState(Boolean(initialData?.ratePartyType || initialData?.ratePartyId));
+    const [isBusinessExpense, setIsBusinessExpense] = useState(Boolean(initialData?.siteExpense || initialData?.ratePartyType || initialData?.ratePartyId));
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
     const ratePartyOptions = useMemo(() => {
@@ -556,6 +586,33 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
         }
     }, [currentUser, formData.from]);
 
+    useEffect(() => {
+        if (!isBusinessExpense || !formData.ratePartyType) return;
+        switch (formData.ratePartyType) {
+            case 'mine-quarry':
+                loadMineQuarries();
+                break;
+            case 'vendor-customer':
+                loadVendorCustomers();
+                break;
+            case 'royalty-owner':
+                loadRoyaltyOwnerProfiles();
+                break;
+            case 'transport-owner':
+                loadTransportOwnerProfiles();
+                break;
+            default:
+                break;
+        }
+    }, [
+        isBusinessExpense,
+        formData.ratePartyType,
+        loadMineQuarries,
+        loadVendorCustomers,
+        loadRoyaltyOwnerProfiles,
+        loadTransportOwnerProfiles,
+    ]);
+
     const handleToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setFormData(p => ({...p, to: value}));
@@ -580,7 +637,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({ ...formData, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
+        onSave({ ...formData, siteExpense: isBusinessExpense, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
     };
 
     const getAvailableBalance = () => {
@@ -666,7 +723,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onSave, onClose, initialData,
                         </>
                     )}
                 </div>
-                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <InputField label="Head Account" id="headAccount" name="headAccount" type="text" value={formData.headAccount} onChange={e => setFormData(p => ({...p, headAccount: e.target.value }))} isReadOnly={isViewMode} required />
                     <InputField label="Category" id="category" name="category" type="text" value={formData.category} onChange={e => setFormData(p => ({...p, category: e.target.value }))} isReadOnly={isViewMode} />
                     <InputField label="Sub-Category" id="subCategory" name="subCategory" type="text" value={formData.subCategory} onChange={e => setFormData(p => ({...p, subCategory: e.target.value }))} isReadOnly={isViewMode} />
                 </div>

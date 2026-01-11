@@ -8,7 +8,13 @@ import Pagination from '../components/Pagination';
 const ITEMS_PER_PAGE = 10;
 
 const MerchantsPage: React.FC = () => {
-  const { merchants, merchantTypes, siteLocations, addMerchant, updateMerchant, deleteMerchant } = useData();
+  const { merchants, merchantTypes, siteLocations, addMerchant, updateMerchant, deleteMerchant, loadMerchants, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
+
+  useEffect(() => {
+    loadMerchants();
+    loadMerchantTypes();
+    loadSiteLocations();
+  }, [loadMerchants, loadMerchantTypes, loadSiteLocations, refreshKey]);
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
