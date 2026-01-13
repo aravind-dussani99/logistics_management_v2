@@ -80,7 +80,6 @@ const initialFormData = {
     transportOwnerMobileNumber: '',
     netWeight: '0',
     royaltyNumber: '',
-    royaltyM3: '',
     deductionPercentage: '0',
     sizeChangePercentage: '0',
     agent: '',
@@ -96,6 +95,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         addRoyaltyOwnerProfile,
         addTransportOwnerProfile,
         addVehicleMaster,
+        addSiteLocation,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -231,6 +231,34 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         }
 
         setIsSubmitting(true);
+        const createdSites = new Map<string, string>();
+        const normalizeSiteName = (value?: string) => (value || '').trim();
+        const findSiteId = (name: string) => {
+            const key = name.toLowerCase();
+            return createdSites.get(key) || siteLocations.find(site => site.name.toLowerCase() === key)?.id || '';
+        };
+        const ensureSiteLocation = async (name: string, type: 'pickup' | 'drop-off' | 'both') => {
+            if (!name) return;
+            const existingId = findSiteId(name);
+            if (existingId) return;
+            const newSite = await addSiteLocation({
+                name,
+                type,
+                address: '',
+                pointOfContact: '',
+                remarks: '',
+            });
+            createdSites.set(name.toLowerCase(), newSite.id);
+        };
+
+        const pickupName = normalizeSiteName(formData.pickupPlace);
+        const dropOffName = normalizeSiteName(formData.dropOffPlace);
+        if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
+            await ensureSiteLocation(pickupName, 'both');
+        } else {
+            await ensureSiteLocation(pickupName, 'pickup');
+            await ensureSiteLocation(dropOffName, 'drop-off');
+        }
         const netWeight = parseFloat(formData.netWeight) || 0;
         
         const selectedVehicle = vehicles.find(v => v.vehicleNumber === formData.vehicleNumber);
@@ -299,7 +327,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
             netWeight: netWeight,
             royaltyNumber: formData.royaltyNumber,
             royaltyTons: netWeight, 
-            royaltyM3: parseFloat(formData.royaltyM3) || 0,
             deductionPercentage: parseFloat(formData.deductionPercentage) || 0,
             sizeChangePercentage: parseFloat(formData.sizeChangePercentage) || 0,
             tonnage: netWeight,
@@ -320,12 +347,15 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
-        const updated = { ...formData, [id]: value };
+        const nextValue = id === 'vehicleNumber'
+            ? value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : value;
+        const updated = { ...formData, [id]: nextValue };
         if (id === 'dropOffPlace') {
-            updated.place = value;
+            updated.place = nextValue;
         }
         if (id === 'transporterName') {
-            const owner = transportOwnerProfiles.find(item => item.name === value);
+            const owner = transportOwnerProfiles.find(item => item.name === nextValue);
             updated.transportOwnerMobileNumber = owner?.contactNumber || '';
         }
         setFormData(updated);
@@ -361,8 +391,11 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     };
 
     const handleOneOffValueChange = (field: keyof typeof oneOffValues, value: string) => {
-        setOneOffValues(prev => ({ ...prev, [field]: value }));
-        setFormData(prev => ({ ...prev, [field]: value } as typeof prev));
+        const nextValue = field === 'vehicleNumber'
+            ? value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : value;
+        setOneOffValues(prev => ({ ...prev, [field]: nextValue }));
+        setFormData(prev => ({ ...prev, [field]: nextValue } as typeof prev));
     };
 
     const handleMasterFieldChange = (field: keyof typeof oneOffMaster, key: string, value: string | boolean) => {
@@ -421,18 +454,19 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">1. Enter Details</h3>
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                         <InputField label="Date" id="date" type="date" required error={errors.date} value={formData.date} onChange={handleInputChange}/>
-                        <InputField label="Pickup Place" id="pickupPlace" type="select" value={formData.pickupPlace} onChange={handleInputChange}>
-                            <option value="">Select Pickup</option>
+                        <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace} onChange={handleInputChange}/>
+                        <datalist id="pickupPlace-options">
                             {pickupSites.map(site => (
-                                <option key={site.id} value={site.name}>{site.name}</option>
+                                <option key={site.id} value={site.name} />
                             ))}
-                        </InputField>
-                        <InputField label="Drop-off Place" id="dropOffPlace" type="select" value={formData.dropOffPlace} onChange={handleInputChange}>
-                            <option value="">Select Drop-off</option>
+                        </datalist>
+                        <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace} onChange={handleInputChange}/>
+                        <datalist id="dropOffPlace-options">
                             {dropOffSites.map(site => (
-                                <option key={site.id} value={site.name}>{site.name}</option>
+                                <option key={site.id} value={site.name} />
                             ))}
-                        </InputField>
+
+                        </datalist>
                         <InputField
                             label="Vendor & Customer Name"
                             id="customer"
@@ -631,7 +665,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                         <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight} onChange={handleInputChange} error={errors.netWeight} required />
                         <InputField label="Deduction %" id="deductionPercentage" type="number" step="0.01" value={formData.deductionPercentage} onChange={handleInputChange} />
                         <InputField label="Royalty Number" id="royaltyNumber" type="text" placeholder="e.g., R-9876" value={formData.royaltyNumber} onChange={handleInputChange}/>
-                        <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" placeholder="e.g., 14" value={formData.royaltyM3} onChange={handleInputChange}/>
                         <InputField label="Size Change %" id="sizeChangePercentage" type="number" step="0.01" value={formData.sizeChangePercentage} onChange={handleInputChange} />
                     </div>
                 </div>

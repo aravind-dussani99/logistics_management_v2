@@ -146,6 +146,7 @@ if (!ATTACHMENTS_BUCKET) {
   app.use('/uploads', express.static(UPLOADS_ROOT));
 }
 app.get('/health', (_req, res) => {
+  // Minimal response for load balancer checks.
   res.json({ status: 'ok' });
 });
 
