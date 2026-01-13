@@ -156,7 +156,7 @@ const ReceivedTrips: React.FC = () => {
         return `${diffDays} days ago`;
     };
 
-    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Royalty M3', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
 
     if (canManageTrips) {
         return <Navigate to="/trips" replace />;
@@ -197,7 +197,6 @@ const ReceivedTrips: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.quarryName || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyOwnerName || '-'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyM3 ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.netWeight ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.pickupPlace || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.dropOffPlace || trip.place || '-'}</td>

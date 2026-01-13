@@ -127,7 +127,7 @@ interface DataContextType {
   updateCustomerRate: (customerId: string, rate: RateEntry) => Promise<void>;
   deleteCustomerRate: (customerId: string, rateId: string) => Promise<void>;
 
-  addSiteLocation: (site: Omit<SiteLocation, 'id'>) => Promise<void>;
+  addSiteLocation: (site: Omit<SiteLocation, 'id'>) => Promise<SiteLocation>;
   updateSiteLocation: (id: string, site: Omit<SiteLocation, 'id'>) => Promise<void>;
   deleteSiteLocation: (id: string) => Promise<void>;
 
@@ -736,6 +736,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addSiteLocation = async (site: Omit<SiteLocation, 'id'>) => {
     const newSite = await siteLocationApi.create(site);
     setSiteLocations(prev => [...prev, newSite]);
+    return newSite;
   };
   const updateSiteLocation = async (id: string, site: Omit<SiteLocation, 'id'>) => {
     const updatedSite = await siteLocationApi.update(id, site);

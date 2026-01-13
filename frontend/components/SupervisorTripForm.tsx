@@ -65,6 +65,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         addRoyaltyOwnerProfile,
         addTransportOwnerProfile,
         addVehicleMaster,
+        addSiteLocation,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -82,8 +83,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         grossWeight: 0,
         netWeight: 0,
         royaltyTons: 0,
-        royaltyM3: 0,
     });
+    const [netWeightManual, setNetWeightManual] = useState(false);
     const [files, setFiles] = useState<Record<'ewayBillUpload' | 'invoiceDCUpload' | 'waymentSlipUpload' | 'royaltyUpload' | 'taxInvoiceUpload' | 'endWaymentSlipUpload', TripUploadFile[]>>({
         ewayBillUpload: [],
         invoiceDCUpload: [],
@@ -217,9 +218,17 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value, type } = e.target;
-        let newFormData = { ...formData, [id]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value };
+        let nextValue: string | number = type === 'number' ? (value === '' ? '' : parseFloat(value)) : value;
+        if (id === 'vehicleNumber' && typeof nextValue === 'string') {
+            nextValue = nextValue.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        }
+        let newFormData = { ...formData, [id]: nextValue };
 
-        if (id === 'grossWeight' || id === 'emptyWeight') {
+        if (id === 'netWeight') {
+            setNetWeightManual(value !== '');
+        }
+
+        if ((id === 'grossWeight' || id === 'emptyWeight') && !netWeightManual) {
             const gross = id === 'grossWeight' ? parseFloat(value) : newFormData.grossWeight;
             const empty = id === 'emptyWeight' ? parseFloat(value) : newFormData.emptyWeight;
             newFormData.netWeight = Math.max(0, (gross || 0) - (empty || 0));
@@ -232,11 +241,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         }
         
         if (id === 'dropOffPlace') {
-            newFormData.place = value;
+            newFormData.place = String(nextValue);
         }
 
         if (id === 'vehicleNumber') {
-            const vehicle = vehicles.find(v => v.vehicleNumber === value);
+            const vehicle = vehicles.find(v => v.vehicleNumber === nextValue);
             newFormData.transporterName = vehicle?.ownerName || '';
             const ownerMatch = transportOwnerProfiles.find(item => item.name === newFormData.transporterName);
             newFormData.transportOwnerMobileNumber = ownerMatch?.contactNumber || '';
@@ -280,6 +289,35 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         setIsSubmitting(true);
         try {
             if (mode === 'enter') {
+                const createdSites = new Map<string, string>();
+                const normalizeSiteName = (value?: string) => (value || '').trim();
+                const findSiteId = (name: string) => {
+                    const key = name.toLowerCase();
+                    return createdSites.get(key) || siteLocations.find(site => site.name.toLowerCase() === key)?.id || '';
+                };
+                const ensureSiteLocation = async (name: string, type: 'pickup' | 'drop-off' | 'both') => {
+                    if (!name) return;
+                    const existingId = findSiteId(name);
+                    if (existingId) return;
+                    const newSite = await addSiteLocation({
+                        name,
+                        type,
+                        address: '',
+                        pointOfContact: '',
+                        remarks: '',
+                    });
+                    createdSites.set(name.toLowerCase(), newSite.id);
+                };
+
+                const pickupName = normalizeSiteName(formData.pickupPlace);
+                const dropOffName = normalizeSiteName(formData.dropOffPlace);
+                if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
+                    await ensureSiteLocation(pickupName, 'both');
+                } else {
+                    await ensureSiteLocation(pickupName, 'pickup');
+                    await ensureSiteLocation(dropOffName, 'drop-off');
+                }
+
                 const customerName = (formData.customer || '').trim();
                 const quarryName = (formData.quarryName || '').trim();
                 const royaltyOwnerName = (formData.royaltyOwnerName || '').trim();
@@ -310,10 +348,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 try {
                     if (customerIsOneOff && customerName) {
                         const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId =
-                            siteLocations.find(site => site.name === formData.dropOffPlace)?.id
-                            || siteLocations.find(site => site.name === formData.pickupPlace)?.id
-                            || '';
+                        const siteLocationId = findSiteId(dropOffName) || findSiteId(pickupName);
                         if (merchantTypeId && siteLocationId) {
                             await addVendorCustomer({
                                 merchantTypeId,
@@ -331,10 +366,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     }
                     if (quarryIsOneOff && quarryName) {
                         const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId =
-                            siteLocations.find(site => site.name === formData.pickupPlace)?.id
-                            || siteLocations.find(site => site.name === formData.dropOffPlace)?.id
-                            || '';
+                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
                         if (merchantTypeId && siteLocationId) {
                         await addMineQuarry({
                                 merchantTypeId,
@@ -352,10 +384,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     }
                     if (royaltyIsOneOff && royaltyOwnerName) {
                         const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId =
-                            siteLocations.find(site => site.name === formData.pickupPlace)?.id
-                            || siteLocations.find(site => site.name === formData.dropOffPlace)?.id
-                            || '';
+                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
                         if (merchantTypeId && siteLocationId) {
                         await addRoyaltyOwnerProfile({
                                 merchantTypeId,
@@ -373,10 +402,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     }
                     if (transportIsOneOff && transportOwnerName) {
                         const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId =
-                            siteLocations.find(site => site.name === formData.pickupPlace)?.id
-                            || siteLocations.find(site => site.name === formData.dropOffPlace)?.id
-                            || '';
+                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
                         if (merchantTypeId && siteLocationId) {
                         await addTransportOwnerProfile({
                                 merchantTypeId,
@@ -502,14 +528,14 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">Enter New Trip</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                              <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} required />
-                            <InputField label="Pickup Place" id="pickupPlace" type="select" value={formData.pickupPlace || ''} onChange={handleInputChange} required>
-                                <option value="">Select Pickup</option>
-                                {pickupSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
-                            </InputField>
-                            <InputField label="Drop-off Place" id="dropOffPlace" type="select" value={formData.dropOffPlace || ''} onChange={handleInputChange} required>
-                                <option value="">Select Drop-off</option>
-                                {dropOffSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
-                            </InputField>
+                            <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace || ''} onChange={handleInputChange} required />
+                            <datalist id="pickupPlace-options">
+                                {pickupSites.map(site => <option key={site.id} value={site.name} />)}
+                            </datalist>
+                            <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace || ''} onChange={handleInputChange} required />
+                            <datalist id="dropOffPlace-options">
+                                {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
+                            </datalist>
                              <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} />
                             <div className="col-span-1">
                                 <InputField
@@ -564,7 +590,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             </div>
                             <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} />
                             <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} />
-                            <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" value={formData.royaltyM3} onChange={handleInputChange} />
 
                             <div className="col-span-1">
                                 <InputField
@@ -600,7 +625,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             
                             <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} />
                             <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} />
-                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={safeToFixed(formData.netWeight)} isReadOnly={true} />
+                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight ?? ''} onChange={handleInputChange} />
                         </div>
                         {isPrivileged && (
                             <div className="mt-8">
@@ -679,7 +704,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                 <div><strong>Mine & Quarry Name:</strong> {trip?.quarryName || '-'}</div>
                                 <div><strong>Material Type:</strong> {trip?.material || '-'}</div>
                                 <div><strong>Royalty Owner Name:</strong> {trip?.royaltyOwnerName || '-'}</div>
-                                <div><strong>Royalty M3:</strong> {trip?.royaltyM3 ?? '-'}</div>
                                 <div><strong>Net Weight (Tons):</strong> {trip?.netWeight ?? '-'}</div>
                                 <div><strong>Pickup Place:</strong> {trip?.pickupPlace || '-'}</div>
                                 <div><strong>Drop-off Place:</strong> {trip?.dropOffPlace || trip?.place || '-'}</div>
@@ -710,14 +734,14 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">{mode === 'edit' ? 'Edit' : 'View'} Trip #{trip?.id}</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                              <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} isReadOnly={isReadOnly} required />
-                             <InputField label="Pickup Place" id="pickupPlace" type="select" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required>
-                                <option value="">Select Pickup</option>
-                                {pickupSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
-                            </InputField>
-                             <InputField label="Drop-off Place" id="dropOffPlace" type="select" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required>
-                                <option value="">Select Drop-off</option>
-                                {dropOffSites.map(site => <option key={site.id} value={site.name}>{site.name}</option>)}
-                            </InputField>
+                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required />
+                             <datalist id="pickupPlace-options-edit">
+                                 {pickupSites.map(site => <option key={site.id} value={site.name} />)}
+                             </datalist>
+                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required />
+                             <datalist id="dropOffPlace-options-edit">
+                                 {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
+                             </datalist>
                              <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             {isReadOnly ? (
                                 <InputField label="Vendor & Customer Name" id="customer" type="text" value={formData.customer} isReadOnly={isReadOnly} required />
@@ -784,7 +808,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             )}
                             <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" value={formData.royaltyM3} onChange={handleInputChange} isReadOnly={isReadOnly} />
 
                             {isReadOnly ? (
                                 <InputField label="Vehicle Number" id="vehicleNumber" type="text" value={formData.vehicleNumber} isReadOnly={isReadOnly} />
@@ -828,7 +851,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
 
                             <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={safeToFixed(formData.netWeight)} isReadOnly={true} />
+                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
                             
                             <InputField label="Vendor Name (Quarry Owner)" id="vendorName" type="text" value={formData.vendorName} isReadOnly={true} />
 
