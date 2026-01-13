@@ -465,6 +465,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                             {dropOffSites.map(site => (
                                 <option key={site.id} value={site.name} />
                             ))}
+
                         </datalist>
                         <InputField
                             label="Vendor & Customer Name"

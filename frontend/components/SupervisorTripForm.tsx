@@ -317,7 +317,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     await ensureSiteLocation(pickupName, 'pickup');
                     await ensureSiteLocation(dropOffName, 'drop-off');
                 }
-
                 const customerName = (formData.customer || '').trim();
                 const quarryName = (formData.quarryName || '').trim();
                 const royaltyOwnerName = (formData.royaltyOwnerName || '').trim();

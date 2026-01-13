@@ -162,6 +162,10 @@ const ReceivedTrips: React.FC = () => {
         return <Navigate to="/trips" replace />;
     }
 
+    if (canManageTrips) {
+        return <Navigate to="/trips" replace />;
+    }
+
     return (
         <div className="relative">
             <PageHeader
