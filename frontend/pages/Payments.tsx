@@ -18,17 +18,33 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
 };
 
 const Payments: React.FC = () => {
-  const { payments, addPayment, updatePayment, deletePayment, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
+  const data = useData();
+  const {
+    payments,
+    addPayment,
+    updatePayment,
+    deletePayment,
+    vendorCustomers,
+    mineQuarries,
+    royaltyOwnerProfiles,
+    transportOwnerProfiles,
+    loadPayments,
+    loadVendorCustomers,
+    loadMineQuarries,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
+  } = data;
   const { openModal, closeModal } = useUI();
   const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', type: 'all', query: '' });
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    loadPayments();
-    loadVendorCustomers();
-    loadMineQuarries();
-    loadRoyaltyOwnerProfiles();
-    loadTransportOwnerProfiles();
+    loadPayments?.();
+    loadVendorCustomers?.();
+    loadMineQuarries?.();
+    loadRoyaltyOwnerProfiles?.();
+    loadTransportOwnerProfiles?.();
   }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
   const ratePartyNameById = useMemo(() => {

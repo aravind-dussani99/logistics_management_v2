@@ -9,6 +9,7 @@ interface SupervisorTripFormProps {
     mode: 'enter' | 'upload' | 'edit' | 'view';
     trip?: TripType;
     onClose: () => void;
+    onSubmitSuccess?: () => void;
 }
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, isReadOnly?: boolean, children?: React.ReactNode }> = ({ label, isReadOnly, ...props }) => {
@@ -56,7 +57,7 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
     );
 };
 
-const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onClose }) => {
+const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onClose, onSubmitSuccess }) => {
     const {
         addTrip,
         updateTrip,
@@ -468,6 +469,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 });
             }
             onClose();
+            onSubmitSuccess?.();
         } catch (error) {
             console.error("Failed to save trip", error);
         } finally {

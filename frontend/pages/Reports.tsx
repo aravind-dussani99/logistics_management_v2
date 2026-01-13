@@ -1,22 +1,25 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import { formatDateDisplay } from '../utils';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
-import { Trip, Advance, DailyExpense } from '../types';
+import { Trip, Advance, DailyExpense, Role } from '../types';
 import { formatCurrency } from '../utils';
 
 type ReportType = 'trips' | 'advances' | 'expenses';
 const ITEMS_PER_PAGE = 20;
 
-const Reports: React.FC = () => {
+const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports' }) => {
+    const { currentUser } = useAuth();
     const { trips, advances, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadAdvances } = useData();
     const [reportType, setReportType] = useState<ReportType>('trips');
     const [filters, setFilters] = useState<Filters>({});
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
+    const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
 
     useEffect(() => {
         loadTrips();
@@ -25,14 +28,20 @@ const Reports: React.FC = () => {
 
     useEffect(() => {
         const fetchAllExpenses = async () => {
-            const supervisors = await getSupervisorAccounts();
-            const all = await Promise.all(
-                supervisors.map(name => getDailyExpenses(name).then(res => res.expenses))
-            );
-            setAllExpenses(all.flat());
-        }
+            if (!currentUser) return;
+            if (canViewAll) {
+                const supervisors = await getSupervisorAccounts();
+                const all = await Promise.all(
+                    supervisors.map(name => getDailyExpenses(name).then(res => res.expenses))
+                );
+                setAllExpenses(all.flat());
+            } else {
+                const { expenses } = await getDailyExpenses(currentUser.name);
+                setAllExpenses(expenses);
+            }
+        };
         fetchAllExpenses();
-    }, [getDailyExpenses, getSupervisorAccounts, refreshKey]);
+    }, [getDailyExpenses, getSupervisorAccounts, refreshKey, currentUser, canViewAll]);
 
     const handleExport = () => {
         let headers: string[] = [];
@@ -138,8 +147,8 @@ const Reports: React.FC = () => {
 
     return (
          <div className="relative">
-             <PageHeader
-                title="Consolidated Reports"
+            <PageHeader
+                title={mode === 'dashboard' ? 'Dashboard' : 'Consolidated Reports'}
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now

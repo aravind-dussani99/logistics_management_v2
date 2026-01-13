@@ -37,6 +37,7 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
 interface AdvanceFormProps {
     advance?: Advance;
     onClose: () => void;
+    onSubmitSuccess?: () => void;
 }
 
 const RATE_PARTY_LABELS: { value: RatePartyType; label: string }[] = [
@@ -46,7 +47,7 @@ const RATE_PARTY_LABELS: { value: RatePartyType; label: string }[] = [
     { value: 'transport-owner', label: 'Transport & Owner' },
 ];
 
-const AdvanceForm: React.FC<AdvanceFormProps> = ({ advance, onClose }) => {
+const AdvanceForm: React.FC<AdvanceFormProps> = ({ advance, onClose, onSubmitSuccess }) => {
     const { trips, accounts, addAdvance, updateAdvance, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
     const [entryType, setEntryType] = useState<'trip' | 'manual'>(advance?.tripId ? 'trip' : 'manual');
     const [selectedTripId, setSelectedTripId] = useState<string>(advance?.tripId?.toString() || '');
@@ -148,6 +149,7 @@ const AdvanceForm: React.FC<AdvanceFormProps> = ({ advance, onClose }) => {
                 await addAdvance(payload);
             }
             onClose();
+            onSubmitSuccess?.();
         } catch (error) {
             console.error("Failed to save advance", error);
         } finally {
