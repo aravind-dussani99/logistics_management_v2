@@ -19,7 +19,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       items: [
         { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST] },
         { to: '/trips', icon: 'bus-outline', name: 'Trip Management', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips', roles: [Role.DROPOFF_SUPERVISOR] },
         { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
@@ -78,7 +77,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const supervisorItems = isDropOffSupervisor
     ? [
         { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
-        { to: '/received', icon: 'checkbox-outline', name: 'Received Trips' },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
         { to: '/site-expenses', icon: 'wallet-outline', name: 'Site Expenses' },
         { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },

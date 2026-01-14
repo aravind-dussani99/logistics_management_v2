@@ -19,7 +19,11 @@ const DataTable = <T,>({ title, headers, data, renderRow }: DataTableProps<T>) =
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
               {headers.map(header => (
-                <th key={header} scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th
+                  key={header}
+                  scope="col"
+                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider${header.toLowerCase() === 'actions' ? ' no-print' : ''}`}
+                >
                   {header}
                 </th>
               ))}

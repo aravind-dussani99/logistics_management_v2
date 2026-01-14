@@ -489,14 +489,6 @@ app.post('/api/users', async (req, res) => {
     res.status(400).json({ error: 'Invalid role.' });
     return;
   }
-  if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
-    res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
-    return;
-  }
-  if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
-    res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
-    return;
-  }
   try {
     const passwordHash = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
@@ -577,14 +569,6 @@ app.put('/api/users/:id', async (req, res) => {
       if (role && !isSupervisorRole(String(role))) {
         data.pickupLocationId = null;
         data.dropOffLocationId = null;
-      }
-      if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
-        res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
-        return;
-      }
-      if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
-        res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
-        return;
       }
       if (password) {
         data.passwordHash = await bcrypt.hash(String(password), 10);
@@ -2002,18 +1986,7 @@ app.get('/api/daily-expenses/export', async (req, res) => {
 app.get('/api/trips', async (req, res) => {
   try {
     const where = {};
-    if (req.user?.role === 'PICKUP_SUPERVISOR') {
-      if (!req.user.pickupLocationName) {
-        return res.json([]);
-      }
-      where.pickupPlace = req.user.pickupLocationName;
-    }
-    if (req.user?.role === 'DROPOFF_SUPERVISOR') {
-      if (!req.user.dropOffLocationName) {
-        return res.json([]);
-      }
-      where.dropOffPlace = req.user.dropOffLocationName;
-    }
+    // No pickup/dropoff restriction for supervisors at this stage.
     const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
     const hydrated = await Promise.all(trips.map(async (trip) => {
       const updated = { ...trip };
@@ -2142,11 +2115,6 @@ app.post('/api/trips', async (req, res) => {
   if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName) {
-    if (data.pickupPlace && data.pickupPlace !== req.user.pickupLocationName) {
-      return res.status(403).json({ error: 'Pickup location mismatch.' });
-    }
-  }
   if (!data.date || !data.customer) {
     return res.status(400).json({ error: 'Date and customer are required.' });
   }
@@ -2155,9 +2123,7 @@ app.post('/api/trips', async (req, res) => {
       data: {
         date: new Date(data.date),
         place: data.place || '',
-        pickupPlace: req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName
-          ? req.user.pickupLocationName
-          : (data.pickupPlace || ''),
+        pickupPlace: data.pickupPlace || '',
         dropOffPlace: data.dropOffPlace || '',
         vendorName: data.vendorName || '',
         vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
@@ -2226,12 +2192,6 @@ app.put('/api/trips/:id', async (req, res) => {
     if (!existingTrip) {
       res.status(404).json({ error: 'Trip not found' });
       return;
-    }
-    if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName && existingTrip.pickupPlace !== req.user.pickupLocationName) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    if (req.user?.role === 'DROPOFF_SUPERVISOR' && req.user.dropOffLocationName && existingTrip.dropOffPlace !== req.user.dropOffLocationName) {
-      return res.status(403).json({ error: 'Forbidden' });
     }
     if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
       return res.status(403).json({ error: 'Forbidden' });

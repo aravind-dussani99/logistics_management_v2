@@ -24,7 +24,7 @@ const SupervisorDailyExpensesForm: React.FC<{ defaultSiteExpense?: boolean; titl
   }, [currentUser, getDailyExpenses]);
 
   const handleReset = () => setFormKey(prev => prev + 1);
-  const handleSuccess = () => navigate('/dashboard');
+  const handleSuccess = () => navigate('/dashboard', { state: { reportType: defaultSiteExpense ? 'site-expenses' : 'expenses' } });
 
   const handleSave = async (data: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>) => {
     const payload = {

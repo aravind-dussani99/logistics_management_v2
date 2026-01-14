@@ -19,7 +19,7 @@ const SupervisorAdvancesForm: React.FC = () => {
   }, [loadTrips, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles]);
 
   const handleReset = () => setFormKey(prev => prev + 1);
-  const handleSuccess = () => navigate('/dashboard');
+  const handleSuccess = () => navigate('/dashboard', { state: { reportType: 'advances' } });
 
   return (
     <div className="relative">

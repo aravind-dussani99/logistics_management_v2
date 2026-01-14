@@ -9,7 +9,7 @@ const SupervisorEnterTrips: React.FC = () => {
   const [filters, setFilters] = useState({});
 
   const handleReset = () => setFormKey(prev => prev + 1);
-  const handleSuccess = () => navigate('/dashboard');
+  const handleSuccess = () => navigate('/dashboard', { state: { reportType: 'trips' } });
 
   return (
     <div className="relative">

@@ -436,6 +436,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 const tripPayload = {
                     ...formData,
                     place: formData.place || formData.dropOffPlace || '',
+                    pickupPlace: formData.pickupPlace,
                     customer: customerName || formData.customer,
                     vendorCustomerIsOneOff: customerIsOneOff,
                     quarryName: quarryName || formData.quarryName,
@@ -528,7 +529,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                      <div>
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">Enter New Trip</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-                             <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} required />
+                            <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} required />
                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace || ''} onChange={handleInputChange} required />
                             <datalist id="pickupPlace-options">
                                 {pickupSites.map(site => <option key={site.id} value={site.name} />)}
