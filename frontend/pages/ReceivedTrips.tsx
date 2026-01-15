@@ -32,10 +32,7 @@ const ReceivedTrips: React.FC = () => {
     useEffect(() => {
         const filtered = trips.filter(t => {
             const status = (t.status || '').toLowerCase();
-            if (!['in transit', 'pending validation', 'completed'].includes(status)) return false;
-            if (!currentUser?.dropOffLocationName) return true;
-            const tripLocation = t.dropOffPlace || t.place;
-            return tripLocation === currentUser.dropOffLocationName;
+            return ['in transit', 'pending validation', 'completed', 'validated', 'trip completed'].includes(status);
         })
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setInTransitTrips(filtered);
@@ -76,7 +73,7 @@ const ReceivedTrips: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (message) => {
                     await updateTrip(trip.id, {
-                        status: 'completed',
+                        status: 'trip completed',
                         validationComments: message || '',
                         validatedBy: currentUser?.name || currentUser?.username || '',
                         validatedAt: new Date().toISOString(),
@@ -207,7 +204,7 @@ const ReceivedTrips: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                     {(() => {
                                         const status = (trip.status || '').toLowerCase();
-                                        if (status === 'completed') {
+                                        if (status === 'completed' || status === 'validated' || status === 'trip completed') {
                                             return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
                                         }
                                         if (status === 'pending validation') {
@@ -222,27 +219,14 @@ const ReceivedTrips: React.FC = () => {
                                         <>
                                             <button onClick={() => handleReceive(trip)} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
                                             <button
-                                                onClick={() => {
-                                                    openModal('Request Update', (
-                                                        <RequestDialog
-                                                            title={`Request update for Trip #${trip.id}`}
-                                                            confirmLabel="Send Request"
-                                                            onCancel={closeModal}
-                                                            onConfirm={async (reason) => {
-                                                                await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
-                                                                closeModal();
-                                                            }}
-                                                        />
-                                                    ));
-                                                }}
-                                                className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                disabled={trip.pendingRequestType === 'update'}
+                                                onClick={() => handleSendBack(trip, 'pickup')}
+                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
                                             >
-                                                {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                                Send Back to Update
                                             </button>
                                         </>
                                     )}
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && (trip.status || '').toLowerCase() !== 'completed' && (
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && !['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
                                         <button
                                             onClick={() => {
                                                 openModal('Request Update', (
@@ -263,7 +247,7 @@ const ReceivedTrips: React.FC = () => {
                                             {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
                                         </button>
                                     )}
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() === 'completed' && (
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && ['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
                                         <button
                                             onClick={() => handleRaiseIssue(trip)}
                                             className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"

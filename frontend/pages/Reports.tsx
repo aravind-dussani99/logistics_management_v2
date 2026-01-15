@@ -27,22 +27,22 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
     const { trips, advances, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadAdvances, updateTrip, deleteTrip, deleteAdvance, updateDailyExpense, deleteDailyExpense } = useData();
-    const [reportType, setReportType] = useState<ReportType>('trips');
+    const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
+    const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+    const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
+    const [reportType, setReportType] = useState<ReportType>(isDropoffSupervisor ? 'received' : 'trips');
     const [filters, setFilters] = useState<Filters>({});
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
     const [isPrinting, setIsPrinting] = useState(false);
-    const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
-    const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
-
     useEffect(() => {
         const state = location.state as { reportType?: ReportType } | null;
         if (state?.reportType) {
             setReportType(state.reportType);
             return;
         }
-        if (mode === 'dashboard' && isDropoffSupervisor) {
-            setReportType('received');
+        if (mode === 'dashboard') {
+            setReportType(isDropoffSupervisor ? 'received' : 'trips');
         }
     }, [location.state, mode, isDropoffSupervisor]);
 
@@ -144,7 +144,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             if (filters.dateTo && item.date > filters.dateTo) return false;
             if (reportType === 'received') {
                 const status = (item.status || '').toLowerCase();
-                if (!['in transit', 'pending validation', 'completed', 'validated'].includes(status)) return false;
+                if (!['in transit', 'pending validation', 'completed', 'validated', 'trip completed'].includes(status)) return false;
             }
             return true;
         }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -182,6 +182,66 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         ));
     };
 
+    const handleRequestUpdate = (trip: Trip, label = 'Request Update') => {
+        if (!currentUser) return;
+        openModal(label, (
+            <RequestDialog
+                title={`${label} for Trip #${trip.id}`}
+                confirmLabel="Send Request"
+                onCancel={closeModal}
+                onConfirm={async (reason) => {
+                    await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    closeModal();
+                }}
+            />
+        ));
+    };
+
+    const handleSendBackToPickup = (trip: Trip) => {
+        if (!currentUser) return;
+        openModal('Send Back to Pick-up Supervisor', (
+            <RequestDialog
+                title={`Send back to Pick-up Supervisor`}
+                label="Reason"
+                confirmLabel="Send Back"
+                onCancel={closeModal}
+                onConfirm={async (message) => {
+                    await updateTrip(trip.id, {
+                        status: 'pending upload',
+                        pendingRequestType: 'sent-back-dropoff',
+                        pendingRequestMessage: message || '',
+                        pendingRequestBy: currentUser.name,
+                        pendingRequestRole: currentUser.role,
+                        pendingRequestAt: new Date().toISOString(),
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} sent back to Pick-up Supervisor. ${message || ''}`.trim(),
+                        type: 'alert',
+                        targetRole: Role.PICKUP_SUPERVISOR,
+                        targetUser: trip.createdBy || null,
+                        tripId: trip.id,
+                        requestType: 'sent-back-dropoff',
+                        requesterName: currentUser.name,
+                        requesterRole: currentUser.role,
+                        requestMessage: message || '',
+                    });
+                    await notificationApi.create({
+                        message: `Trip #${trip.id} sent back to Pick-up Supervisor. ${message || ''}`.trim(),
+                        type: 'alert',
+                        targetRole: Role.ADMIN,
+                        targetUser: null,
+                        tripId: trip.id,
+                        requestType: 'sent-back-dropoff',
+                        requesterName: currentUser.name,
+                        requesterRole: currentUser.role,
+                        requestMessage: message || '',
+                    });
+                    closeModal();
+                }}
+            />
+        ));
+    };
+
     const handleValidate = (trip: Trip) => {
         openModal('Validate Trip', (
             <RequestDialog
@@ -191,7 +251,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 onCancel={closeModal}
                 onConfirm={async (message) => {
                     await updateTrip(trip.id, {
-                        status: 'completed',
+                        status: 'trip completed',
                         validationComments: message || '',
                         validatedBy: currentUser?.name || currentUser?.username || '',
                         validatedAt: new Date().toISOString(),
@@ -201,17 +261,31 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         pendingRequestRole: null,
                         pendingRequestAt: null,
                     });
-                    await notificationApi.create({
+                    const notifications = [
+                        {
+                            targetRole: Role.PICKUP_SUPERVISOR,
+                            targetUser: trip.createdBy || null,
+                        },
+                        {
+                            targetRole: Role.DROPOFF_SUPERVISOR,
+                            targetUser: trip.receivedBy || null,
+                        },
+                        {
+                            targetRole: Role.ADMIN,
+                            targetUser: null,
+                        },
+                    ];
+                    await Promise.all(notifications.map(target => notificationApi.create({
                         message: `Trip #${trip.id} validated. ${message || ''}`.trim(),
                         type: 'info',
-                        targetRole: Role.ADMIN,
-                        targetUser: null,
+                        targetRole: target.targetRole,
+                        targetUser: target.targetUser,
                         tripId: trip.id,
                         requestType: 'validated',
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
-                    });
+                    })));
                     closeModal();
                 }}
             />
@@ -298,34 +372,73 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{t.dropOffPlace || t.place || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{t.status}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
-                                    <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (t.status || '').toLowerCase() === 'in transit' && (
-                                        <>
-                                            <button onClick={() => handleReceive(t)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
-                                            <button
-                                                onClick={() => {
-                                                    openModal('Request Update', (
-                                                        <RequestDialog
-                                                            title={`Request update for Trip #${t.id}`}
-                                                            confirmLabel="Send Request"
-                                                            onCancel={closeModal}
-                                                            onConfirm={async (reason) => {
-                                                                await tripApi.requestUpdate(t.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
-                                                                closeModal();
-                                                            }}
-                                                        />
-                                                    ));
-                                                }}
-                                                className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'update') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                disabled={t.pendingRequestType === 'update'}
-                                            >
-                                                {t.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                            </button>
-                                        </>
-                                    )}
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (t.status || '').toLowerCase() === 'completed' && (
-                                        <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
-                                    )}
+                                    {(() => {
+                                        const status = (t.status || '').toLowerCase();
+                                        const isCompleted = ['completed', 'validated', 'trip completed'].includes(status);
+                                        const isPendingUpload = status === 'pending upload' || status === 'pending';
+                                        const isInTransit = status === 'in transit';
+                                        const isPendingValidation = status === 'pending validation';
+                                        if (isPickupSupervisor) {
+                                            return (
+                                                <>
+                                                    <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                    {isPendingUpload && (
+                                                        <>
+                                                            <button onClick={() => openModal(`Upload Trip #${t.id}`, <SupervisorTripForm mode="upload" trip={t} onClose={closeModal} onSubmitSuccess={loadTrips} />)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Upload</button>
+                                                            <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                                                            <button onClick={() => deleteTrip(t.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
+                                                        </>
+                                                    )}
+                                                    {!isPendingUpload && !isCompleted && (
+                                                        <button
+                                                            onClick={() => handleRequestUpdate(t)}
+                                                            className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'update') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                                            disabled={t.pendingRequestType === 'update'}
+                                                        >
+                                                            {t.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                                        </button>
+                                                    )}
+                                                    {isCompleted && (
+                                                        <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
+                                                    )}
+                                                </>
+                                            );
+                                        }
+                                        if (isDropoffSupervisor) {
+                                            return (
+                                                <>
+                                                    <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                    {isInTransit && (
+                                                        <>
+                                                            <button onClick={() => handleReceive(t)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
+                                                            <button
+                                                                onClick={() => handleSendBackToPickup(t)}
+                                                                className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'sent-back-dropoff') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                                                disabled={t.pendingRequestType === 'sent-back-dropoff'}
+                                                            >
+                                                                {t.pendingRequestType === 'sent-back-dropoff' ? 'Sent Back' : 'Send Back to Update'}
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {isPendingValidation && (
+                                                        <button
+                                                            onClick={() => handleRequestUpdate(t)}
+                                                            className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'update') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                                            disabled={t.pendingRequestType === 'update'}
+                                                        >
+                                                            {t.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                                        </button>
+                                                    )}
+                                                    {isCompleted && (
+                                                        <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
+                                                    )}
+                                                </>
+                                            );
+                                        }
+                                        return (
+                                            <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                        );
+                                    })()}
                                     {canManageTrips && (
                                         <>
                                             <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
@@ -439,7 +552,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                 {mode === 'dashboard' && isDropoffSupervisor ? (
                                     <option value="received">Trips Received</option>
                                 ) : (
-                                    <option value="trips">Trips Added</option>
+                                    <option value="trips">Trips added</option>
                                 )}
                                 <option value="expenses">Daily Expenses</option>
                                 <option value="site-expenses">Site Expenses</option>

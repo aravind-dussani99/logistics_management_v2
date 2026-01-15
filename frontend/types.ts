@@ -372,15 +372,15 @@ export interface MineQuarryData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface VendorCustomerData {
@@ -388,15 +388,15 @@ export interface VendorCustomerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface RoyaltyOwnerData {
@@ -404,15 +404,15 @@ export interface RoyaltyOwnerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface TransportOwnerData {
@@ -420,15 +420,15 @@ export interface TransportOwnerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface TransportOwnerVehicle {

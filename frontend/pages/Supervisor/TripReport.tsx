@@ -105,21 +105,21 @@ const SupervisorTripReport: React.FC = () => {
         }
     };
 
-    const handleRequestDelete = async (trip: Trip) => {
+    const handleRequestUpdate = async (trip: Trip) => {
         if (!currentUser) return;
-        openModal('Request Delete', (
+        openModal('Request Update', (
             <RequestDialog
-                title={`Request delete for Trip #${trip.id}`}
+                title={`Request update for Trip #${trip.id}`}
                 confirmLabel="Send Request"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
                     try {
-                        await tripApi.requestDelete(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
-                        setRequestMessage('Delete request sent to admin for approval.');
+                        await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        setRequestMessage('Update request sent to admin for review.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } catch (error) {
-                        console.error('Failed to request delete', error);
-                        setRequestMessage('Failed to send delete request. Please try again.');
+                        console.error('Failed to request update', error);
+                        setRequestMessage('Failed to send update request. Please try again.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } finally {
                         closeModal();
@@ -159,7 +159,10 @@ const SupervisorTripReport: React.FC = () => {
             case 'pending upload': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending Upload</span>;
             case 'in transit': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">In Transit</span>;
             case 'pending validation': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Pending Validation</span>;
-            case 'completed': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
+            case 'completed':
+            case 'trip completed':
+            case 'validated':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
             default: return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{status}</span>
         }
     }
@@ -226,6 +229,7 @@ const SupervisorTripReport: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                 {trip.status === 'pending upload' ? (
                                     <>
+                                        <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                                         <button onClick={() => handleUpload(trip)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Upload</button>
                                         <button onClick={() => handleEdit(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Edit</button>
                                         <button onClick={() => handleDelete(trip.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
@@ -233,16 +237,26 @@ const SupervisorTripReport: React.FC = () => {
                                 ) : trip.status === 'in transit' ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                        <button onClick={() => handleEdit(trip)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                         <button
-                                            onClick={() => handleRequestDelete(trip)}
-                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'delete' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                            disabled={trip.pendingRequestType === 'delete'}
+                                            onClick={() => handleRequestUpdate(trip)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'update'}
                                         >
-                                            {trip.pendingRequestType === 'delete' ? 'Delete Requested' : 'Request Delete'}
+                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
                                         </button>
                                     </>
-                                ) : trip.status === 'completed' ? (
+                                ) : trip.status === 'pending validation' ? (
+                                    <>
+                                        <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                        <button
+                                            onClick={() => handleRequestUpdate(trip)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'update'}
+                                        >
+                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                        </button>
+                                    </>
+                                ) : ['completed', 'validated', 'trip completed'].includes(trip.status) ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                                         <button onClick={() => handleRaiseIssue(trip)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>

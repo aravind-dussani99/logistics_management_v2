@@ -395,7 +395,7 @@ const signGsUrl = async (value) => {
     return signedUrl;
   } catch (error) {
     console.warn('Failed to sign attachment URL', error);
-    return value;
+    return toPublicUrl(value);
   }
 };
 
@@ -2631,10 +2631,9 @@ const validateMerchantProfile = (body) => {
   const {
     merchantTypeId,
     name,
-    siteLocationId,
   } = body || {};
-  if (!merchantTypeId || !name || !siteLocationId) {
-    return 'Merchant type, name, and site location are required.';
+  if (!merchantTypeId || !name) {
+    return 'Merchant type and name are required.';
   }
   return '';
 };

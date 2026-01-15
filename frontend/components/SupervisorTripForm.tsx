@@ -4,6 +4,7 @@ import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role, TripRateOve
 import { safeToFixed } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import { tripApi } from '../services/tripApi';
+import { notificationApi } from '../services/notificationApi';
 
 interface SupervisorTripFormProps {
     mode: 'enter' | 'upload' | 'edit' | 'view';
@@ -41,7 +42,11 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
     const inputId = id || label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'file';
     return (
         <div className="col-span-1">
-            <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            {isReadOnly ? (
+                <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+            ) : (
+                <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+            )}
             {isReadOnly ? (
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 truncate">{files && files.length > 0 ? `${files.length} file(s)` : "Not uploaded"}</p>
             ) : (
@@ -468,6 +473,20 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     rateOverrideEnabled: rateOverrideEnabled,
                     rateOverride: rateOverrideEnabled ? rateOverride : null,
                 });
+                if (mode === 'upload') {
+                    const rolesToNotify = [Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT];
+                    await Promise.all(rolesToNotify.map(targetRole => notificationApi.create({
+                        message: `Trip #${trip!.id} is now in transit.`,
+                        type: 'info',
+                        targetRole,
+                        targetUser: null,
+                        tripId: trip!.id,
+                        requestType: 'in-transit',
+                        requesterName: currentUser?.name || currentUser?.username || 'Supervisor',
+                        requesterRole: currentUser?.role || Role.PICKUP_SUPERVISOR,
+                        requestMessage: '',
+                    })));
+                }
             }
             onClose();
             onSubmitSuccess?.();

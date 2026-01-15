@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Trip, TripUploadFile } from '../types';
+import { Trip, TripUploadFile, Role } from '../types';
 import { formatDateDisplay, safeToFixed } from '../utils';
+import { notificationApi } from '../services/notificationApi';
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string, isReadOnly?: boolean }> = ({ label, isReadOnly, ...props }) => {
     const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
@@ -94,6 +95,18 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                 receivedByRole: currentUser?.role || '',
                 status: 'pending validation',
             });
+            const rolesToNotify = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT];
+            await Promise.all(rolesToNotify.map(targetRole => notificationApi.create({
+                message: `Trip #${trip.id} received and pending validation.`,
+                type: 'info',
+                targetRole,
+                targetUser: null,
+                tripId: trip.id,
+                requestType: 'pending-validation',
+                requesterName: currentUser?.name || currentUser?.username || 'Supervisor',
+                requesterRole: currentUser?.role || Role.DROPOFF_SUPERVISOR,
+                requestMessage: '',
+            })));
             onClose();
         } catch (error) {
             console.error("Failed to receive trip", error);

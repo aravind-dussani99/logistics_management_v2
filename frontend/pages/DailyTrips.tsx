@@ -37,7 +37,7 @@ const DailyTrips: React.FC = () => {
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
-    const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed' | 'trip completed'>('all');
 
     useEffect(() => {
         loadTrips();
@@ -52,7 +52,7 @@ const DailyTrips: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (message) => {
                     await updateTrip(trip.id, {
-                        status: 'completed',
+                        status: 'trip completed',
                         validationComments: message || '',
                         validatedBy: currentUser?.name || currentUser?.username || '',
                         validatedAt: new Date().toISOString(),
@@ -62,17 +62,31 @@ const DailyTrips: React.FC = () => {
                         pendingRequestRole: null,
                         pendingRequestAt: null,
                     });
-                    await notificationApi.create({
+                    const notifications = [
+                        {
+                            targetRole: Role.PICKUP_SUPERVISOR,
+                            targetUser: trip.createdBy || null,
+                        },
+                        {
+                            targetRole: Role.DROPOFF_SUPERVISOR,
+                            targetUser: trip.receivedBy || null,
+                        },
+                        {
+                            targetRole: Role.ADMIN,
+                            targetUser: null,
+                        },
+                    ];
+                    await Promise.all(notifications.map(target => notificationApi.create({
                         message: `Trip #${trip.id} validated. ${message || ''}`.trim(),
                         type: 'info',
-                        targetRole: Role.ADMIN,
-                        targetUser: null,
+                        targetRole: target.targetRole,
+                        targetUser: target.targetUser,
                         tripId: trip.id,
                         requestType: 'validated',
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
-                    });
+                    })));
                     closeModal();
                 }}
             />
@@ -194,7 +208,14 @@ const DailyTrips: React.FC = () => {
             if (filters.customer && trip.customer !== filters.customer) return false;
             if (filters.quarry && trip.quarryName !== filters.quarry) return false;
             if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
-            if (statusFilter !== 'all' && (trip.status || '').toLowerCase() !== statusFilter) return false;
+            if (statusFilter !== 'all') {
+                const status = (trip.status || '').toLowerCase();
+                if (statusFilter === 'completed') {
+                    if (!['completed', 'trip completed', 'validated'].includes(status)) return false;
+                } else if (status !== statusFilter) {
+                    return false;
+                }
+            }
             return true;
         });
 
