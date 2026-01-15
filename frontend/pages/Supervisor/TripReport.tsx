@@ -114,7 +114,7 @@ const SupervisorTripReport: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
                     try {
-                        await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                         setRequestMessage('Update request sent to admin for review.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } catch (error) {
@@ -139,7 +139,7 @@ const SupervisorTripReport: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
                     try {
-                        await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                         setRequestMessage('Issue sent to admin for review.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } catch (error) {
@@ -199,7 +199,11 @@ const SupervisorTripReport: React.FC = () => {
                     </div>
                     {activeNotification && (
                         <div className="px-4 py-2 text-sm bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 border-b dark:border-gray-700">
-                            {activeNotification.message}
+                            <div className="font-semibold">
+                                {activeNotification.requesterName || 'Request'}
+                                {activeNotification.requesterContact ? ` • ${activeNotification.requesterContact}` : ''}
+                            </div>
+                            <div>{activeNotification.message}</div>
                         </div>
                     )}
                     {requestMessage && (

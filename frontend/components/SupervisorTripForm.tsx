@@ -485,6 +485,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         requesterName: currentUser?.name || currentUser?.username || 'Supervisor',
                         requesterRole: currentUser?.role || Role.PICKUP_SUPERVISOR,
                         requestMessage: '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     })));
                 }
             }

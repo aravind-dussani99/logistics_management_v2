@@ -225,6 +225,7 @@ export interface Notification {
     requesterName?: string | null;
     requesterRole?: string | null;
     requestMessage?: string | null;
+    requesterContact?: string | null;
 }
 
 export interface DailySummary {

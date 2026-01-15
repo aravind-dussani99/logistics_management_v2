@@ -175,7 +175,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 confirmLabel="Submit Issue"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
-                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                     closeModal();
                 }}
             />
@@ -190,7 +190,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 confirmLabel="Send Request"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
-                    await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                     closeModal();
                 }}
             />
@@ -224,6 +224,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         requesterName: currentUser.name,
                         requesterRole: currentUser.role,
                         requestMessage: message || '',
+                        requesterContact: currentUser.mobileNumber || '',
                     });
                     await notificationApi.create({
                         message: `Trip #${trip.id} sent back to Pick-up Supervisor. ${message || ''}`.trim(),
@@ -235,6 +236,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         requesterName: currentUser.name,
                         requesterRole: currentUser.role,
                         requestMessage: message || '',
+                        requesterContact: currentUser.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -285,6 +287,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     })));
                     closeModal();
                 }}
@@ -322,6 +325,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -413,10 +417,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                                             <button onClick={() => handleReceive(t)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
                                                             <button
                                                                 onClick={() => handleSendBackToPickup(t)}
-                                                                className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'sent-back-dropoff') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                                disabled={t.pendingRequestType === 'sent-back-dropoff'}
+                                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
                                                             >
-                                                                {t.pendingRequestType === 'sent-back-dropoff' ? 'Sent Back' : 'Send Back to Update'}
+                                                                Send Back to Update
                                                             </button>
                                                         </>
                                                     )}
@@ -460,6 +463,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                                                     requestType: 'delete',
                                                                     requesterName: currentUser?.name || 'Admin',
                                                                     requesterRole: currentUser?.role || Role.ADMIN,
+                                                                    requesterContact: currentUser?.mobileNumber || '',
                                                                 });
                                                                 await deleteTrip(t.id);
                                                                 closeModal();

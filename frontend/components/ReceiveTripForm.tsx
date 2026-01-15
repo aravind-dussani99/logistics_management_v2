@@ -106,6 +106,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                 requesterName: currentUser?.name || currentUser?.username || 'Supervisor',
                 requesterRole: currentUser?.role || Role.DROPOFF_SUPERVISOR,
                 requestMessage: '',
+                requesterContact: currentUser?.mobileNumber || '',
             })));
             onClose();
         } catch (error) {
@@ -153,7 +154,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                     Cancel
                 </button>
                 <button type="submit" disabled={isSubmitting} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50">
-                    {isSubmitting ? 'Saving...' : 'Confirm & Validate'}
+                    {isSubmitting ? 'Saving...' : 'Submit'}
                 </button>
             </div>
         </form>

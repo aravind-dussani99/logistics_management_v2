@@ -17,6 +17,16 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
   'transport-owner': 'Transport & Owner',
 };
 
+const getMtdRange = () => {
+  const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  return {
+    dateFrom: formatDate(startOfMonth),
+    dateTo: formatDate(today),
+  };
+};
+
 const Payments: React.FC = () => {
   const data = useData();
   const {
@@ -36,7 +46,7 @@ const Payments: React.FC = () => {
     refreshKey,
   } = data;
   const { openModal, closeModal } = useUI();
-  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', type: 'all', query: '' });
+  const [filters, setFilters] = useState({ ...getMtdRange(), type: 'all', query: '' });
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {

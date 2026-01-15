@@ -38,6 +38,7 @@ export const notificationApi = {
     requesterName?: string | null;
     requesterRole?: string | null;
     requestMessage?: string | null;
+    requesterContact?: string | null;
   }): Promise<Notification> => {
     const response = await authFetch(basePath, {
       method: 'POST',

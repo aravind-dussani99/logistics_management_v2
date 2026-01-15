@@ -40,21 +40,21 @@ export const tripApi = {
     const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
-  requestDelete: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  requestDelete: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/request-delete`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
     await handleResponse(response);
   },
-  requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/request-update`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
     await handleResponse(response);
   },
-  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/raise-issue`, {
       method: 'POST',
       body: JSON.stringify(data),

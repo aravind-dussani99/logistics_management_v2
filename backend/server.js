@@ -72,6 +72,7 @@ const loadUserForRequest = async (userId) => {
 
 const hasRole = (user, roles) => Boolean(user && roles.includes(user.role));
 const getUserDisplayName = (user) => user?.name || user?.username || '';
+const getUserContact = (user) => user?.mobileNumber || '';
 const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
 const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
 
@@ -930,6 +931,7 @@ const ensureMerchantTables = async () => {
       requesterName TEXT,
       requesterRole TEXT,
       requestMessage TEXT,
+      requesterContact TEXT,
       createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -940,6 +942,7 @@ const ensureMerchantTables = async () => {
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => {});
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => {});
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => {});
 };
 
 const ensureSeedData = async () => {
@@ -2057,6 +2060,7 @@ app.post('/api/notifications', async (req, res) => {
     requesterName = null,
     requesterRole = null,
     requestMessage = null,
+    requesterContact = null,
   } = req.body || {};
   if (!message) {
     return res.status(400).json({ error: 'Message is required.' });
@@ -2075,6 +2079,7 @@ app.post('/api/notifications', async (req, res) => {
         requesterName,
         requesterRole,
         requestMessage,
+        requesterContact,
       },
     });
     res.status(201).json(notification);
@@ -2296,6 +2301,27 @@ app.put('/api/trips/:id', async (req, res) => {
         user: req.user,
       });
     }
+    const clearingRequest =
+      Object.prototype.hasOwnProperty.call(data, 'pendingRequestType')
+      && (data.pendingRequestType === null || data.pendingRequestType === '');
+    if (clearingRequest && existingTrip.pendingRequestBy) {
+      await prisma.notificationRecord.create({
+        data: {
+          message: `Trip #${trip.id} updated by ${getUserDisplayName(req.user) || 'Admin'}.`,
+          type: 'info',
+          timestamp: new Date(),
+          read: false,
+          targetRole: existingTrip.pendingRequestRole || null,
+          targetUser: existingTrip.pendingRequestBy || null,
+          tripId: trip.id,
+          requestType: 'update-resolved',
+          requesterName: getUserDisplayName(req.user),
+          requesterRole: req.user?.role || null,
+          requestMessage: data.validationComments || '',
+          requesterContact: getUserContact(req.user),
+        },
+      });
+    }
     res.json(trip);
   } catch (error) {
     console.error('Failed to update trip', error);
@@ -2305,7 +2331,7 @@ app.put('/api/trips/:id', async (req, res) => {
 
 app.post('/api/trips/:id/request-delete', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', reason = '' } = req.body || {};
+  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2323,6 +2349,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     });
     await prisma.tripRecord.update({
@@ -2350,7 +2377,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
 
 app.post('/api/trips/:id/request-update', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', reason = '' } = req.body || {};
+  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2368,6 +2395,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     });
     await prisma.tripRecord.update({
@@ -2395,7 +2423,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
 
 app.post('/api/trips/:id/raise-issue', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'User', requestedByRole = 'User', reason = '' } = req.body || {};
+  const { requestedBy = 'User', requestedByRole = 'User', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2414,6 +2442,7 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     })));
     await prisma.tripRecord.update({

@@ -465,6 +465,7 @@ model NotificationRecord {
   requestType String?
   requesterName String?
   requesterRole String?
+  requesterContact String?
   requestMessage String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

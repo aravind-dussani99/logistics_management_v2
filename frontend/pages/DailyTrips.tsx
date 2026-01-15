@@ -86,6 +86,7 @@ const DailyTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     })));
                     closeModal();
                 }}
@@ -123,6 +124,7 @@ const DailyTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -274,7 +276,10 @@ const DailyTrips: React.FC = () => {
                 </div>
                 {activeRequest && (
                     <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        <div className="font-semibold">Trip request from {activeRequest.requesterName || 'Supervisor'}</div>
+                        <div className="font-semibold">
+                            Trip request from {activeRequest.requesterName || 'Supervisor'}
+                            {activeRequest.requesterContact ? ` • ${activeRequest.requesterContact}` : ''}
+                        </div>
                         <div className="mt-1">{activeRequest.message}</div>
                     </div>
                 )}

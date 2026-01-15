@@ -61,7 +61,7 @@ From the sidebar, navigate to the **"Received Trips"** page. This page lists all
 Locate the correct trip in the table and click the green **"Receive"** button.
 
 **Step 3: Enter Final Weighment Details**
-A form will appear showing the trip's starting details. Enter the final weighment information from the destination's weighment slip. The form will automatically calculate any weight difference. Add a reason if there is a discrepancy. Click **"Confirm & Validate"** to complete the process.
+                A form will appear showing the trip's starting details. Enter the final weighment information from the destination's weighment slip. The form will automatically calculate any weight difference. Add a reason if there is a discrepancy. Click **"Submit"** to complete the process.
 
 ---
 

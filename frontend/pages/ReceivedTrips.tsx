@@ -57,7 +57,7 @@ const ReceivedTrips: React.FC = () => {
                 confirmLabel="Submit Issue"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
-                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                     closeModal();
                 }}
             />
@@ -93,6 +93,7 @@ const ReceivedTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -130,6 +131,7 @@ const ReceivedTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -235,7 +237,7 @@ const ReceivedTrips: React.FC = () => {
                                                         confirmLabel="Send Request"
                                                         onCancel={closeModal}
                                                         onConfirm={async (reason) => {
-                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                                                             closeModal();
                                                         }}
                                                     />
