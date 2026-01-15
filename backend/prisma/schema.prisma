@@ -160,7 +160,7 @@ model MineQuarry {
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -181,7 +181,7 @@ model VendorCustomer {
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -202,7 +202,7 @@ model RoyaltyOwnerProfile {
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -223,7 +223,7 @@ model TransportOwnerProfile {
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
   vehicleLinks TransportOwnerVehicle[]
 
   @@index([name])
