@@ -75,7 +75,7 @@ const QuarriesPage: React.FC = () => {
                 title="Quarry Management"
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Quarry', action: handleAddQuarry }}
             />
             

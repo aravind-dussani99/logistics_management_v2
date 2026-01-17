@@ -148,19 +148,19 @@ model MineQuarry {
   id             String @id @default(uuid())
   merchantTypeId String
   name           String
-  contactNumber  String
-  email          String
-  siteLocationId String
-  companyName    String
+  contactNumber  String?
+  email          String?
+  siteLocationId String?
+  companyName    String?
   gstOptIn       Boolean @default(false)
-  gstNumber      String
-  gstDetails     String
-  remarks        String
+  gstNumber      String?
+  gstDetails     String?
+  remarks        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -169,19 +169,19 @@ model VendorCustomer {
   id             String @id @default(uuid())
   merchantTypeId String
   name           String
-  contactNumber  String
-  email          String
-  siteLocationId String
-  companyName    String
+  contactNumber  String?
+  email          String?
+  siteLocationId String?
+  companyName    String?
   gstOptIn       Boolean @default(false)
-  gstNumber      String
-  gstDetails     String
-  remarks        String
+  gstNumber      String?
+  gstDetails     String?
+  remarks        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -190,19 +190,19 @@ model RoyaltyOwnerProfile {
   id             String @id @default(uuid())
   merchantTypeId String
   name           String
-  contactNumber  String
-  email          String
-  siteLocationId String
-  companyName    String
+  contactNumber  String?
+  email          String?
+  siteLocationId String?
+  companyName    String?
   gstOptIn       Boolean @default(false)
-  gstNumber      String
-  gstDetails     String
-  remarks        String
+  gstNumber      String?
+  gstDetails     String?
+  remarks        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
 
   @@index([name])
 }
@@ -211,19 +211,19 @@ model TransportOwnerProfile {
   id             String @id @default(uuid())
   merchantTypeId String
   name           String
-  contactNumber  String
-  email          String
-  siteLocationId String
-  companyName    String
+  contactNumber  String?
+  email          String?
+  siteLocationId String?
+  companyName    String?
   gstOptIn       Boolean @default(false)
-  gstNumber      String
-  gstDetails     String
-  remarks        String
+  gstNumber      String?
+  gstDetails     String?
+  remarks        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   merchantType MerchantType @relation(fields: [merchantTypeId], references: [id])
-  siteLocation SiteLocation @relation(fields: [siteLocationId], references: [id])
+  siteLocation SiteLocation? @relation(fields: [siteLocationId], references: [id], onDelete: SetNull)
   vehicleLinks TransportOwnerVehicle[]
 
   @@index([name])
@@ -413,6 +413,7 @@ model TripActivityRecord {
   tripId    Int
   action    String
   message   String
+  attachments Json?
   actorName String
   actorRole String
   createdAt DateTime @default(now())
@@ -465,6 +466,7 @@ model NotificationRecord {
   requestType String?
   requesterName String?
   requesterRole String?
+  requesterContact String?
   requestMessage String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

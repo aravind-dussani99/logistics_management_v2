@@ -4,11 +4,13 @@ import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
+import MergeDialog from '../components/MergeDialog';
+import AlertDialog from '../components/AlertDialog';
 
 const ITEMS_PER_PAGE = 10;
 
 const VendorCustomerDataPage: React.FC = () => {
-  const { vendorCustomers, merchantTypes, siteLocations, addVendorCustomer, updateVendorCustomer, deleteVendorCustomer, loadVendorCustomers, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
+  const { vendorCustomers, merchantTypes, siteLocations, addVendorCustomer, updateVendorCustomer, deleteVendorCustomer, mergeVendorCustomer, loadVendorCustomers, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,6 +71,26 @@ const VendorCustomerDataPage: React.FC = () => {
     await deleteVendorCustomer(id);
   };
 
+  const handleMerge = (row: VendorCustomerData) => {
+    const options = vendorCustomers.filter(item => item.id !== row.id).map(item => ({ id: item.id, name: item.name }));
+    if (options.length === 0) {
+      openModal('Merge Vendor & Customer', <AlertDialog message="No other record available to merge into." onConfirm={closeModal} />);
+      return;
+    }
+    openModal('Merge Vendor & Customer', (
+      <MergeDialog
+        sourceLabel="Vendor & Customer"
+        sourceName={row.name}
+        options={options}
+        onConfirm={async (targetId) => {
+          await mergeVendorCustomer(row.id, targetId);
+          closeModal();
+        }}
+        onClose={closeModal}
+      />
+    ));
+  };
+
   useEffect(() => {
     const nextTotalPages = Math.ceil(filteredRows.length / ITEMS_PER_PAGE) || 1;
     if (currentPage > nextTotalPages) setCurrentPage(nextTotalPages);
@@ -81,7 +103,7 @@ const VendorCustomerDataPage: React.FC = () => {
         subtitle="Manage vendor and customer profiles with GST details."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Vendor & Customer', action: handleAdd }}
       />
 
@@ -129,6 +151,7 @@ const VendorCustomerDataPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{row.remarks || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button onClick={() => handleEdit(row)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                      <button onClick={() => handleMerge(row)} className="px-3 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700">Merge</button>
                       <button onClick={() => handleDelete(row.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
                     </td>
                   </tr>

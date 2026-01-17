@@ -38,7 +38,7 @@ const CategoriesPage: React.FC = () => {
                 subtitle="Manage high-level categories for your Chart of Accounts."
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Category', action: handleAddCategory }}
             />
 

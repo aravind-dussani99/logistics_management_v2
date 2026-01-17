@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Trip, TripUploadFile } from '../types';
+import { Trip, TripUploadFile, Role } from '../types';
 import { formatDateDisplay, safeToFixed } from '../utils';
+import { notificationApi } from '../services/notificationApi';
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string, isReadOnly?: boolean }> = ({ label, isReadOnly, ...props }) => {
     const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
@@ -94,6 +95,19 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                 receivedByRole: currentUser?.role || '',
                 status: 'pending validation',
             });
+            const rolesToNotify = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT];
+            await Promise.all(rolesToNotify.map(targetRole => notificationApi.create({
+                message: `Trip #${trip.id} received and pending validation.`,
+                type: 'info',
+                targetRole,
+                targetUser: null,
+                tripId: trip.id,
+                requestType: 'pending-validation',
+                requesterName: currentUser?.name || currentUser?.username || 'Supervisor',
+                requesterRole: currentUser?.role || Role.DROPOFF_SUPERVISOR,
+                requestMessage: '',
+                requesterContact: currentUser?.mobileNumber || '',
+            })));
             onClose();
         } catch (error) {
             console.error("Failed to receive trip", error);
@@ -140,7 +154,7 @@ const ReceiveTripForm: React.FC<ReceiveTripFormProps> = ({ trip, onClose }) => {
                     Cancel
                 </button>
                 <button type="submit" disabled={isSubmitting} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50">
-                    {isSubmitting ? 'Saving...' : 'Confirm & Validate'}
+                    {isSubmitting ? 'Saving...' : 'Submit'}
                 </button>
             </div>
         </form>

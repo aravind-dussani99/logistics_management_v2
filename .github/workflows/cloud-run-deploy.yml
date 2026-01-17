@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -79,6 +80,9 @@ jobs:
             exit 0
           fi
           {
+            echo "${MATCHES}"
+          } > destructive-migrations.txt
+          {
             echo "### Destructive migration review required"
             echo ""
             echo "The following migration files include destructive operations:"
@@ -87,7 +91,37 @@ jobs:
             echo "${MATCHES}"
             echo "\`\`\`"
           } >> $GITHUB_STEP_SUMMARY
+          echo "Destructive migration details:"
+          echo "${MATCHES}"
           echo "destructive=true" >> $GITHUB_OUTPUT
+      - name: Upload destructive migration report
+        if: steps.detect.outputs.destructive == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: destructive-migrations-report
+          path: destructive-migrations.txt
+      - name: Post destructive migration summary to PR
+        if: steps.detect.outputs.destructive == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('destructive-migrations.txt', 'utf8');
+            const summary = [
+              '### Destructive migration review required',
+              '',
+              'The following statements were detected:',
+              '',
+              '```',
+              body.trim(),
+              '```',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: summary,
+            });
 
   approve-destructive-migrations:
     runs-on: ubuntu-latest
@@ -100,8 +134,8 @@ jobs:
 
   migrate-dev:
     runs-on: ubuntu-latest
-    needs: [detect-destructive-migrations]
-    if: github.event_name == 'pull_request' && needs.detect-destructive-migrations.outputs.destructive != 'true'
+    needs: [detect-destructive-migrations, approve-destructive-migrations]
+    if: github.event_name == 'pull_request' && (needs.detect-destructive-migrations.outputs.destructive != 'true' || needs.approve-destructive-migrations.result == 'success')
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Trip, Role } from '../types';
+import { Trip, Role, Notification } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useUI } from '../contexts/UIContext';
@@ -8,12 +8,13 @@ import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
 import ReceiveTripForm from '../components/ReceiveTripForm';
 import SupervisorTripForm from '../components/SupervisorTripForm';
+import TripHistoryDialog from '../components/TripHistoryDialog';
 import RequestDialog from '../components/RequestDialog';
 import AlertDialog from '../components/AlertDialog';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 import { formatDateDisplay } from '../utils';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -21,9 +22,11 @@ const ReceivedTrips: React.FC = () => {
     const { trips, refreshKey, updateTrip, deleteTrip, loadTrips } = useData();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
+    const location = useLocation();
     const canManageTrips = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [inTransitTrips, setInTransitTrips] = useState<Trip[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
 
     useEffect(() => {
         loadTrips();
@@ -32,14 +35,28 @@ const ReceivedTrips: React.FC = () => {
     useEffect(() => {
         const filtered = trips.filter(t => {
             const status = (t.status || '').toLowerCase();
-            if (!['in transit', 'pending validation', 'completed'].includes(status)) return false;
-            if (!currentUser?.dropOffLocationName) return true;
-            const tripLocation = t.dropOffPlace || t.place;
-            return tripLocation === currentUser.dropOffLocationName;
+            return ['in transit', 'pending validation', 'completed', 'validated', 'trip completed'].includes(status);
         })
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setInTransitTrips(filtered);
     }, [trips, refreshKey, currentUser]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const notificationId = params.get('notificationId');
+        if (!notificationId) return;
+        notificationApi.getById(notificationId).then(note => {
+            setActiveNotification(note);
+            if (note.tripId) {
+                const trip = trips.find(t => t.id === note.tripId);
+                if (trip) {
+                    openModal(`Trip #${trip.id} History`, <TripHistoryDialog trip={trip} notification={note} onClose={closeModal} />);
+                }
+            }
+        }).catch(error => {
+            console.error('Failed to load notification', error);
+        });
+    }, [location.search, trips, openModal, closeModal]);
     
     const delayedTripsCount = useMemo(() => {
         const twoDaysAgo = new Date();
@@ -60,7 +77,7 @@ const ReceivedTrips: React.FC = () => {
                 confirmLabel="Submit Issue"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
-                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                    await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                     closeModal();
                 }}
             />
@@ -76,7 +93,7 @@ const ReceivedTrips: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (message) => {
                     await updateTrip(trip.id, {
-                        status: 'completed',
+                        status: 'trip completed',
                         validationComments: message || '',
                         validatedBy: currentUser?.name || currentUser?.username || '',
                         validatedAt: new Date().toISOString(),
@@ -96,6 +113,7 @@ const ReceivedTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -133,6 +151,7 @@ const ReceivedTrips: React.FC = () => {
                         requesterName: currentUser?.name || 'Admin',
                         requesterRole: currentUser?.role || Role.ADMIN,
                         requestMessage: message || '',
+                        requesterContact: currentUser?.mobileNumber || '',
                     });
                     closeModal();
                 }}
@@ -156,7 +175,11 @@ const ReceivedTrips: React.FC = () => {
         return `${diffDays} days ago`;
     };
 
-    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Royalty M3', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+
+    if (canManageTrips) {
+        return <Navigate to="/trips" replace />;
+    }
 
     if (canManageTrips) {
         return <Navigate to="/trips" replace />;
@@ -169,12 +192,12 @@ const ReceivedTrips: React.FC = () => {
                 subtitle={`${inTransitTrips.length} trips available. ${delayedTripsCount > 0 ? `⚠️ ${delayedTripsCount} are delayed (>48h).` : ''}`}
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showAddAction={false}
             />
             <main className="pt-6">
                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-                     <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
+                    <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
                         <h2 className="text-xl font-semibold">Received Trips</h2>
                         <Pagination 
                             currentPage={currentPage}
@@ -182,6 +205,15 @@ const ReceivedTrips: React.FC = () => {
                             onPageChange={setCurrentPage}
                         />
                     </div>
+                    {activeNotification && (
+                        <div className="px-4 py-2 text-sm bg-amber-50 text-amber-900 border-b dark:border-gray-700">
+                            <div className="font-semibold">
+                                Trip request from {activeNotification.requesterName || 'Supervisor'}
+                                {activeNotification.requesterContact ? ` - ${activeNotification.requesterContact}` : ''}
+                            </div>
+                            <div className="mt-1">{activeNotification.message}</div>
+                        </div>
+                    )}
                     <DataTable
                         title=""
                         headers={headers}
@@ -189,6 +221,7 @@ const ReceivedTrips: React.FC = () => {
                         renderRow={(trip: Trip, index: number) => (
                             <tr key={trip.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{trip.id}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)} ({getDelay(trip.date)})</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.invoiceDCNumber || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer || '-'}</td>
@@ -197,14 +230,13 @@ const ReceivedTrips: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.quarryName || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyOwnerName || '-'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyM3 ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.netWeight ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.pickupPlace || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.dropOffPlace || trip.place || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                     {(() => {
                                         const status = (trip.status || '').toLowerCase();
-                                        if (status === 'completed') {
+                                        if (status === 'completed' || status === 'validated' || status === 'trip completed') {
                                             return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
                                         }
                                         if (status === 'pending validation') {
@@ -215,31 +247,21 @@ const ReceivedTrips: React.FC = () => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                     <button onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                    {(trip.activityCount ?? 0) > 0 && (
+                                        <button onClick={() => openModal(`Trip #${trip.id} History`, <TripHistoryDialog trip={trip} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">History</button>
+                                    )}
                                     {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() === 'in transit' && (
                                         <>
                                             <button onClick={() => handleReceive(trip)} className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
                                             <button
-                                                onClick={() => {
-                                                    openModal('Request Update', (
-                                                        <RequestDialog
-                                                            title={`Request update for Trip #${trip.id}`}
-                                                            confirmLabel="Send Request"
-                                                            onCancel={closeModal}
-                                                            onConfirm={async (reason) => {
-                                                                await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
-                                                                closeModal();
-                                                            }}
-                                                        />
-                                                    ));
-                                                }}
-                                                className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                disabled={trip.pendingRequestType === 'update'}
+                                                onClick={() => handleSendBack(trip, 'pickup')}
+                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
                                             >
-                                                {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                                Send Back to Update
                                             </button>
                                         </>
                                     )}
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && (trip.status || '').toLowerCase() !== 'completed' && (
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && !['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
                                         <button
                                             onClick={() => {
                                                 openModal('Request Update', (
@@ -248,7 +270,7 @@ const ReceivedTrips: React.FC = () => {
                                                         confirmLabel="Send Request"
                                                         onCancel={closeModal}
                                                         onConfirm={async (reason) => {
-                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                                                             closeModal();
                                                         }}
                                                     />
@@ -260,7 +282,7 @@ const ReceivedTrips: React.FC = () => {
                                             {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
                                         </button>
                                     )}
-                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() === 'completed' && (
+                                    {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && ['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
                                         <button
                                             onClick={() => handleRaiseIssue(trip)}
                                             className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"

@@ -51,7 +51,7 @@ const TripDataPage: React.FC = () => {
         subtitle="All entered and received trips in one place."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showAddAction={false}
       />
 

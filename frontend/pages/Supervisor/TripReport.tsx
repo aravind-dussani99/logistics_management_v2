@@ -14,6 +14,7 @@ import RequestDialog from '../../components/RequestDialog';
 import { useLocation } from 'react-router-dom';
 import { notificationApi } from '../../services/notificationApi';
 import { Notification } from '../../types';
+import AlertDialog from '../../components/AlertDialog';
 
 const SUPERVISOR_TRIPS_PER_PAGE = 10;
 
@@ -68,10 +69,12 @@ const SupervisorTripReport: React.FC = () => {
     }, [location.search, trips, openModal, closeModal]);
     
     const filteredTrips = useMemo(() => {
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
         return myTrips.filter(trip => {
-            const tripDate = trip.date ? trip.date.split('T')[0] : '';
-            if (filters.dateFrom && tripDate < filters.dateFrom) return false;
-            if (filters.dateTo && tripDate > filters.dateTo) return false;
+            const tripDate = trip.date ? new Date(trip.date) : null;
+            if (fromDate && tripDate && tripDate < fromDate) return false;
+            if (toDate && tripDate && tripDate > toDate) return false;
             return true;
         });
     }, [myTrips, filters]);
@@ -100,26 +103,35 @@ const SupervisorTripReport: React.FC = () => {
     };
 
     const handleDelete = async (tripId: number) => {
-        if (window.confirm('Are you sure you want to delete this trip entry?')) {
-            await deleteTrip(tripId);
-        }
+        openModal('Delete Trip', (
+            <AlertDialog
+                message="Delete this trip? This action cannot be undone."
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onCancel={closeModal}
+                onConfirm={async () => {
+                    await deleteTrip(tripId);
+                    closeModal();
+                }}
+            />
+        ));
     };
 
-    const handleRequestDelete = async (trip: Trip) => {
+    const handleRequestUpdate = async (trip: Trip) => {
         if (!currentUser) return;
-        openModal('Request Delete', (
+        openModal('Request Update', (
             <RequestDialog
-                title={`Request delete for Trip #${trip.id}`}
+                title={`Request update for Trip #${trip.id}`}
                 confirmLabel="Send Request"
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
                     try {
-                        await tripApi.requestDelete(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
-                        setRequestMessage('Delete request sent to admin for approval.');
+                        await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
+                        setRequestMessage('Update request sent to admin for review.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } catch (error) {
-                        console.error('Failed to request delete', error);
-                        setRequestMessage('Failed to send delete request. Please try again.');
+                        console.error('Failed to request update', error);
+                        setRequestMessage('Failed to send update request. Please try again.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } finally {
                         closeModal();
@@ -139,7 +151,7 @@ const SupervisorTripReport: React.FC = () => {
                 onCancel={closeModal}
                 onConfirm={async (reason) => {
                     try {
-                        await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, reason });
+                        await tripApi.raiseIssue(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
                         setRequestMessage('Issue sent to admin for review.');
                         setTimeout(() => setRequestMessage(''), 4000);
                     } catch (error) {
@@ -159,12 +171,15 @@ const SupervisorTripReport: React.FC = () => {
             case 'pending upload': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending Upload</span>;
             case 'in transit': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">In Transit</span>;
             case 'pending validation': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Pending Validation</span>;
-            case 'completed': return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
+            case 'completed':
+            case 'trip completed':
+            case 'validated':
+                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Completed</span>;
             default: return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">{status}</span>
         }
     }
     
-    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Royalty M3', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
 
     return (
         <div className="relative">
@@ -173,7 +188,7 @@ const SupervisorTripReport: React.FC = () => {
                 subtitle={`You have entered ${myTrips.length} trips.`}
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Enter Trip', action: handleEnterTrip }}
             />
             <main className="pt-6">
@@ -196,7 +211,11 @@ const SupervisorTripReport: React.FC = () => {
                     </div>
                     {activeNotification && (
                         <div className="px-4 py-2 text-sm bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 border-b dark:border-gray-700">
-                            {activeNotification.message}
+                            <div className="font-semibold">
+                                {activeNotification.requesterName || 'Request'}
+                                {activeNotification.requesterContact ? ` • ${activeNotification.requesterContact}` : ''}
+                            </div>
+                            <div>{activeNotification.message}</div>
                         </div>
                     )}
                     {requestMessage && (
@@ -211,6 +230,7 @@ const SupervisorTripReport: React.FC = () => {
                         renderRow={(trip: Trip, index: number) => (
                             <tr key={trip.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * SUPERVISOR_TRIPS_PER_PAGE + index + 1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{trip.id}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.invoiceDCNumber || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer || '-'}</td>
@@ -219,7 +239,6 @@ const SupervisorTripReport: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.quarryName || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.material || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyOwnerName || '-'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.royaltyM3 ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.netWeight ?? '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.pickupPlace || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.dropOffPlace || trip.place || '-'}</td>
@@ -227,6 +246,7 @@ const SupervisorTripReport: React.FC = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                 {trip.status === 'pending upload' ? (
                                     <>
+                                        <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                                         <button onClick={() => handleUpload(trip)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Upload</button>
                                         <button onClick={() => handleEdit(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Edit</button>
                                         <button onClick={() => handleDelete(trip.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
@@ -234,16 +254,26 @@ const SupervisorTripReport: React.FC = () => {
                                 ) : trip.status === 'in transit' ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                        <button onClick={() => handleEdit(trip)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                         <button
-                                            onClick={() => handleRequestDelete(trip)}
-                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'delete' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                            disabled={trip.pendingRequestType === 'delete'}
+                                            onClick={() => handleRequestUpdate(trip)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'update'}
                                         >
-                                            {trip.pendingRequestType === 'delete' ? 'Delete Requested' : 'Request Delete'}
+                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
                                         </button>
                                     </>
-                                ) : trip.status === 'completed' ? (
+                                ) : trip.status === 'pending validation' ? (
+                                    <>
+                                        <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                        <button
+                                            onClick={() => handleRequestUpdate(trip)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
+                                            disabled={trip.pendingRequestType === 'update'}
+                                        >
+                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
+                                        </button>
+                                    </>
+                                ) : ['completed', 'validated', 'trip completed'].includes(trip.status) ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                                         <button onClick={() => handleRaiseIssue(trip)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>

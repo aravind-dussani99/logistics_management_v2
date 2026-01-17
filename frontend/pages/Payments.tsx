@@ -17,18 +17,44 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
   'transport-owner': 'Transport & Owner',
 };
 
+const getMtdRange = () => {
+  const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  return {
+    dateFrom: formatDate(startOfMonth),
+    dateTo: formatDate(today),
+  };
+};
+
 const Payments: React.FC = () => {
-  const { payments, addPayment, updatePayment, deletePayment, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
+  const data = useData();
+  const {
+    payments,
+    addPayment,
+    updatePayment,
+    deletePayment,
+    vendorCustomers,
+    mineQuarries,
+    royaltyOwnerProfiles,
+    transportOwnerProfiles,
+    loadPayments,
+    loadVendorCustomers,
+    loadMineQuarries,
+    loadRoyaltyOwnerProfiles,
+    loadTransportOwnerProfiles,
+    refreshKey,
+  } = data;
   const { openModal, closeModal } = useUI();
-  const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', type: 'all', query: '' });
+  const [filters, setFilters] = useState({ ...getMtdRange(), type: 'all', query: '' });
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    loadPayments();
-    loadVendorCustomers();
-    loadMineQuarries();
-    loadRoyaltyOwnerProfiles();
-    loadTransportOwnerProfiles();
+    loadPayments?.();
+    loadVendorCustomers?.();
+    loadMineQuarries?.();
+    loadRoyaltyOwnerProfiles?.();
+    loadTransportOwnerProfiles?.();
   }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
   const ratePartyNameById = useMemo(() => {
@@ -125,7 +151,7 @@ const Payments: React.FC = () => {
         subtitle="Track payment and receipt entries by head account and rate party."
         filters={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
         onFilterChange={(next) => setFilters(prev => ({ ...prev, ...next }))}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={['date']}
         pageAction={{ label: 'Add Payment', action: handleAdd }}
       />

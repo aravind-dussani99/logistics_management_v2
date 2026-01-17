@@ -85,7 +85,7 @@ const Profile: React.FC = () => {
         subtitle="Update your personal details and profile photo."
         filters={filters}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showAddAction={false}
       />
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">

@@ -39,7 +39,7 @@ const Accounts: React.FC = () => {
                 subtitle="Manage all financial entities, vendors, customers, and expense categories."
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Account', action: handleAddAccount }}
             />
 

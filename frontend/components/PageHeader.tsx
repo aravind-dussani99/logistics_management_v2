@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useUI } from '../contexts/UIContext';
-import FilterPanel, { Filters } from './FilterPanel';
-import { VehicleOwner, CustomerRate, QuarryOwner, Role } from '../types';
+import FilterPanel, { Filters, FilterField } from './FilterPanel';
+import { Role } from '../types';
 import AddTripForm from './AddTripForm';
 import AddVehicleForm from './AddVehicleForm';
 import AddQuarryForm from './AddQuarryForm';
@@ -19,10 +19,11 @@ interface PageHeaderProps {
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
     filterData: {
-        vehicles: VehicleOwner[];
-        customers: CustomerRate[];
-        quarries: QuarryOwner[];
-        royaltyOwners: string[];
+        vehicles: { id?: string; vehicleNumber: string }[];
+        transportOwners: { id?: string; name: string }[];
+        customers: { id?: string; name: string }[];
+        quarries: { id?: string; name: string }[];
+        royaltyOwners: { id?: string; name: string }[];
     };
     pageAction?: {
         label: string;
@@ -48,11 +49,23 @@ const supervisorActions = [
     { name: 'Enter Trip', icon: 'document-text-outline', action: 'enterTrip' },
 ];
 
-const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = [], showMoreFilters = [], filters, onFilterChange, filterData, pageAction, secondaryAction, showAddAction = true }) => {
+const PageHeader: React.FC<PageHeaderProps> = ({
+    title,
+    subtitle,
+    showFilters = [],
+    showMoreFilters = [],
+    filters,
+    onFilterChange,
+    filterData = { vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] },
+    pageAction,
+    secondaryAction,
+    showAddAction = true,
+}) => {
     const { openModal, closeModal } = useUI();
     const { currentUser } = useAuth();
     const filterPopoverRef = useRef<HTMLDivElement>(null);
     const addMenuRef = useRef<HTMLDivElement>(null);
+    const hasDateFilters = showFilters.includes('date') || showMoreFilters.includes('date');
 
     const [isFilterPopoverOpen, setFilterPopoverOpen] = useState(false);
     const [isAddMenuOpen, setAddMenuOpen] = useState(false);
@@ -68,6 +81,19 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        if (!hasDateFilters) return;
+        if (filters.dateFrom || filters.dateTo) return;
+        const today = new Date();
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const formatDate = (date: Date) => date.toISOString().split('T')[0];
+        onFilterChange({
+            ...filters,
+            dateFrom: formatDate(startOfMonth),
+            dateTo: formatDate(today),
+        });
+    }, [filters, hasDateFilters, onFilterChange]);
     
     const handleFilterChangeInternal = (key: keyof Filters, value: string) => {
         onFilterChange({ ...filters, [key]: value });
@@ -98,8 +124,24 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
             {children}
         </div>
     );
-    
-    const uniqueTransporters = Array.from(new Set(filterData.vehicles.map(v => v.ownerName)));
+    const vehicles = filterData?.vehicles ?? [];
+    const transportOwners = filterData?.transportOwners ?? [];
+    const customers = filterData?.customers ?? [];
+    const quarries = filterData?.quarries ?? [];
+    const royaltyOwners = filterData?.royaltyOwners ?? [];
+
+    const safeFilterData = {
+        vehicles,
+        transportOwners,
+        customers,
+        quarries,
+        royaltyOwners,
+    };
+
+    const uniqueTransporters = useMemo(() => {
+        const names = transportOwners.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [transportOwners]);
 
     const filterComponents = {
         date: (
@@ -120,7 +162,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
             <FilterInput label="Quarry">
                 <select className={baseInputClass} value={filters.quarry || ''} onChange={e => handleFilterChangeInternal('quarry', e.target.value)}>
                     <option value="">All Quarries</option>
-                    {filterData.quarries.map(q => <option key={q.id} value={q.quarryName}>{q.quarryName}</option>)}
+                    {safeFilterData.quarries.map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
                 </select>
             </FilterInput>
         ),
@@ -147,7 +189,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
                                 <span className="hidden lg:inline">{showFilters.length > 0 ? "More Filters" : "Filters"}</span>
                                 <span className="lg:hidden">Filters</span>
                             </button>
-                            {isFilterPopoverOpen && <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-20 border dark:border-gray-600"><FilterPanel filters={filters} setFilters={onFilterChange} data={filterData} /></div>}
+                            {isFilterPopoverOpen && (
+                                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-20 border dark:border-gray-600">
+                                    <FilterPanel
+                                        filters={filters}
+                                        setFilters={onFilterChange}
+                                        data={safeFilterData}
+                                        visibleFields={showMoreFilters.length ? showMoreFilters : (showFilters.length ? showFilters : undefined)}
+                                    />
+                                </div>
+                            )}
                         </div>
                     }
                     {(pageAction || secondaryAction) ? (
@@ -173,7 +224,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, showFilters = 
                             </button>
                             {isAddMenuOpen && (
                                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl z-20 border dark:border-gray-600 overflow-hidden">
-                                    <ul>{addActions.map(action => (<li key={action.action}><button onClick={() => handleAddAction(action.action)} className="w-full flex items-center px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                            <ul>{(addActions || []).map(action => (<li key={action.action}><button onClick={() => handleAddAction(action.action)} className="w-full flex items-center px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                         <ion-icon name={action.icon} className="text-xl mr-3"></ion-icon><span>{action.name}</span></button></li>))}</ul>
                                 </div>
                             )}

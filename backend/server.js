@@ -72,10 +72,11 @@ const loadUserForRequest = async (userId) => {
 
 const hasRole = (user, roles) => Boolean(user && roles.includes(user.role));
 const getUserDisplayName = (user) => user?.name || user?.username || '';
+const getUserContact = (user) => user?.mobileNumber || '';
 const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
 const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
 
-const logTripActivity = async ({ tripId, action, message, user }) => {
+const logTripActivity = async ({ tripId, action, message, user, attachments }) => {
   if (!tripId) return;
   try {
     await prisma.tripActivityRecord.create({
@@ -83,6 +84,7 @@ const logTripActivity = async ({ tripId, action, message, user }) => {
         tripId: Number(tripId),
         action,
         message,
+        attachments: attachments || undefined,
         actorName: getUserDisplayName(user) || 'System',
         actorRole: user?.role || 'SYSTEM',
       },
@@ -146,6 +148,7 @@ if (!ATTACHMENTS_BUCKET) {
   app.use('/uploads', express.static(UPLOADS_ROOT));
 }
 app.get('/health', (_req, res) => {
+  // Minimal response for load balancer checks.
   res.json({ status: 'ok' });
 });
 
@@ -358,6 +361,18 @@ const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
   return JSON.stringify(updated);
 };
 
+const normalizeActivityAttachments = async ({ attachments, trip, req }) => {
+  if (!attachments || (Array.isArray(attachments) && attachments.length === 0)) return [];
+  const stored = await normalizeUploadField({
+    fieldValue: attachments,
+    trip,
+    req,
+    fieldKey: 'activity_attachment',
+  });
+  if (!stored) return [];
+  return parseUploadList(stored);
+};
+
 const isGsUrl = (value) => typeof value === 'string' && value.startsWith('gs://');
 const extractGsPath = (value) => {
   if (!value || typeof value !== 'string') return null;
@@ -394,7 +409,7 @@ const signGsUrl = async (value) => {
     return signedUrl;
   } catch (error) {
     console.warn('Failed to sign attachment URL', error);
-    return value;
+    return toPublicUrl(value);
   }
 };
 
@@ -488,14 +503,6 @@ app.post('/api/users', async (req, res) => {
     res.status(400).json({ error: 'Invalid role.' });
     return;
   }
-  if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
-    res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
-    return;
-  }
-  if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
-    res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
-    return;
-  }
   try {
     const passwordHash = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
@@ -576,14 +583,6 @@ app.put('/api/users/:id', async (req, res) => {
       if (role && !isSupervisorRole(String(role))) {
         data.pickupLocationId = null;
         data.dropOffLocationId = null;
-      }
-      if (role === 'PICKUP_SUPERVISOR' && !pickupLocationId) {
-        res.status(400).json({ error: 'pickupLocationId is required for pickup supervisors' });
-        return;
-      }
-      if (role === 'DROPOFF_SUPERVISOR' && !dropOffLocationId) {
-        res.status(400).json({ error: 'dropOffLocationId is required for dropoff supervisors' });
-        return;
       }
       if (password) {
         data.passwordHash = await bcrypt.hash(String(password), 10);
@@ -945,6 +944,7 @@ const ensureMerchantTables = async () => {
       requesterName TEXT,
       requesterRole TEXT,
       requestMessage TEXT,
+      requesterContact TEXT,
       createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -955,6 +955,7 @@ const ensureMerchantTables = async () => {
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => {});
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => {});
   await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => {});
 };
 
 const ensureSeedData = async () => {
@@ -1077,6 +1078,42 @@ app.delete('/api/site-locations/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete site location', error);
     res.status(500).json({ error: 'Failed to delete site location' });
+  }
+});
+
+app.post('/api/merge/site-locations', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.siteLocation.findUnique({ where: { id: sourceId } });
+      const target = await tx.siteLocation.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.merchant.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.mineQuarry.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.vendorCustomer.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.royaltyOwnerProfile.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.transportOwnerProfile.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.user.updateMany({ where: { pickupLocationId: sourceId }, data: { pickupLocationId: targetId } });
+      await tx.user.updateMany({ where: { dropOffLocationId: sourceId }, data: { dropOffLocationId: targetId } });
+      await tx.materialRate.updateMany({ where: { pickupLocationId: sourceId }, data: { pickupLocationId: targetId } });
+      await tx.materialRate.updateMany({ where: { dropOffLocationId: sourceId }, data: { dropOffLocationId: targetId } });
+      await tx.tripRecord.updateMany({ where: { pickupPlace: source.name }, data: { pickupPlace: target.name } });
+      await tx.tripRecord.updateMany({ where: { dropOffPlace: source.name }, data: { dropOffPlace: target.name } });
+      await tx.tripRecord.updateMany({ where: { place: source.name }, data: { place: target.name } });
+      await tx.siteLocation.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target site location not found.' });
+    }
+    console.error('Failed to merge site locations', error);
+    res.status(500).json({ error: 'Failed to merge site locations' });
   }
 });
 
@@ -2001,21 +2038,15 @@ app.get('/api/daily-expenses/export', async (req, res) => {
 app.get('/api/trips', async (req, res) => {
   try {
     const where = {};
-    if (req.user?.role === 'PICKUP_SUPERVISOR') {
-      if (!req.user.pickupLocationName) {
-        return res.json([]);
-      }
-      where.pickupPlace = req.user.pickupLocationName;
-    }
-    if (req.user?.role === 'DROPOFF_SUPERVISOR') {
-      if (!req.user.dropOffLocationName) {
-        return res.json([]);
-      }
-      where.dropOffPlace = req.user.dropOffLocationName;
-    }
+    // No pickup/dropoff restriction for supervisors at this stage.
     const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
+    const activityCounts = await prisma.tripActivityRecord.groupBy({
+      by: ['tripId'],
+      _count: { _all: true },
+    });
+    const activityMap = new Map(activityCounts.map(entry => [entry.tripId, entry._count._all]));
     const hydrated = await Promise.all(trips.map(async (trip) => {
-      const updated = { ...trip };
+      const updated = { ...trip, activityCount: activityMap.get(trip.id) || 0 };
       for (const field of UPLOAD_FIELDS) {
         if (trip[field]) {
           updated[field] = await resolveUploadList(trip[field]);
@@ -2031,9 +2062,6 @@ app.get('/api/trips', async (req, res) => {
 });
 
 app.get('/api/trips/:id/activity', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   const { id } = req.params;
   try {
     const entries = await prisma.tripActivityRecord.findMany({
@@ -2044,6 +2072,60 @@ app.get('/api/trips/:id/activity', async (req, res) => {
   } catch (error) {
     console.error('Failed to list trip activity', error);
     res.status(500).json({ error: 'Failed to list trip activity' });
+  }
+});
+
+app.post('/api/trips/:id/activity', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const {
+    message = '',
+    action = 'comment',
+    attachments = [],
+    notifyRole = null,
+    notifyUser = null,
+  } = req.body || {};
+  if (!message && (!Array.isArray(attachments) || attachments.length === 0)) {
+    return res.status(400).json({ error: 'Message or attachments are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const storedAttachments = await normalizeActivityAttachments({ attachments, trip, req });
+    const entry = await prisma.tripActivityRecord.create({
+      data: {
+        tripId: Number(id),
+        action,
+        message,
+        attachments: storedAttachments.length > 0 ? storedAttachments : undefined,
+        actorName: getUserDisplayName(req.user) || 'System',
+        actorRole: req.user?.role || 'SYSTEM',
+      },
+    });
+    if (notifyRole || notifyUser) {
+      await prisma.notificationRecord.create({
+        data: {
+          message: `Trip #${id} update from ${getUserDisplayName(req.user) || 'User'}${message ? `: ${message}` : ''}`.trim(),
+          type: 'info',
+          timestamp: new Date(),
+          read: false,
+          targetRole: notifyRole || null,
+          targetUser: notifyUser || null,
+          tripId: Number(id),
+          requestType: 'comment',
+          requesterName: getUserDisplayName(req.user),
+          requesterRole: req.user?.role || null,
+          requesterContact: getUserContact(req.user),
+          requestMessage: message || '',
+        },
+      });
+    }
+    res.status(201).json(entry);
+  } catch (error) {
+    console.error('Failed to create trip activity', error);
+    res.status(500).json({ error: 'Failed to create trip activity' });
   }
 });
 
@@ -2083,6 +2165,7 @@ app.post('/api/notifications', async (req, res) => {
     requesterName = null,
     requesterRole = null,
     requestMessage = null,
+    requesterContact = null,
   } = req.body || {};
   if (!message) {
     return res.status(400).json({ error: 'Message is required.' });
@@ -2101,6 +2184,7 @@ app.post('/api/notifications', async (req, res) => {
         requesterName,
         requesterRole,
         requestMessage,
+        requesterContact,
       },
     });
     res.status(201).json(notification);
@@ -2141,11 +2225,6 @@ app.post('/api/trips', async (req, res) => {
   if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
-  if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName) {
-    if (data.pickupPlace && data.pickupPlace !== req.user.pickupLocationName) {
-      return res.status(403).json({ error: 'Pickup location mismatch.' });
-    }
-  }
   if (!data.date || !data.customer) {
     return res.status(400).json({ error: 'Date and customer are required.' });
   }
@@ -2154,9 +2233,7 @@ app.post('/api/trips', async (req, res) => {
       data: {
         date: new Date(data.date),
         place: data.place || '',
-        pickupPlace: req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName
-          ? req.user.pickupLocationName
-          : (data.pickupPlace || ''),
+        pickupPlace: data.pickupPlace || '',
         dropOffPlace: data.dropOffPlace || '',
         vendorName: data.vendorName || '',
         vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
@@ -2217,34 +2294,275 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
+app.post('/api/trips/atomic', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const payload = req.body || {};
+  const data = payload.trip || payload;
+  const createMasters = payload.createMasters || {};
+  if (!data.date || !data.customer) {
+    return res.status(400).json({ error: 'Date and customer are required.' });
+  }
+
+  const normalizeVehicleNumber = (value = '') =>
+    String(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  const findMerchantType = async (tx) => {
+    const existing = await tx.merchantType.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (existing) return existing.id;
+    const created = await tx.merchantType.create({ data: { name: 'General', remarks: 'Auto-created for trip entries.' } });
+    return created.id;
+  };
+
+  try {
+    const createdTrip = await prisma.$transaction(async (tx) => {
+      const merchantTypeId = await findMerchantType(tx);
+      const pickupName = (data.pickupPlace || '').trim();
+      const dropOffName = (data.dropOffPlace || '').trim();
+
+      const pickupLocation = pickupName
+        ? await tx.siteLocation.findFirst({ where: { name: { equals: pickupName, mode: 'insensitive' } } })
+        : null;
+      const dropOffLocation = dropOffName
+        ? await tx.siteLocation.findFirst({ where: { name: { equals: dropOffName, mode: 'insensitive' } } })
+        : null;
+
+      const shouldCreatePickup = Boolean(createMasters.pickupPlace ?? true);
+      const shouldCreateDropOff = Boolean(createMasters.dropOffPlace ?? true);
+
+      const ensuredPickup = !pickupName || pickupLocation
+        ? pickupLocation
+        : shouldCreatePickup
+          ? await tx.siteLocation.create({
+              data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
+            })
+          : null;
+
+      const ensuredDropOff = !dropOffName || dropOffLocation
+        ? dropOffLocation
+        : shouldCreateDropOff
+          ? await tx.siteLocation.create({
+              data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
+            })
+          : null;
+
+      const lookupByName = async (model, name, allowCreate, defaults = {}) => {
+        if (!name) return null;
+        const existing = await model.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
+        if (existing) return existing;
+        if (!allowCreate) return null;
+        return model.create({ data: { merchantTypeId, name, ...defaults } });
+      };
+
+      const customerName = (data.customer || '').trim();
+      const quarryName = (data.quarryName || '').trim();
+      const royaltyName = (data.royaltyOwnerName || '').trim();
+      const transportName = (data.transporterName || '').trim();
+      const materialName = (data.material || '').trim();
+      const normalizedVehicle = normalizeVehicleNumber(data.vehicleNumber || '');
+
+      const vendorCustomer = await lookupByName(tx.vendorCustomer, customerName, Boolean(createMasters.vendorCustomer ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredDropOff?.id || ensuredPickup?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const mineQuarry = await lookupByName(tx.mineQuarry, quarryName, Boolean(createMasters.mineQuarry ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const royaltyOwner = await lookupByName(tx.royaltyOwnerProfile, royaltyName, Boolean(createMasters.royaltyOwner ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const transportOwner = await lookupByName(tx.transportOwnerProfile, transportName, Boolean(createMasters.transportOwner ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+
+      const materialType = materialName
+        ? await tx.materialTypeDefinition.findFirst({ where: { name: { equals: materialName, mode: 'insensitive' } } })
+        : null;
+      const ensuredMaterial = !materialName || materialType
+        ? materialType
+        : Boolean(createMasters.materialType ?? true)
+          ? await tx.materialTypeDefinition.create({ data: { name: materialName, remarks: '' } })
+          : null;
+
+      const existingVehicle = normalizedVehicle
+        ? await tx.vehicleMaster.findFirst({ where: { vehicleNumber: normalizedVehicle } })
+        : null;
+      const ensuredVehicle = !normalizedVehicle || existingVehicle
+        ? existingVehicle
+        : Boolean(createMasters.vehicleMaster ?? true)
+          ? await tx.vehicleMaster.create({
+              data: {
+                vehicleNumber: normalizedVehicle,
+                vehicleType: '',
+                capacity: 0,
+                ownerName: '',
+                contactNumber: '',
+                remarks: '',
+              },
+            })
+          : null;
+
+      const trip = await tx.tripRecord.create({
+        data: {
+          date: new Date(data.date),
+          place: data.place || '',
+          pickupPlace: pickupName,
+          dropOffPlace: dropOffName,
+          vendorName: data.vendorName || '',
+          vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
+          customer: vendorCustomer?.name || customerName,
+          invoiceDCNumber: data.invoiceDCNumber || '',
+          quarryName: mineQuarry?.name || quarryName,
+          mineQuarryIsOneOff: Boolean(data.mineQuarryIsOneOff),
+          royaltyOwnerName: royaltyOwner?.name || royaltyName,
+          royaltyOwnerIsOneOff: Boolean(data.royaltyOwnerIsOneOff),
+          material: ensuredMaterial?.name || materialName,
+          vehicleNumber: ensuredVehicle?.vehicleNumber || normalizedVehicle,
+          vehicleIsOneOff: Boolean(data.vehicleIsOneOff),
+          transporterName: transportOwner?.name || transportName,
+          transportOwnerIsOneOff: Boolean(data.transportOwnerIsOneOff),
+          transportOwnerMobileNumber: data.transportOwnerMobileNumber || '',
+          emptyWeight: Number(data.emptyWeight || 0),
+          grossWeight: Number(data.grossWeight || 0),
+          netWeight: Number(data.netWeight || 0),
+          royaltyNumber: data.royaltyNumber || '',
+          royaltyTons: Number(data.royaltyTons || 0),
+          royaltyM3: Number(data.royaltyM3 || 0),
+          deductionPercentage: Number(data.deductionPercentage || 0),
+          sizeChangePercentage: Number(data.sizeChangePercentage || 0),
+          tonnage: Number(data.tonnage || 0),
+          revenue: Number(data.revenue || 0),
+          materialCost: Number(data.materialCost || 0),
+          transportCost: Number(data.transportCost || 0),
+          royaltyCost: Number(data.royaltyCost || 0),
+          profit: Number(data.profit || 0),
+          paymentStatus: data.paymentStatus || 'unpaid',
+          agent: data.agent || '',
+          status: data.status || 'pending upload',
+          createdBy: getUserDisplayName(req.user),
+          rateOverrideEnabled: Boolean(data.rateOverrideEnabled),
+          rateOverride: data.rateOverride || null,
+        },
+      });
+      return trip;
+    });
+    res.status(201).json(createdTrip);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create trip with masters';
+    console.error('Failed to create trip with masters', message, error);
+    res.status(500).json({ error: message });
+  }
+});
+
 app.put('/api/trips/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body || {};
+  const role = req.user?.role || '';
+  const sanitizedData = { ...data };
+  const entryFieldKeys = [
+    'date',
+    'place',
+    'pickupPlace',
+    'dropOffPlace',
+    'vendorName',
+    'vendorCustomerIsOneOff',
+    'customer',
+    'invoiceDCNumber',
+    'quarryName',
+    'mineQuarryIsOneOff',
+    'royaltyOwnerName',
+    'royaltyOwnerIsOneOff',
+    'material',
+    'vehicleNumber',
+    'vehicleIsOneOff',
+    'transporterName',
+    'transportOwnerIsOneOff',
+    'transportOwnerMobileNumber',
+    'emptyWeight',
+    'grossWeight',
+    'netWeight',
+    'royaltyNumber',
+    'royaltyTons',
+    'royaltyM3',
+    'deductionPercentage',
+    'sizeChangePercentage',
+    'tonnage',
+    'agent',
+  ];
+  const receivedFieldKeys = [
+    'receivedDate',
+    'receivedBy',
+    'receivedByRole',
+    'endEmptyWeight',
+    'endGrossWeight',
+    'endNetWeight',
+    'endWaymentSlipUpload',
+    'weightDifferenceReason',
+  ];
+  const validationFieldKeys = [
+    'validatedBy',
+    'validatedAt',
+    'validationComments',
+  ];
+  if (role === 'PICKUP_SUPERVISOR') {
+    [...receivedFieldKeys, ...validationFieldKeys].forEach((field) => {
+      delete sanitizedData[field];
+    });
+  } else if (role === 'DROPOFF_SUPERVISOR') {
+    [...entryFieldKeys, ...validationFieldKeys].forEach((field) => {
+      delete sanitizedData[field];
+    });
+  }
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    delete sanitizedData.createdBy;
+  }
   try {
     const existingTrip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!existingTrip) {
       res.status(404).json({ error: 'Trip not found' });
       return;
     }
-    if (req.user?.role === 'PICKUP_SUPERVISOR' && req.user.pickupLocationName && existingTrip.pickupPlace !== req.user.pickupLocationName) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    if (req.user?.role === 'DROPOFF_SUPERVISOR' && req.user.dropOffLocationName && existingTrip.dropOffPlace !== req.user.dropOffLocationName) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
     if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const tripForUploads = {
       ...existingTrip,
-      ...data,
-      date: data.date ? new Date(data.date) : existingTrip.date,
+      ...sanitizedData,
+      date: sanitizedData.date ? new Date(sanitizedData.date) : existingTrip.date,
     };
     const uploadUpdates = {};
     for (const field of UPLOAD_FIELDS) {
-      if (data[field] !== undefined) {
+      if (sanitizedData[field] !== undefined) {
         uploadUpdates[field] = await normalizeUploadField({
-          fieldValue: data[field],
+          fieldValue: sanitizedData[field],
           trip: tripForUploads,
           req,
           fieldKey: field,
@@ -2254,85 +2572,106 @@ app.put('/api/trips/:id', async (req, res) => {
     const trip = await prisma.tripRecord.update({
       where: { id: Number(id) },
       data: {
-        date: data.date ? new Date(data.date) : undefined,
-        place: data.place,
-        pickupPlace: data.pickupPlace,
-        dropOffPlace: data.dropOffPlace,
-        vendorName: data.vendorName,
-        vendorCustomerIsOneOff: data.vendorCustomerIsOneOff !== undefined ? Boolean(data.vendorCustomerIsOneOff) : undefined,
-        customer: data.customer,
-        invoiceDCNumber: data.invoiceDCNumber,
-        quarryName: data.quarryName,
-        mineQuarryIsOneOff: data.mineQuarryIsOneOff !== undefined ? Boolean(data.mineQuarryIsOneOff) : undefined,
-        royaltyOwnerName: data.royaltyOwnerName,
-        royaltyOwnerIsOneOff: data.royaltyOwnerIsOneOff !== undefined ? Boolean(data.royaltyOwnerIsOneOff) : undefined,
-        material: data.material,
-        vehicleNumber: data.vehicleNumber,
-        vehicleIsOneOff: data.vehicleIsOneOff !== undefined ? Boolean(data.vehicleIsOneOff) : undefined,
-        transporterName: data.transporterName,
-        transportOwnerIsOneOff: data.transportOwnerIsOneOff !== undefined ? Boolean(data.transportOwnerIsOneOff) : undefined,
-        transportOwnerMobileNumber: data.transportOwnerMobileNumber,
-        emptyWeight: data.emptyWeight !== undefined ? Number(data.emptyWeight) : undefined,
-        grossWeight: data.grossWeight !== undefined ? Number(data.grossWeight) : undefined,
-        netWeight: data.netWeight !== undefined ? Number(data.netWeight) : undefined,
-        royaltyNumber: data.royaltyNumber,
-        royaltyTons: data.royaltyTons !== undefined ? Number(data.royaltyTons) : undefined,
-        royaltyM3: data.royaltyM3 !== undefined ? Number(data.royaltyM3) : undefined,
-        deductionPercentage: data.deductionPercentage !== undefined ? Number(data.deductionPercentage) : undefined,
-        sizeChangePercentage: data.sizeChangePercentage !== undefined ? Number(data.sizeChangePercentage) : undefined,
-        tonnage: data.tonnage !== undefined ? Number(data.tonnage) : undefined,
-        revenue: data.revenue !== undefined ? Number(data.revenue) : undefined,
-        materialCost: data.materialCost !== undefined ? Number(data.materialCost) : undefined,
-        transportCost: data.transportCost !== undefined ? Number(data.transportCost) : undefined,
-        royaltyCost: data.royaltyCost !== undefined ? Number(data.royaltyCost) : undefined,
-        profit: data.profit !== undefined ? Number(data.profit) : undefined,
-        paymentStatus: data.paymentStatus,
-        agent: data.agent,
-        status: data.status,
-        createdBy: data.createdBy,
+        date: sanitizedData.date ? new Date(sanitizedData.date) : undefined,
+        place: sanitizedData.place,
+        pickupPlace: sanitizedData.pickupPlace,
+        dropOffPlace: sanitizedData.dropOffPlace,
+        vendorName: sanitizedData.vendorName,
+        vendorCustomerIsOneOff: sanitizedData.vendorCustomerIsOneOff !== undefined ? Boolean(sanitizedData.vendorCustomerIsOneOff) : undefined,
+        customer: sanitizedData.customer,
+        invoiceDCNumber: sanitizedData.invoiceDCNumber,
+        quarryName: sanitizedData.quarryName,
+        mineQuarryIsOneOff: sanitizedData.mineQuarryIsOneOff !== undefined ? Boolean(sanitizedData.mineQuarryIsOneOff) : undefined,
+        royaltyOwnerName: sanitizedData.royaltyOwnerName,
+        royaltyOwnerIsOneOff: sanitizedData.royaltyOwnerIsOneOff !== undefined ? Boolean(sanitizedData.royaltyOwnerIsOneOff) : undefined,
+        material: sanitizedData.material,
+        vehicleNumber: sanitizedData.vehicleNumber,
+        vehicleIsOneOff: sanitizedData.vehicleIsOneOff !== undefined ? Boolean(sanitizedData.vehicleIsOneOff) : undefined,
+        transporterName: sanitizedData.transporterName,
+        transportOwnerIsOneOff: sanitizedData.transportOwnerIsOneOff !== undefined ? Boolean(sanitizedData.transportOwnerIsOneOff) : undefined,
+        transportOwnerMobileNumber: sanitizedData.transportOwnerMobileNumber,
+        emptyWeight: sanitizedData.emptyWeight !== undefined ? Number(sanitizedData.emptyWeight) : undefined,
+        grossWeight: sanitizedData.grossWeight !== undefined ? Number(sanitizedData.grossWeight) : undefined,
+        netWeight: sanitizedData.netWeight !== undefined ? Number(sanitizedData.netWeight) : undefined,
+        royaltyNumber: sanitizedData.royaltyNumber,
+        royaltyTons: sanitizedData.royaltyTons !== undefined ? Number(sanitizedData.royaltyTons) : undefined,
+        royaltyM3: sanitizedData.royaltyM3 !== undefined ? Number(sanitizedData.royaltyM3) : undefined,
+        deductionPercentage: sanitizedData.deductionPercentage !== undefined ? Number(sanitizedData.deductionPercentage) : undefined,
+        sizeChangePercentage: sanitizedData.sizeChangePercentage !== undefined ? Number(sanitizedData.sizeChangePercentage) : undefined,
+        tonnage: sanitizedData.tonnage !== undefined ? Number(sanitizedData.tonnage) : undefined,
+        revenue: sanitizedData.revenue !== undefined ? Number(sanitizedData.revenue) : undefined,
+        materialCost: sanitizedData.materialCost !== undefined ? Number(sanitizedData.materialCost) : undefined,
+        transportCost: sanitizedData.transportCost !== undefined ? Number(sanitizedData.transportCost) : undefined,
+        royaltyCost: sanitizedData.royaltyCost !== undefined ? Number(sanitizedData.royaltyCost) : undefined,
+        profit: sanitizedData.profit !== undefined ? Number(sanitizedData.profit) : undefined,
+        paymentStatus: sanitizedData.paymentStatus,
+        agent: sanitizedData.agent,
+        status: sanitizedData.status,
+        createdBy: sanitizedData.createdBy,
         ...uploadUpdates,
-        receivedDate: data.receivedDate ? new Date(data.receivedDate) : data.receivedDate,
-        receivedBy: data.receivedBy,
-        receivedByRole: data.receivedByRole,
-        endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : undefined,
-        endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : undefined,
-        endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : undefined,
-        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? data.endWaymentSlipUpload,
-        weightDifferenceReason: data.weightDifferenceReason,
-        validatedBy: data.validatedBy,
-        validatedAt: data.validatedAt ? new Date(data.validatedAt) : data.validatedAt,
-        validationComments: data.validationComments,
-        pendingRequestType: data.pendingRequestType,
-        pendingRequestMessage: data.pendingRequestMessage,
-        pendingRequestBy: data.pendingRequestBy,
-        pendingRequestRole: data.pendingRequestRole,
-        pendingRequestAt: data.pendingRequestAt ? new Date(data.pendingRequestAt) : data.pendingRequestAt,
-        rateOverrideEnabled: data.rateOverrideEnabled !== undefined ? Boolean(data.rateOverrideEnabled) : undefined,
-        rateOverride: data.rateOverride,
+        receivedDate: sanitizedData.receivedDate ? new Date(sanitizedData.receivedDate) : sanitizedData.receivedDate,
+        receivedBy: sanitizedData.receivedBy,
+        receivedByRole: sanitizedData.receivedByRole,
+        endEmptyWeight: sanitizedData.endEmptyWeight !== undefined ? Number(sanitizedData.endEmptyWeight) : undefined,
+        endGrossWeight: sanitizedData.endGrossWeight !== undefined ? Number(sanitizedData.endGrossWeight) : undefined,
+        endNetWeight: sanitizedData.endNetWeight !== undefined ? Number(sanitizedData.endNetWeight) : undefined,
+        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? sanitizedData.endWaymentSlipUpload,
+        weightDifferenceReason: sanitizedData.weightDifferenceReason,
+        validatedBy: sanitizedData.validatedBy,
+        validatedAt: sanitizedData.validatedAt ? new Date(sanitizedData.validatedAt) : sanitizedData.validatedAt,
+        validationComments: sanitizedData.validationComments,
+        pendingRequestType: sanitizedData.pendingRequestType,
+        pendingRequestMessage: sanitizedData.pendingRequestMessage,
+        pendingRequestBy: sanitizedData.pendingRequestBy,
+        pendingRequestRole: sanitizedData.pendingRequestRole,
+        pendingRequestAt: sanitizedData.pendingRequestAt ? new Date(sanitizedData.pendingRequestAt) : sanitizedData.pendingRequestAt,
+        rateOverrideEnabled: sanitizedData.rateOverrideEnabled !== undefined ? Boolean(sanitizedData.rateOverrideEnabled) : undefined,
+        rateOverride: sanitizedData.rateOverride,
       },
     });
-    if (data.status && data.status !== existingTrip.status) {
+    if (sanitizedData.status && sanitizedData.status !== existingTrip.status) {
       await logTripActivity({
         tripId: trip.id,
         action: 'status_change',
-        message: `Status changed from ${existingTrip.status || 'unknown'} to ${data.status}.`,
+        message: `Status changed from ${existingTrip.status || 'unknown'} to ${sanitizedData.status}.`,
         user: req.user,
       });
     }
-    if (data.pendingRequestType && data.pendingRequestType !== existingTrip.pendingRequestType) {
+    if (sanitizedData.pendingRequestType && sanitizedData.pendingRequestType !== existingTrip.pendingRequestType) {
       await logTripActivity({
         tripId: trip.id,
         action: 'request',
-        message: `Request ${data.pendingRequestType}${data.pendingRequestMessage ? `: ${data.pendingRequestMessage}` : ''}`,
+        message: `Request ${sanitizedData.pendingRequestType}${sanitizedData.pendingRequestMessage ? `: ${sanitizedData.pendingRequestMessage}` : ''}`,
         user: req.user,
       });
     }
-    if (data.validationComments) {
+    if (sanitizedData.validationComments) {
       await logTripActivity({
         tripId: trip.id,
         action: 'validation',
         message: `Validation comments added.`,
         user: req.user,
+      });
+    }
+    const clearingRequest =
+      Object.prototype.hasOwnProperty.call(sanitizedData, 'pendingRequestType')
+      && (sanitizedData.pendingRequestType === null || sanitizedData.pendingRequestType === '');
+    if (clearingRequest && existingTrip.pendingRequestBy) {
+      await prisma.notificationRecord.create({
+        data: {
+          message: `Trip #${trip.id} updated by ${getUserDisplayName(req.user) || 'Admin'}.`,
+          type: 'info',
+          timestamp: new Date(),
+          read: false,
+          targetRole: existingTrip.pendingRequestRole || null,
+          targetUser: existingTrip.pendingRequestBy || null,
+          tripId: trip.id,
+          requestType: 'update-resolved',
+          requesterName: getUserDisplayName(req.user),
+          requesterRole: req.user?.role || null,
+          requestMessage: sanitizedData.validationComments || '',
+          requesterContact: getUserContact(req.user),
+        },
       });
     }
     res.json(trip);
@@ -2344,7 +2683,7 @@ app.put('/api/trips/:id', async (req, res) => {
 
 app.post('/api/trips/:id/request-delete', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', reason = '' } = req.body || {};
+  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2362,6 +2701,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     });
     await prisma.tripRecord.update({
@@ -2389,7 +2729,7 @@ app.post('/api/trips/:id/request-delete', async (req, res) => {
 
 app.post('/api/trips/:id/request-update', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', reason = '' } = req.body || {};
+  const { requestedBy = 'Supervisor', requestedByRole = 'Supervisor', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2407,6 +2747,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     });
     await prisma.tripRecord.update({
@@ -2434,7 +2775,7 @@ app.post('/api/trips/:id/request-update', async (req, res) => {
 
 app.post('/api/trips/:id/raise-issue', async (req, res) => {
   const { id } = req.params;
-  const { requestedBy = 'User', requestedByRole = 'User', reason = '' } = req.body || {};
+  const { requestedBy = 'User', requestedByRole = 'User', requestedByContact = '', reason = '' } = req.body || {};
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -2453,6 +2794,7 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
         requesterName: requestedBy,
         requesterRole: requestedByRole,
         requestMessage: reason,
+        requesterContact: requestedByContact,
       },
     })));
     await prisma.tripRecord.update({
@@ -2479,11 +2821,25 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
 });
 
 app.delete('/api/trips/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   const { id } = req.params;
   try {
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+      const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+      if (!trip) {
+        return res.status(404).json({ error: 'Trip not found' });
+      }
+      const isPickupSupervisor = req.user?.role === 'PICKUP_SUPERVISOR';
+      const status = (trip.status || '').toLowerCase();
+      const isPendingUpload = status === 'pending upload' || status === 'pending';
+      const actorName = getUserDisplayName(req.user);
+      const actorUsername = req.user?.username || '';
+      const createdBy = trip.createdBy || '';
+      const matchesCreator = [actorName, actorUsername].some(value => value && value.toLowerCase() === createdBy.toLowerCase());
+      const canDelete = isPickupSupervisor && isPendingUpload && matchesCreator;
+      if (!canDelete) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
     await prisma.tripRecord.delete({ where: { id: Number(id) } });
     res.status(204).end();
   } catch (error) {
@@ -2572,6 +2928,42 @@ app.delete('/api/vehicle-masters/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete vehicle', error);
     res.status(500).json({ error: 'Failed to delete vehicle' });
+  }
+});
+
+app.post('/api/merge/vehicle-masters', async (req, res) => {
+  const { sourceId, targetId } = req.body || {};
+  if (!sourceId || !targetId) {
+    return res.status(400).json({ error: 'Source and target vehicle IDs are required.' });
+  }
+  if (sourceId === targetId) {
+    return res.status(400).json({ error: 'Source and target must be different.' });
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.vehicleMaster.findUnique({ where: { id: sourceId } });
+      const target = await tx.vehicleMaster.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.tripRecord.updateMany({
+        where: { vehicleNumber: source.vehicleNumber },
+        data: { vehicleNumber: target.vehicleNumber },
+      });
+      await tx.transportOwnerVehicle.updateMany({
+        where: { vehicleNumber: source.vehicleNumber },
+        data: { vehicleNumber: target.vehicleNumber },
+      });
+      await tx.vehicleMaster.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target vehicle not found.' });
+    }
+    console.error('Failed to merge vehicle records', error);
+    res.status(500).json({ error: 'Failed to merge vehicle records' });
   }
 });
 
@@ -2670,12 +3062,41 @@ const validateMerchantProfile = (body) => {
   const {
     merchantTypeId,
     name,
-    siteLocationId,
   } = body || {};
-  if (!merchantTypeId || !name || !siteLocationId) {
-    return 'Merchant type, name, and site location are required.';
+  if (!merchantTypeId || !name) {
+    return 'Merchant type and name are required.';
   }
   return '';
+};
+
+const validateMergeRequest = (body) => {
+  const { sourceId, targetId } = body || {};
+  if (!sourceId || !targetId) {
+    return 'sourceId and targetId are required.';
+  }
+  if (sourceId === targetId) {
+    return 'sourceId and targetId must be different.';
+  }
+  return '';
+};
+
+const updateRatePartyReferences = async (tx, ratePartyType, sourceId, targetId) => {
+  await tx.materialRate.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.merchantBankAccount.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.advanceRecord.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.dailyExpenseRecord.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
 };
 
 app.get('/api/mine-quarries', async (req, res) => {
@@ -2755,6 +3176,33 @@ app.delete('/api/mine-quarries/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete mine & quarry record', error);
     res.status(500).json({ error: 'Failed to delete mine & quarry record' });
+  }
+});
+
+app.post('/api/merge/mine-quarries', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.mineQuarry.findUnique({ where: { id: sourceId } });
+      const target = await tx.mineQuarry.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'mine-quarry', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { quarryName: source.name }, data: { quarryName: target.name } });
+      await tx.tripRecord.updateMany({ where: { vendorName: source.name }, data: { vendorName: target.name } });
+      await tx.mineQuarry.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target mine & quarry not found.' });
+    }
+    console.error('Failed to merge mine & quarry records', error);
+    res.status(500).json({ error: 'Failed to merge mine & quarry records' });
   }
 });
 
@@ -2838,6 +3286,32 @@ app.delete('/api/vendor-customers/:id', async (req, res) => {
   }
 });
 
+app.post('/api/merge/vendor-customers', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.vendorCustomer.findUnique({ where: { id: sourceId } });
+      const target = await tx.vendorCustomer.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'vendor-customer', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { customer: source.name }, data: { customer: target.name } });
+      await tx.vendorCustomer.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target vendor & customer not found.' });
+    }
+    console.error('Failed to merge vendor & customer records', error);
+    res.status(500).json({ error: 'Failed to merge vendor & customer records' });
+  }
+});
+
 app.get('/api/royalty-owners', async (req, res) => {
   try {
     const items = await prisma.royaltyOwnerProfile.findMany({
@@ -2918,6 +3392,32 @@ app.delete('/api/royalty-owners/:id', async (req, res) => {
   }
 });
 
+app.post('/api/merge/royalty-owners', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.royaltyOwnerProfile.findUnique({ where: { id: sourceId } });
+      const target = await tx.royaltyOwnerProfile.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'royalty-owner', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { royaltyOwnerName: source.name }, data: { royaltyOwnerName: target.name } });
+      await tx.royaltyOwnerProfile.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target royalty owner not found.' });
+    }
+    console.error('Failed to merge royalty owner records', error);
+    res.status(500).json({ error: 'Failed to merge royalty owner records' });
+  }
+});
+
 app.get('/api/transport-owners', async (req, res) => {
   try {
     const items = await prisma.transportOwnerProfile.findMany({
@@ -2995,6 +3495,33 @@ app.delete('/api/transport-owners/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete transport owner record', error);
     res.status(500).json({ error: 'Failed to delete transport owner record' });
+  }
+});
+
+app.post('/api/merge/transport-owners', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.transportOwnerProfile.findUnique({ where: { id: sourceId } });
+      const target = await tx.transportOwnerProfile.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'transport-owner', sourceId, targetId);
+      await tx.transportOwnerVehicle.updateMany({ where: { transportOwnerId: sourceId }, data: { transportOwnerId: targetId } });
+      await tx.tripRecord.updateMany({ where: { transporterName: source.name }, data: { transporterName: target.name } });
+      await tx.transportOwnerProfile.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target transport owner not found.' });
+    }
+    console.error('Failed to merge transport owner records', error);
+    res.status(500).json({ error: 'Failed to merge transport owner records' });
   }
 });
 
@@ -3129,6 +3656,32 @@ app.delete('/api/material-types/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete material type', error);
     res.status(500).json({ error: 'Failed to delete material type' });
+  }
+});
+
+app.post('/api/merge/material-types', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.materialTypeDefinition.findUnique({ where: { id: sourceId } });
+      const target = await tx.materialTypeDefinition.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.materialRate.updateMany({ where: { materialTypeId: sourceId }, data: { materialTypeId: targetId } });
+      await tx.tripRecord.updateMany({ where: { material: source.name }, data: { material: target.name } });
+      await tx.materialTypeDefinition.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target material type not found.' });
+    }
+    console.error('Failed to merge material types', error);
+    res.status(500).json({ error: 'Failed to merge material types' });
   }
 });
 
