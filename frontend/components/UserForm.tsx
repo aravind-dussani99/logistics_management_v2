@@ -85,7 +85,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
                 </InputField>
 
                 {role === Role.PICKUP_SUPERVISOR && (
-                    <InputField label="Pickup Location" id="pickupLocationId" name="pickupLocationId" type="select" value={pickupLocationId} onChange={e => setPickupLocationId(e.target.value)} required>
+                    <InputField label="Pickup Location" id="pickupLocationId" name="pickupLocationId" type="select" value={pickupLocationId} onChange={e => setPickupLocationId(e.target.value)}>
                         <option value="">Select pickup location</option>
                         {siteLocations.map(location => (
                             <option key={location.id} value={location.id}>{location.name}</option>
@@ -94,7 +94,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, siteLocations, onSave, onClos
                 )}
 
                 {role === Role.DROPOFF_SUPERVISOR && (
-                    <InputField label="Drop-off Location" id="dropOffLocationId" name="dropOffLocationId" type="select" value={dropOffLocationId} onChange={e => setDropOffLocationId(e.target.value)} required>
+                    <InputField label="Drop-off Location" id="dropOffLocationId" name="dropOffLocationId" type="select" value={dropOffLocationId} onChange={e => setDropOffLocationId(e.target.value)}>
                         <option value="">Select drop-off location</option>
                         {siteLocations.map(location => (
                             <option key={location.id} value={location.id}>{location.name}</option>

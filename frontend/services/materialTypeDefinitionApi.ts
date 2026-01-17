@@ -38,4 +38,11 @@ export const materialTypeDefinitionApi = {
     const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
+  merge: async (sourceId: string, targetId: string): Promise<void> => {
+    const response = await authFetch('/api/merge/material-types', {
+      method: 'POST',
+      body: JSON.stringify({ sourceId, targetId }),
+    });
+    await handleResponse(response);
+  },
 };

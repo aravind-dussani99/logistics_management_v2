@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/mockApi';
+import { findBestFuzzyMatch, normalizeMatchValue } from '../utils';
 import { useData } from '../contexts/DataContext';
 import { Trip, TripRateOverride, Role } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -96,6 +97,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         addTransportOwnerProfile,
         addVehicleMaster,
         addSiteLocation,
+        addMaterialTypeDefinition,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -200,7 +202,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
 
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
-        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'netWeight', 'pickupPlace', 'dropOffPlace'];
+        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'netWeight'];
         
         requiredFields.forEach(field => {
             if (!formData[field] || (field === 'netWeight' && parseFloat(formData[field]) <= 0)) {
@@ -251,8 +253,21 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
             createdSites.set(name.toLowerCase(), newSite.id);
         };
 
-        const pickupName = normalizeSiteName(formData.pickupPlace);
-        const dropOffName = normalizeSiteName(formData.dropOffPlace);
+        const suggestName = (label: string, value: string, candidates: string[]) => {
+            const trimmed = normalizeMatchValue(value);
+            if (!trimmed) return trimmed;
+            const exact = candidates.find(item => item.trim().toLowerCase() === trimmed.toLowerCase());
+            if (exact) return exact;
+            const suggestion = findBestFuzzyMatch(trimmed, candidates);
+            if (suggestion && window.confirm(`"${trimmed}" looks similar to "${suggestion.name}" for ${label}.\nUse "${suggestion.name}" instead?`)) {
+                return suggestion.name;
+            }
+            return trimmed;
+        };
+
+        const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
+        const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
+        const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
         if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
             await ensureSiteLocation(pickupName, 'both');
         } else {
@@ -262,35 +277,62 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         const netWeight = parseFloat(formData.netWeight) || 0;
         
         const selectedVehicle = vehicles.find(v => v.vehicleNumber === formData.vehicleNumber);
+        const resolvedCustomerName = oneOffSelection.customer
+            ? suggestName('Vendor & Customer', oneOffValues.customer, vendorCustomers.map(item => item.name))
+            : normalizeMatchValue(formData.customer);
+        const resolvedQuarryName = oneOffSelection.quarryName
+            ? suggestName('Mine & Quarry', oneOffValues.quarryName, mineQuarries.map(item => item.name))
+            : normalizeMatchValue(formData.quarryName);
+        const resolvedRoyaltyName = oneOffSelection.royaltyOwnerName
+            ? suggestName('Royalty Owner', oneOffValues.royaltyOwnerName, royaltyOwnerProfiles.map(item => item.name))
+            : normalizeMatchValue(formData.royaltyOwnerName);
+        const resolvedTransportName = oneOffSelection.transporterName
+            ? suggestName('Transport Owner', oneOffValues.transporterName, transportOwnerProfiles.map(item => item.name))
+            : normalizeMatchValue(formData.transporterName);
+        const resolvedVehicleNumber = oneOffSelection.vehicleNumber
+            ? normalizeMatchValue(oneOffValues.vehicleNumber).toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : normalizeMatchValue(formData.vehicleNumber).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        const existingCustomer = vendorCustomers.find(item => item.name.toLowerCase() === resolvedCustomerName.toLowerCase());
+        const existingQuarry = mineQuarries.find(item => item.name.toLowerCase() === resolvedQuarryName.toLowerCase());
+        const existingRoyalty = royaltyOwnerProfiles.find(item => item.name.toLowerCase() === resolvedRoyaltyName.toLowerCase());
+        const existingTransport = transportOwnerProfiles.find(item => item.name.toLowerCase() === resolvedTransportName.toLowerCase());
+        const existingVehicle = vehicles.find(item => item.vehicleNumber?.toLowerCase() === resolvedVehicleNumber.toLowerCase());
         
+        const existingMaterial = materialTypeDefinitions.find(item => item.name.trim().toLowerCase() === materialName.toLowerCase());
+        const resolvedMaterial = existingMaterial?.name || materialName;
+
         try {
-            if (oneOffSelection.customer && saveToMaster.customer) {
+            if (materialName && !existingMaterial) {
+                await addMaterialTypeDefinition({ name: materialName, remarks: '' });
+            }
+            if (oneOffSelection.customer && saveToMaster.customer && !existingCustomer && resolvedCustomerName) {
                 await addVendorCustomer({
                     ...oneOffMaster.customer,
-                    name: oneOffValues.customer,
+                    name: resolvedCustomerName,
                 });
             }
-            if (oneOffSelection.quarryName && saveToMaster.quarryName) {
+            if (oneOffSelection.quarryName && saveToMaster.quarryName && !existingQuarry && resolvedQuarryName) {
                 await addMineQuarry({
                     ...oneOffMaster.quarryName,
-                    name: oneOffValues.quarryName,
+                    name: resolvedQuarryName,
                 });
             }
-            if (oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName) {
+            if (oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName && !existingRoyalty && resolvedRoyaltyName) {
                 await addRoyaltyOwnerProfile({
                     ...oneOffMaster.royaltyOwnerName,
-                    name: oneOffValues.royaltyOwnerName,
+                    name: resolvedRoyaltyName,
                 });
             }
-            if (oneOffSelection.transporterName && saveToMaster.transporterName) {
+            if (oneOffSelection.transporterName && saveToMaster.transporterName && !existingTransport && resolvedTransportName) {
                 await addTransportOwnerProfile({
                     ...oneOffMaster.transporterName,
-                    name: oneOffValues.transporterName,
+                    name: resolvedTransportName,
                 });
             }
-            if (oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber) {
+            if (oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber && !existingVehicle && resolvedVehicleNumber) {
                 await addVehicleMaster({
-                    vehicleNumber: oneOffValues.vehicleNumber,
+                    vehicleNumber: resolvedVehicleNumber,
                     vehicleType: oneOffMaster.vehicleNumber.vehicleType,
                     ownerName: oneOffMaster.vehicleNumber.ownerName,
                     contactNumber: oneOffMaster.vehicleNumber.contactNumber,
@@ -306,22 +348,22 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
 
         const newTripData: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'> = {
             date: formData.date,
-            place: formData.place || formData.dropOffPlace,
-            pickupPlace: formData.pickupPlace,
-            dropOffPlace: formData.dropOffPlace,
-            vendorName: formData.quarryName, 
-            vendorCustomerIsOneOff: oneOffSelection.customer,
-            customer: formData.customer,
+            place: dropOffName || formData.place,
+            pickupPlace: pickupName,
+            dropOffPlace: dropOffName,
+            vendorName: existingQuarry?.name || resolvedQuarryName, 
+            vendorCustomerIsOneOff: Boolean(resolvedCustomerName) && !existingCustomer,
+            customer: existingCustomer?.name || resolvedCustomerName,
             invoiceDCNumber: formData.invoiceDCNumber,
-            quarryName: formData.quarryName,
-            mineQuarryIsOneOff: oneOffSelection.quarryName,
-            royaltyOwnerName: formData.royaltyOwnerName,
-            royaltyOwnerIsOneOff: oneOffSelection.royaltyOwnerName,
-            material: formData.material,
-            vehicleNumber: formData.vehicleNumber,
-            vehicleIsOneOff: oneOffSelection.vehicleNumber,
-            transporterName: formData.transporterName || selectedVehicle?.ownerName || '',
-            transportOwnerIsOneOff: oneOffSelection.transporterName,
+            quarryName: existingQuarry?.name || resolvedQuarryName,
+            mineQuarryIsOneOff: Boolean(resolvedQuarryName) && !existingQuarry,
+            royaltyOwnerName: existingRoyalty?.name || resolvedRoyaltyName,
+            royaltyOwnerIsOneOff: Boolean(resolvedRoyaltyName) && !existingRoyalty,
+            material: resolvedMaterial,
+            vehicleNumber: resolvedVehicleNumber,
+            vehicleIsOneOff: Boolean(resolvedVehicleNumber) && !existingVehicle,
+            transporterName: existingTransport?.name || resolvedTransportName || selectedVehicle?.ownerName || '',
+            transportOwnerIsOneOff: Boolean(resolvedTransportName) && !existingTransport,
             emptyWeight: 0, 
             grossWeight: netWeight, 
             netWeight: netWeight,
@@ -589,10 +631,10 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                                 )}
                             </>
                         )}
-                        <InputField label="Material Type" id="material" type="select" required error={errors.material} value={formData.material} onChange={handleInputChange}>
-                             <option value="">Select Material</option>
-                             {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-                        </InputField>
+                        <InputField label="Material Type" id="material" type="text" required error={errors.material} value={formData.material} onChange={handleInputChange} list="material-type-options" />
+                        <datalist id="material-type-options">
+                             {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
+                        </datalist>
                         <InputField label="Vehicle Number" id="vehicleNumber" type="select" error={errors.vehicleNumber} value={oneOffSelection.vehicleNumber ? ONE_OFF_VALUE : formData.vehicleNumber} onChange={(event) => handleOneOffSelect('vehicleNumber', event.target.value)}>
                             <option value="">Select Vehicle</option>
                             {vehicles.map(v => <option key={v.id} value={v.vehicleNumber}>{v.vehicleNumber} ({v.ownerName})</option>)}

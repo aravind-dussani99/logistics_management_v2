@@ -1068,6 +1068,42 @@ app.delete('/api/site-locations/:id', async (req, res) => {
   }
 });
 
+app.post('/api/merge/site-locations', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.siteLocation.findUnique({ where: { id: sourceId } });
+      const target = await tx.siteLocation.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.merchant.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.mineQuarry.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.vendorCustomer.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.royaltyOwnerProfile.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.transportOwnerProfile.updateMany({ where: { siteLocationId: sourceId }, data: { siteLocationId: targetId } });
+      await tx.user.updateMany({ where: { pickupLocationId: sourceId }, data: { pickupLocationId: targetId } });
+      await tx.user.updateMany({ where: { dropOffLocationId: sourceId }, data: { dropOffLocationId: targetId } });
+      await tx.materialRate.updateMany({ where: { pickupLocationId: sourceId }, data: { pickupLocationId: targetId } });
+      await tx.materialRate.updateMany({ where: { dropOffLocationId: sourceId }, data: { dropOffLocationId: targetId } });
+      await tx.tripRecord.updateMany({ where: { pickupPlace: source.name }, data: { pickupPlace: target.name } });
+      await tx.tripRecord.updateMany({ where: { dropOffPlace: source.name }, data: { dropOffPlace: target.name } });
+      await tx.tripRecord.updateMany({ where: { place: source.name }, data: { place: target.name } });
+      await tx.siteLocation.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target site location not found.' });
+    }
+    console.error('Failed to merge site locations', error);
+    res.status(500).json({ error: 'Failed to merge site locations' });
+  }
+});
+
 app.get('/api/merchant-types', async (req, res) => {
   try {
     const types = await prisma.merchantType.findMany({ orderBy: { name: 'asc' } });
@@ -2667,6 +2703,36 @@ const validateMerchantProfile = (body) => {
   return '';
 };
 
+const validateMergeRequest = (body) => {
+  const { sourceId, targetId } = body || {};
+  if (!sourceId || !targetId) {
+    return 'sourceId and targetId are required.';
+  }
+  if (sourceId === targetId) {
+    return 'sourceId and targetId must be different.';
+  }
+  return '';
+};
+
+const updateRatePartyReferences = async (tx, ratePartyType, sourceId, targetId) => {
+  await tx.materialRate.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.merchantBankAccount.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.advanceRecord.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+  await tx.dailyExpenseRecord.updateMany({
+    where: { ratePartyType, ratePartyId: sourceId },
+    data: { ratePartyId: targetId },
+  });
+};
+
 app.get('/api/mine-quarries', async (req, res) => {
   try {
     const items = await prisma.mineQuarry.findMany({
@@ -2744,6 +2810,33 @@ app.delete('/api/mine-quarries/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete mine & quarry record', error);
     res.status(500).json({ error: 'Failed to delete mine & quarry record' });
+  }
+});
+
+app.post('/api/merge/mine-quarries', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.mineQuarry.findUnique({ where: { id: sourceId } });
+      const target = await tx.mineQuarry.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'mine-quarry', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { quarryName: source.name }, data: { quarryName: target.name } });
+      await tx.tripRecord.updateMany({ where: { vendorName: source.name }, data: { vendorName: target.name } });
+      await tx.mineQuarry.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target mine & quarry not found.' });
+    }
+    console.error('Failed to merge mine & quarry records', error);
+    res.status(500).json({ error: 'Failed to merge mine & quarry records' });
   }
 });
 
@@ -2827,6 +2920,32 @@ app.delete('/api/vendor-customers/:id', async (req, res) => {
   }
 });
 
+app.post('/api/merge/vendor-customers', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.vendorCustomer.findUnique({ where: { id: sourceId } });
+      const target = await tx.vendorCustomer.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'vendor-customer', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { customer: source.name }, data: { customer: target.name } });
+      await tx.vendorCustomer.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target vendor & customer not found.' });
+    }
+    console.error('Failed to merge vendor & customer records', error);
+    res.status(500).json({ error: 'Failed to merge vendor & customer records' });
+  }
+});
+
 app.get('/api/royalty-owners', async (req, res) => {
   try {
     const items = await prisma.royaltyOwnerProfile.findMany({
@@ -2907,6 +3026,32 @@ app.delete('/api/royalty-owners/:id', async (req, res) => {
   }
 });
 
+app.post('/api/merge/royalty-owners', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.royaltyOwnerProfile.findUnique({ where: { id: sourceId } });
+      const target = await tx.royaltyOwnerProfile.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'royalty-owner', sourceId, targetId);
+      await tx.tripRecord.updateMany({ where: { royaltyOwnerName: source.name }, data: { royaltyOwnerName: target.name } });
+      await tx.royaltyOwnerProfile.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target royalty owner not found.' });
+    }
+    console.error('Failed to merge royalty owner records', error);
+    res.status(500).json({ error: 'Failed to merge royalty owner records' });
+  }
+});
+
 app.get('/api/transport-owners', async (req, res) => {
   try {
     const items = await prisma.transportOwnerProfile.findMany({
@@ -2984,6 +3129,33 @@ app.delete('/api/transport-owners/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete transport owner record', error);
     res.status(500).json({ error: 'Failed to delete transport owner record' });
+  }
+});
+
+app.post('/api/merge/transport-owners', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.transportOwnerProfile.findUnique({ where: { id: sourceId } });
+      const target = await tx.transportOwnerProfile.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await updateRatePartyReferences(tx, 'transport-owner', sourceId, targetId);
+      await tx.transportOwnerVehicle.updateMany({ where: { transportOwnerId: sourceId }, data: { transportOwnerId: targetId } });
+      await tx.tripRecord.updateMany({ where: { transporterName: source.name }, data: { transporterName: target.name } });
+      await tx.transportOwnerProfile.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target transport owner not found.' });
+    }
+    console.error('Failed to merge transport owner records', error);
+    res.status(500).json({ error: 'Failed to merge transport owner records' });
   }
 });
 
@@ -3118,6 +3290,32 @@ app.delete('/api/material-types/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete material type', error);
     res.status(500).json({ error: 'Failed to delete material type' });
+  }
+});
+
+app.post('/api/merge/material-types', async (req, res) => {
+  const errorMessage = validateMergeRequest(req.body);
+  if (errorMessage) return res.status(400).json({ error: errorMessage });
+  const { sourceId, targetId } = req.body || {};
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.materialTypeDefinition.findUnique({ where: { id: sourceId } });
+      const target = await tx.materialTypeDefinition.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.materialRate.updateMany({ where: { materialTypeId: sourceId }, data: { materialTypeId: targetId } });
+      await tx.tripRecord.updateMany({ where: { material: source.name }, data: { material: target.name } });
+      await tx.materialTypeDefinition.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target material type not found.' });
+    }
+    console.error('Failed to merge material types', error);
+    res.status(500).json({ error: 'Failed to merge material types' });
   }
 });
 

@@ -21,7 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setSidebarOpen(false);
     document.body.style.pointerEvents = '';
     document.body.style.overflow = '';
-  }, [location.pathname, location.search, modalContent, closeModal]);
+  }, [location.pathname, location.search, closeModal]);
 
   return (
     <div className="flex h-screen bg-light dark:bg-dark text-gray-800 dark:text-gray-200">

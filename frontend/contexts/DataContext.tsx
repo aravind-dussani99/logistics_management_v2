@@ -130,6 +130,7 @@ interface DataContextType {
   addSiteLocation: (site: Omit<SiteLocation, 'id'>) => Promise<SiteLocation>;
   updateSiteLocation: (id: string, site: Omit<SiteLocation, 'id'>) => Promise<void>;
   deleteSiteLocation: (id: string) => Promise<void>;
+  mergeSiteLocation: (sourceId: string, targetId: string) => Promise<void>;
 
   addMerchantType: (data: Omit<MerchantType, 'id'>) => Promise<void>;
   updateMerchantType: (id: string, data: Omit<MerchantType, 'id'>) => Promise<void>;
@@ -150,18 +151,22 @@ interface DataContextType {
   addMineQuarry: (data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   updateMineQuarry: (id: string, data: Omit<MineQuarryData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   deleteMineQuarry: (id: string) => Promise<void>;
+  mergeMineQuarry: (sourceId: string, targetId: string) => Promise<void>;
 
   addVendorCustomer: (data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   updateVendorCustomer: (id: string, data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   deleteVendorCustomer: (id: string) => Promise<void>;
+  mergeVendorCustomer: (sourceId: string, targetId: string) => Promise<void>;
 
   addRoyaltyOwnerProfile: (data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   updateRoyaltyOwnerProfile: (id: string, data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   deleteRoyaltyOwnerProfile: (id: string) => Promise<void>;
+  mergeRoyaltyOwnerProfile: (sourceId: string, targetId: string) => Promise<void>;
 
   addTransportOwnerProfile: (data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   updateTransportOwnerProfile: (id: string, data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => Promise<void>;
   deleteTransportOwnerProfile: (id: string) => Promise<void>;
+  mergeTransportOwnerProfile: (sourceId: string, targetId: string) => Promise<void>;
 
   addTransportOwnerVehicle: (data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => Promise<void>;
   updateTransportOwnerVehicle: (id: string, data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => Promise<void>;
@@ -170,6 +175,7 @@ interface DataContextType {
   addMaterialTypeDefinition: (data: Omit<MaterialTypeDefinition, 'id'>) => Promise<void>;
   updateMaterialTypeDefinition: (id: string, data: Omit<MaterialTypeDefinition, 'id'>) => Promise<void>;
   deleteMaterialTypeDefinition: (id: string) => Promise<void>;
+  mergeMaterialTypeDefinition: (sourceId: string, targetId: string) => Promise<void>;
 
   addMaterialRate: (data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => Promise<void>;
   updateMaterialRate: (id: string, data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => Promise<void>;
@@ -746,6 +752,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await siteLocationApi.remove(id);
     setSiteLocations(prev => prev.filter(location => location.id !== id));
   };
+  const mergeSiteLocation = async (sourceId: string, targetId: string) => {
+    await siteLocationApi.merge(sourceId, targetId);
+    refreshData();
+  };
 
   const addMerchantType = async (data: Omit<MerchantType, 'id'>) => {
     const newType = await merchantTypeApi.create(data);
@@ -811,6 +821,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await mineQuarryApi.remove(id);
     setMineQuarries(prev => prev.filter(item => item.id !== id));
   };
+  const mergeMineQuarry = async (sourceId: string, targetId: string) => {
+    await mineQuarryApi.merge(sourceId, targetId);
+    refreshData();
+  };
 
   const addVendorCustomer = async (data: Omit<VendorCustomerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
     const newItem = await vendorCustomerApi.create(data);
@@ -823,6 +837,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteVendorCustomer = async (id: string) => {
     await vendorCustomerApi.remove(id);
     setVendorCustomers(prev => prev.filter(item => item.id !== id));
+  };
+  const mergeVendorCustomer = async (sourceId: string, targetId: string) => {
+    await vendorCustomerApi.merge(sourceId, targetId);
+    refreshData();
   };
 
   const addRoyaltyOwnerProfile = async (data: Omit<RoyaltyOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
@@ -837,6 +855,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await royaltyOwnerDataApi.remove(id);
     setRoyaltyOwnerProfiles(prev => prev.filter(item => item.id !== id));
   };
+  const mergeRoyaltyOwnerProfile = async (sourceId: string, targetId: string) => {
+    await royaltyOwnerDataApi.merge(sourceId, targetId);
+    refreshData();
+  };
 
   const addTransportOwnerProfile = async (data: Omit<TransportOwnerData, 'id' | 'merchantTypeName' | 'siteLocationName'>) => {
     const newItem = await transportOwnerApi.create(data);
@@ -849,6 +871,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteTransportOwnerProfile = async (id: string) => {
     await transportOwnerApi.remove(id);
     setTransportOwnerProfiles(prev => prev.filter(item => item.id !== id));
+  };
+  const mergeTransportOwnerProfile = async (sourceId: string, targetId: string) => {
+    await transportOwnerApi.merge(sourceId, targetId);
+    refreshData();
   };
 
   const addTransportOwnerVehicle = async (data: Omit<TransportOwnerVehicle, 'id' | 'transportOwnerName'>) => {
@@ -875,6 +901,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteMaterialTypeDefinition = async (id: string) => {
     await materialTypeDefinitionApi.remove(id);
     setMaterialTypeDefinitions(prev => prev.filter(item => item.id !== id));
+  };
+  const mergeMaterialTypeDefinition = async (sourceId: string, targetId: string) => {
+    await materialTypeDefinitionApi.merge(sourceId, targetId);
+    refreshData();
   };
 
   const addMaterialRate = async (data: Omit<MaterialRate, 'id' | 'materialTypeName' | 'ratePartyName' | 'pickupLocationName' | 'dropOffLocationName'>) => {
@@ -983,6 +1013,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addSiteLocation,
     updateSiteLocation,
     deleteSiteLocation,
+    mergeSiteLocation,
     addMerchantType,
     updateMerchantType,
     deleteMerchantType,
@@ -998,21 +1029,26 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addMineQuarry,
     updateMineQuarry,
     deleteMineQuarry,
+    mergeMineQuarry,
     addVendorCustomer,
     updateVendorCustomer,
     deleteVendorCustomer,
+    mergeVendorCustomer,
     addRoyaltyOwnerProfile,
     updateRoyaltyOwnerProfile,
     deleteRoyaltyOwnerProfile,
+    mergeRoyaltyOwnerProfile,
     addTransportOwnerProfile,
     updateTransportOwnerProfile,
     deleteTransportOwnerProfile,
+    mergeTransportOwnerProfile,
     addTransportOwnerVehicle,
     updateTransportOwnerVehicle,
     deleteTransportOwnerVehicle,
     addMaterialTypeDefinition,
     updateMaterialTypeDefinition,
     deleteMaterialTypeDefinition,
+    mergeMaterialTypeDefinition,
     addMaterialRate,
     updateMaterialRate,
     deleteMaterialRate,

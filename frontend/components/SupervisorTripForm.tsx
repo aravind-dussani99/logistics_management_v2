@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role, TripRateOverride } from '../types';
-import { safeToFixed } from '../utils';
+import { findBestFuzzyMatch, normalizeMatchValue, safeToFixed } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
@@ -72,6 +72,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         addTransportOwnerProfile,
         addVehicleMaster,
         addSiteLocation,
+        addMaterialTypeDefinition,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -315,18 +316,31 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     createdSites.set(name.toLowerCase(), newSite.id);
                 };
 
-                const pickupName = normalizeSiteName(formData.pickupPlace);
-                const dropOffName = normalizeSiteName(formData.dropOffPlace);
+                const suggestName = (label: string, value: string, candidates: string[]) => {
+                    const trimmed = normalizeMatchValue(value);
+                    if (!trimmed) return trimmed;
+                    const exact = candidates.find(item => item.trim().toLowerCase() === trimmed.toLowerCase());
+                    if (exact) return exact;
+                    const suggestion = findBestFuzzyMatch(trimmed, candidates);
+                    if (suggestion && window.confirm(`"${trimmed}" looks similar to "${suggestion.name}" for ${label}.\nUse "${suggestion.name}" instead?`)) {
+                        return suggestion.name;
+                    }
+                    return trimmed;
+                };
+
+                const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
+                const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
+                const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
                 if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
                     await ensureSiteLocation(pickupName, 'both');
                 } else {
                     await ensureSiteLocation(pickupName, 'pickup');
                     await ensureSiteLocation(dropOffName, 'drop-off');
                 }
-                const customerName = (formData.customer || '').trim();
-                const quarryName = (formData.quarryName || '').trim();
-                const royaltyOwnerName = (formData.royaltyOwnerName || '').trim();
-                const transportOwnerName = (formData.transporterName || '').trim();
+                const customerName = suggestName('Vendor & Customer', (formData.customer || '').trim(), vendorCustomers.map(item => item.name));
+                const quarryName = suggestName('Mine & Quarry', (formData.quarryName || '').trim(), mineQuarries.map(item => item.name));
+                const royaltyOwnerName = suggestName('Royalty Owner', (formData.royaltyOwnerName || '').trim(), royaltyOwnerProfiles.map(item => item.name));
+                const transportOwnerName = suggestName('Transport Owner', (formData.transporterName || '').trim(), transportOwnerProfiles.map(item => item.name));
                 const vehicleNumber = (formData.vehicleNumber || '').trim();
 
                 const matchByName = (name: string, list: { name: string }[]) =>
@@ -336,12 +350,14 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 const existingRoyalty = matchByName(royaltyOwnerName, royaltyOwnerProfiles);
                 const existingTransport = matchByName(transportOwnerName, transportOwnerProfiles);
                 const existingVehicle = vehicles.find(item => item.vehicleNumber?.toLowerCase() === vehicleNumber.toLowerCase());
+                const existingMaterial = matchByName(materialName, materialTypeDefinitions);
 
                 const customerIsOneOff = Boolean(customerName) && !existingCustomer;
                 const quarryIsOneOff = Boolean(quarryName) && !existingQuarry;
                 const royaltyIsOneOff = Boolean(royaltyOwnerName) && !existingRoyalty;
                 const transportIsOneOff = Boolean(transportOwnerName) && !existingTransport;
                 const vehicleIsOneOff = Boolean(vehicleNumber) && !existingVehicle;
+                const materialIsNew = Boolean(materialName) && !existingMaterial;
                 if (rateOverrideEnabled) {
                     if (!rateOverride.materialTypeId || !rateOverride.ratePartyId || !rateOverride.pickupLocationId || !rateOverride.dropOffLocationId || !rateOverride.effectiveFrom) {
                         setRateError('Please complete the required rate fields.');
@@ -351,6 +367,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     setRateError('');
                 }
                 try {
+                    if (materialIsNew && materialName) {
+                        await addMaterialTypeDefinition({ name: materialName, remarks: '' });
+                    }
                     if (customerIsOneOff && customerName) {
                         const merchantTypeId = merchantTypes[0]?.id || '';
                         const siteLocationId = findSiteId(dropOffName) || findSiteId(pickupName);
@@ -440,9 +459,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 }
                 const tripPayload = {
                     ...formData,
-                    place: formData.place || formData.dropOffPlace || '',
-                    pickupPlace: formData.pickupPlace,
+                    place: dropOffName || formData.place || '',
+                    pickupPlace: pickupName,
+                    dropOffPlace: dropOffName,
                     customer: customerName || formData.customer,
+                    material: existingMaterial?.name || materialName || formData.material,
                     vendorCustomerIsOneOff: customerIsOneOff,
                     quarryName: quarryName || formData.quarryName,
                     royaltyOwnerName: royaltyOwnerName || formData.royaltyOwnerName,
@@ -457,6 +478,21 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 };
                 await addTrip(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>);
             } else if (mode === 'upload' || mode === 'edit') {
+                let resolvedMaterial = formData.material;
+                if (mode === 'edit') {
+                    const materialName = normalizeMatchValue(formData.material || '');
+                    const existingMaterial = materialTypeDefinitions.find(item => item.name.trim().toLowerCase() === materialName.toLowerCase());
+                    let finalMaterial = existingMaterial?.name || materialName;
+                    if (materialName && !existingMaterial) {
+                        const suggestion = findBestFuzzyMatch(materialName, materialTypeDefinitions.map(item => item.name));
+                        if (suggestion && window.confirm(`"${materialName}" looks similar to "${suggestion.name}" for Material Type.\nUse "${suggestion.name}" instead?`)) {
+                            finalMaterial = suggestion.name;
+                        } else {
+                            await addMaterialTypeDefinition({ name: materialName, remarks: '' });
+                        }
+                    }
+                    resolvedMaterial = finalMaterial || formData.material;
+                }
                 const uploadData = {
                     ewayBillUpload: serializeUploadValue(files.ewayBillUpload),
                     invoiceDCUpload: serializeUploadValue(files.invoiceDCUpload),
@@ -468,6 +504,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 const nextStatus = mode === 'upload' ? 'in transit' : formData.status;
                 await updateTrip(trip!.id, {
                     ...formData,
+                    material: resolvedMaterial,
                     ...uploadData,
                     status: nextStatus,
                     rateOverrideEnabled: rateOverrideEnabled,
@@ -550,11 +587,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">Enter New Trip</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                             <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} required />
-                            <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace || ''} onChange={handleInputChange} required />
+                            <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace || ''} onChange={handleInputChange} />
                             <datalist id="pickupPlace-options">
                                 {pickupSites.map(site => <option key={site.id} value={site.name} />)}
                             </datalist>
-                            <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace || ''} onChange={handleInputChange} required />
+                            <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace || ''} onChange={handleInputChange} />
                             <datalist id="dropOffPlace-options">
                                 {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
                             </datalist>
@@ -591,10 +628,10 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     ))}
                                 </datalist>
                             </div>
-                            <InputField label="Material Type" id="material" type="select" value={formData.material} onChange={handleInputChange} required>
-                                <option value="">Select Material</option>
-                                {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-                            </InputField>
+                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} required list="material-type-options" />
+                            <datalist id="material-type-options">
+                                {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
+                            </datalist>
                             <div className="col-span-1">
                                 <InputField
                                     label="Royalty Owner Name"
@@ -756,11 +793,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">{mode === 'edit' ? 'Edit' : 'View'} Trip #{trip?.id}</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                              <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} isReadOnly={isReadOnly} required />
-                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required />
+                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
                              <datalist id="pickupPlace-options-edit">
                                  {pickupSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
-                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} required />
+                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
                              <datalist id="dropOffPlace-options-edit">
                                  {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
@@ -805,10 +842,10 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            <InputField label="Material Type" id="material" type="select" value={formData.material} onChange={handleInputChange} isReadOnly={isReadOnly} required>
-                                <option value="">Select Material</option>
-                                {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-                            </InputField>
+                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} isReadOnly={isReadOnly} required list="material-type-options-edit" />
+                            <datalist id="material-type-options-edit">
+                                {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
+                            </datalist>
                             {isReadOnly ? (
                                 <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="text" value={formData.royaltyOwnerName} isReadOnly={isReadOnly} />
                             ) : (
