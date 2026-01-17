@@ -103,7 +103,7 @@ const MineQuarryDataPage: React.FC = () => {
         subtitle="Manage mine and quarry profiles with GST details."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Mine & Quarry', action: handleAdd }}
       />
 

@@ -17,7 +17,8 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLText
     const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'field';
     const inputId = props.id || props.name || toId(label);
     const inputName = props.name || inputId;
-    const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+    const rawValue = props.value ?? '';
+    const inputValue = props.type === 'number' && (rawValue === 0 || rawValue === '0') ? '' : rawValue;
     return (
         <div className="col-span-1">
             {isReadOnly ? (
@@ -28,9 +29,9 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLText
             {isReadOnly ? (
                 <div id={inputId} role="textbox" aria-readonly="true" className="mt-1 block w-full px-3 py-2 text-gray-500 dark:text-gray-400 min-h-[42px] flex items-center bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">{props.value || '-'}</div>
             ) : props.type === 'select' ? (
-                 <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} id={inputId} name={inputName} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{props.children}</select>
+                 <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} id={inputId} name={inputName} value={rawValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{props.children}</select>
             ) : props.type === 'textarea' ? (
-                 <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} id={inputId} name={inputName} rows={2} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+                 <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} id={inputId} name={inputName} rows={2} value={rawValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
             ) : (
                  <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
             )}
@@ -64,14 +65,8 @@ const FileInputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { l
 
 const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onClose, onSubmitSuccess }) => {
     const {
-        addTrip,
+        addTripAtomic,
         updateTrip,
-        addVendorCustomer,
-        addMineQuarry,
-        addRoyaltyOwnerProfile,
-        addTransportOwnerProfile,
-        addVehicleMaster,
-        addSiteLocation,
         addMaterialTypeDefinition,
         loadTripMasters,
         vehicles,
@@ -104,6 +99,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const [previewFile, setPreviewFile] = useState<TripUploadFile | null>(null);
     const [activityLog, setActivityLog] = useState<TripActivity[]>([]);
     const [activityError, setActivityError] = useState('');
+    const [masterSaveError, setMasterSaveError] = useState('');
+    const [submitError, setSubmitError] = useState('');
     const isPrivileged = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [rateError, setRateError] = useState('');
     const [rateOverrideEnabled, setRateOverrideEnabled] = useState(false);
@@ -140,6 +137,35 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 return [];
         }
     })();
+    const entryFieldIds = new Set([
+        'date',
+        'pickupPlace',
+        'dropOffPlace',
+        'invoiceDCNumber',
+        'customer',
+        'quarryName',
+        'material',
+        'royaltyOwnerName',
+        'royaltyNumber',
+        'royaltyTons',
+        'vehicleNumber',
+        'transporterName',
+        'transportOwnerMobileNumber',
+        'emptyWeight',
+        'grossWeight',
+        'netWeight',
+        'vendorName',
+    ]);
+    const receivedFieldIds = new Set([
+        'receivedDate',
+        'endEmptyWeight',
+        'endGrossWeight',
+        'endNetWeight',
+        'weightDifferenceReason',
+    ]);
+    const validationFieldIds = new Set([
+        'validationComments',
+    ]);
 
     useEffect(() => {
         loadTripMasters();
@@ -225,6 +251,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value, type } = e.target;
+        if (entryFieldIds.has(id) && !canEditEntryFields) return;
+        if (receivedFieldIds.has(id) && !canEditReceivedFields) return;
+        if (validationFieldIds.has(id) && !canEditValidationFields) return;
         let nextValue: string | number = type === 'number' ? (value === '' ? '' : parseFloat(value)) : value;
         if (id === 'vehicleNumber' && typeof nextValue === 'string') {
             nextValue = nextValue.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -251,13 +280,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
             newFormData.place = String(nextValue);
         }
 
-        if (id === 'vehicleNumber') {
-            const vehicle = vehicles.find(v => v.vehicleNumber === nextValue);
-            newFormData.transporterName = vehicle?.ownerName || '';
-            const ownerMatch = transportOwnerProfiles.find(item => item.name === newFormData.transporterName);
-            newFormData.transportOwnerMobileNumber = ownerMatch?.contactNumber || '';
-        }
-
         if (id === 'transporterName') {
             const ownerMatch = transportOwnerProfiles.find(item => item.name === value);
             newFormData.transportOwnerMobileNumber = ownerMatch?.contactNumber || '';
@@ -280,6 +302,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, files: selected } = e.target;
         if (!selected || selected.length === 0) return;
+        const entryUploadFields = new Set(['ewayBillUpload', 'invoiceDCUpload', 'waymentSlipUpload', 'royaltyUpload', 'taxInvoiceUpload']);
+        if (entryUploadFields.has(id) && !canEditEntryFields) return;
+        if (id === 'endWaymentSlipUpload' && !canEditReceivedFields) return;
         const fileList = Array.from(selected);
         const entries = await Promise.all(fileList.map(file => new Promise<TripUploadFile>((resolve, reject) => {
             const reader = new FileReader();
@@ -293,28 +318,12 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setMasterSaveError('');
+        setSubmitError('');
         setIsSubmitting(true);
         try {
             if (mode === 'enter') {
-                const createdSites = new Map<string, string>();
                 const normalizeSiteName = (value?: string) => (value || '').trim();
-                const findSiteId = (name: string) => {
-                    const key = name.toLowerCase();
-                    return createdSites.get(key) || siteLocations.find(site => site.name.toLowerCase() === key)?.id || '';
-                };
-                const ensureSiteLocation = async (name: string, type: 'pickup' | 'drop-off' | 'both') => {
-                    if (!name) return;
-                    const existingId = findSiteId(name);
-                    if (existingId) return;
-                    const newSite = await addSiteLocation({
-                        name,
-                        type,
-                        address: '',
-                        pointOfContact: '',
-                        remarks: '',
-                    });
-                    createdSites.set(name.toLowerCase(), newSite.id);
-                };
 
                 const suggestName = (label: string, value: string, candidates: string[]) => {
                     const trimmed = normalizeMatchValue(value);
@@ -331,12 +340,6 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
                 const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
                 const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
-                if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
-                    await ensureSiteLocation(pickupName, 'both');
-                } else {
-                    await ensureSiteLocation(pickupName, 'pickup');
-                    await ensureSiteLocation(dropOffName, 'drop-off');
-                }
                 const customerName = suggestName('Vendor & Customer', (formData.customer || '').trim(), vendorCustomers.map(item => item.name));
                 const quarryName = suggestName('Mine & Quarry', (formData.quarryName || '').trim(), mineQuarries.map(item => item.name));
                 const royaltyOwnerName = suggestName('Royalty Owner', (formData.royaltyOwnerName || '').trim(), royaltyOwnerProfiles.map(item => item.name));
@@ -366,97 +369,16 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     }
                     setRateError('');
                 }
-                try {
-                    if (materialIsNew && materialName) {
-                        await addMaterialTypeDefinition({ name: materialName, remarks: '' });
-                    }
-                    if (customerIsOneOff && customerName) {
-                        const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId = findSiteId(dropOffName) || findSiteId(pickupName);
-                        if (merchantTypeId && siteLocationId) {
-                            await addVendorCustomer({
-                                merchantTypeId,
-                                name: customerName,
-                                contactNumber: '',
-                                email: '',
-                                siteLocationId,
-                                companyName: '',
-                                gstOptIn: false,
-                                gstNumber: '',
-                                gstDetails: '',
-                                remarks: '',
-                            });
-                        }
-                    }
-                    if (quarryIsOneOff && quarryName) {
-                        const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
-                        if (merchantTypeId && siteLocationId) {
-                        await addMineQuarry({
-                                merchantTypeId,
-                                name: quarryName,
-                                contactNumber: '',
-                                email: '',
-                                siteLocationId,
-                                companyName: '',
-                                gstOptIn: false,
-                                gstNumber: '',
-                                gstDetails: '',
-                                remarks: '',
-                        });
-                        }
-                    }
-                    if (royaltyIsOneOff && royaltyOwnerName) {
-                        const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
-                        if (merchantTypeId && siteLocationId) {
-                        await addRoyaltyOwnerProfile({
-                                merchantTypeId,
-                                name: royaltyOwnerName,
-                                contactNumber: '',
-                                email: '',
-                                siteLocationId,
-                                companyName: '',
-                                gstOptIn: false,
-                                gstNumber: '',
-                                gstDetails: '',
-                                remarks: '',
-                        });
-                        }
-                    }
-                    if (transportIsOneOff && transportOwnerName) {
-                        const merchantTypeId = merchantTypes[0]?.id || '';
-                        const siteLocationId = findSiteId(pickupName) || findSiteId(dropOffName);
-                        if (merchantTypeId && siteLocationId) {
-                        await addTransportOwnerProfile({
-                                merchantTypeId,
-                                name: transportOwnerName,
-                                contactNumber: '',
-                                email: '',
-                                siteLocationId,
-                                companyName: '',
-                                gstOptIn: false,
-                                gstNumber: '',
-                                gstDetails: '',
-                                remarks: '',
-                        });
-                        }
-                    }
-                    if (vehicleIsOneOff && vehicleNumber) {
-                        await addVehicleMaster({
-                            vehicleNumber,
-                            vehicleType: '',
-                            ownerName: '',
-                            contactNumber: '',
-                            capacity: 0,
-                            remarks: '',
-                        });
-                    }
-                } catch (error) {
-                    console.error('Failed to save one-off master data', error);
-                    setIsSubmitting(false);
-                    return;
-                }
+                const createMasters = {
+                    vendorCustomer: Boolean(customerIsOneOff && customerName),
+                    mineQuarry: Boolean(quarryIsOneOff && quarryName),
+                    royaltyOwner: Boolean(royaltyIsOneOff && royaltyOwnerName),
+                    transportOwner: Boolean(transportIsOneOff && transportOwnerName),
+                    vehicleMaster: Boolean(vehicleIsOneOff && vehicleNumber),
+                    materialType: Boolean(materialIsNew && materialName),
+                    pickupPlace: Boolean(pickupName),
+                    dropOffPlace: Boolean(dropOffName),
+                };
                 const tripPayload = {
                     ...formData,
                     place: dropOffName || formData.place || '',
@@ -476,7 +398,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     rateOverrideEnabled: rateOverrideEnabled,
                     rateOverride: rateOverrideEnabled ? rateOverride : null,
                 };
-                await addTrip(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>);
+                await addTripAtomic(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>, createMasters);
             } else if (mode === 'upload' || mode === 'edit') {
                 let resolvedMaterial = formData.material;
                 if (mode === 'edit') {
@@ -530,12 +452,25 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
             onSubmitSuccess?.();
         } catch (error) {
             console.error("Failed to save trip", error);
+            setSubmitError('Failed to save the trip. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
     };
     
-    const isReadOnly = mode === 'view';
+    const isViewMode = mode === 'view';
+    const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
+    const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+    const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
+    const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor);
+    const canEditReceivedFields = !isViewMode && (isAdminLike || isDropoffSupervisor);
+    const canEditValidationFields = !isViewMode && isAdminLike;
+    const entryReadOnly = isViewMode || !canEditEntryFields;
+    const receivedReadOnly = isViewMode || !canEditReceivedFields;
+    const validationReadOnly = isViewMode || !canEditValidationFields;
+    const showReceivedSection = isViewMode || canEditReceivedFields || isAdminLike;
+    const showValidationSection = isViewMode || canEditValidationFields;
+    const isReadOnly = isViewMode;
 
     const renderUploadList = (label: string, list: TripUploadFile[]) => (
         <div className="rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-3">
@@ -581,6 +516,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     return (
         <form onSubmit={handleSubmit} className="p-8">
             <div className="space-y-8">
+                {(masterSaveError || submitError) && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {masterSaveError || submitError}
+                    </div>
+                )}
                 { /* ENTER MODE: Expanded form */ }
                 {mode === 'enter' && (
                      <div>
@@ -792,18 +732,18 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                      <div>
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">{mode === 'edit' ? 'Edit' : 'View'} Trip #{trip?.id}</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-                             <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} isReadOnly={isReadOnly} required />
-                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                             <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} isReadOnly={entryReadOnly} required />
+                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
                              <datalist id="pickupPlace-options-edit">
                                  {pickupSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
-                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
                              <datalist id="dropOffPlace-options-edit">
                                  {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
-                             <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            {isReadOnly ? (
-                                <InputField label="Vendor & Customer Name" id="customer" type="text" value={formData.customer} isReadOnly={isReadOnly} required />
+                             <InputField label="Invoice & DC Number" id="invoiceDCNumber" type="text" value={formData.invoiceDCNumber} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                            {entryReadOnly ? (
+                                <InputField label="Vendor & Customer Name" id="customer" type="text" value={formData.customer} isReadOnly={entryReadOnly} required />
                             ) : (
                                 <div className="col-span-1">
                                     <InputField
@@ -822,8 +762,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            {isReadOnly ? (
-                                <InputField label="Mine & Quarry Name" id="quarryName" type="text" value={formData.quarryName} isReadOnly={isReadOnly} required />
+                            {entryReadOnly ? (
+                                <InputField label="Mine & Quarry Name" id="quarryName" type="text" value={formData.quarryName} isReadOnly={entryReadOnly} required />
                             ) : (
                                 <div className="col-span-1">
                                     <InputField
@@ -842,12 +782,12 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} isReadOnly={isReadOnly} required list="material-type-options-edit" />
+                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} isReadOnly={entryReadOnly} required list="material-type-options-edit" />
                             <datalist id="material-type-options-edit">
                                 {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
                             </datalist>
-                            {isReadOnly ? (
-                                <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="text" value={formData.royaltyOwnerName} isReadOnly={isReadOnly} />
+                            {entryReadOnly ? (
+                                <InputField label="Royalty Owner Name" id="royaltyOwnerName" type="text" value={formData.royaltyOwnerName} isReadOnly={entryReadOnly} />
                             ) : (
                                 <div className="col-span-1">
                                     <InputField
@@ -865,11 +805,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                            <InputField label="Royalty Number" id="royaltyNumber" type="text" value={formData.royaltyNumber} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                            <InputField label="Royalty Tons" id="royaltyTons" type="number" step="0.01" value={formData.royaltyTons} onChange={handleInputChange} isReadOnly={entryReadOnly} />
 
-                            {isReadOnly ? (
-                                <InputField label="Vehicle Number" id="vehicleNumber" type="text" value={formData.vehicleNumber} isReadOnly={isReadOnly} />
+                            {entryReadOnly ? (
+                                <InputField label="Vehicle Number" id="vehicleNumber" type="text" value={formData.vehicleNumber} isReadOnly={entryReadOnly} />
                             ) : (
                                 <div className="col-span-1">
                                     <InputField
@@ -887,8 +827,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            {isReadOnly ? (
-                                <InputField label="Transport & Owner Name" id="transporterName" type="text" value={formData.transporterName} isReadOnly={isReadOnly} />
+                            {entryReadOnly ? (
+                                <InputField label="Transport & Owner Name" id="transporterName" type="text" value={formData.transporterName} isReadOnly={entryReadOnly} />
                             ) : (
                                 <div className="col-span-1">
                                     <InputField
@@ -906,24 +846,24 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            <InputField label="Transport & Owner Mobile Number" id="transportOwnerMobileNumber" type="text" value={formData.transportOwnerMobileNumber} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                            <InputField label="Transport & Owner Mobile Number" id="transportOwnerMobileNumber" type="text" value={formData.transportOwnerMobileNumber} onChange={handleInputChange} isReadOnly={entryReadOnly} />
 
-                            <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                            <InputField label="Empty Weight (Tons)" id="emptyWeight" type="number" step="0.01" value={formData.emptyWeight} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                            <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                            <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight ?? ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
                             
                             <InputField label="Vendor Name (Quarry Owner)" id="vendorName" type="text" value={formData.vendorName} isReadOnly={true} />
 
 
                             {/* Upload fields integrated */}
-                            <FileInputField label="E-Way Bill" id="ewayBillUpload" onChange={handleFileChange} files={files.ewayBillUpload} isReadOnly={isReadOnly} multiple />
-                            <FileInputField label="Invoice / DC" id="invoiceDCUpload" onChange={handleFileChange} files={files.invoiceDCUpload} isReadOnly={isReadOnly} multiple />
-                            <FileInputField label="Wayment Slip" id="waymentSlipUpload" onChange={handleFileChange} files={files.waymentSlipUpload} isReadOnly={isReadOnly} multiple />
-                            <FileInputField label="Royalty Slip" id="royaltyUpload" onChange={handleFileChange} files={files.royaltyUpload} isReadOnly={isReadOnly} multiple />
-                            <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} isReadOnly={isReadOnly} multiple />
-                            <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={isReadOnly} multiple />
+                            <FileInputField label="E-Way Bill" id="ewayBillUpload" onChange={handleFileChange} files={files.ewayBillUpload} isReadOnly={entryReadOnly} multiple />
+                            <FileInputField label="Invoice / DC" id="invoiceDCUpload" onChange={handleFileChange} files={files.invoiceDCUpload} isReadOnly={entryReadOnly} multiple />
+                            <FileInputField label="Wayment Slip" id="waymentSlipUpload" onChange={handleFileChange} files={files.waymentSlipUpload} isReadOnly={entryReadOnly} multiple />
+                            <FileInputField label="Royalty Slip" id="royaltyUpload" onChange={handleFileChange} files={files.royaltyUpload} isReadOnly={entryReadOnly} multiple />
+                            <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} isReadOnly={entryReadOnly} multiple />
+                            <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={receivedReadOnly} multiple />
                         </div>
-                        {!isReadOnly && isPrivileged && (
+                        {!entryReadOnly && isPrivileged && (
                             <div className="mt-8">
                                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Add Rate (Optional)</h4>
                                 <div className="mt-3 flex items-center gap-2">
@@ -993,28 +933,32 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             {renderUploadList('Tax Invoice', files.taxInvoiceUpload)}
                             {renderUploadList('Wayment Slip (End Location)', files.endWaymentSlipUpload)}
                         </div>
-                        <div className="mt-8">
-                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Received Details</h4>
-                            <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-                                <InputField label="Received Date" id="receivedDate" type="date" value={formData.receivedDate ? String(formData.receivedDate).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                                <InputField label="End Empty Weight (T)" id="endEmptyWeight" type="number" step="0.01" value={formData.endEmptyWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                                <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight ?? ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
-                                <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly={true} />
-                                <div className="lg:col-span-4">
-                                    <InputField label="Reason for Difference" id="weightDifferenceReason" type="textarea" value={formData.weightDifferenceReason || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                        {showReceivedSection && (
+                            <div className="mt-8">
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Received Details</h4>
+                                <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+                                    <InputField label="Received Date" id="receivedDate" type="date" value={formData.receivedDate ? String(formData.receivedDate).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                    <InputField label="End Empty Weight (T)" id="endEmptyWeight" type="number" step="0.01" value={formData.endEmptyWeight ?? ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                    <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight ?? ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                    <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly={true} />
+                                    <div className="lg:col-span-4">
+                                        <InputField label="Reason for Difference" id="weightDifferenceReason" type="textarea" value={formData.weightDifferenceReason || ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="mt-8">
-                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Validation Details</h4>
-                            <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
-                                <InputField label="Validated By" id="validatedBy" type="text" value={formData.validatedBy || ''} onChange={handleInputChange} isReadOnly={true} />
-                                <InputField label="Validated At" id="validatedAt" type="date" value={formData.validatedAt ? String(formData.validatedAt).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={true} />
-                                <div className="lg:col-span-4">
-                                    <InputField label="Validation Comments" id="validationComments" type="textarea" value={formData.validationComments || ''} onChange={handleInputChange} isReadOnly={isReadOnly} />
+                        )}
+                        {showValidationSection && (
+                            <div className="mt-8">
+                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Validation Details</h4>
+                                <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+                                    <InputField label="Validated By" id="validatedBy" type="text" value={formData.validatedBy || ''} onChange={handleInputChange} isReadOnly={true} />
+                                    <InputField label="Validated At" id="validatedAt" type="date" value={formData.validatedAt ? String(formData.validatedAt).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={true} />
+                                    <div className="lg:col-span-4">
+                                        <InputField label="Validation Comments" id="validationComments" type="textarea" value={formData.validationComments || ''} onChange={handleInputChange} isReadOnly={validationReadOnly} />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                         {mode === 'view' && currentUser && [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) && (
                             <div className="mt-8">
                                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Trip History</h4>
@@ -1052,7 +996,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
                     {isReadOnly ? 'Close' : 'Cancel'}
                 </button>
-                {!isReadOnly && (
+                {!isReadOnly && (mode === 'upload' || canEditEntryFields || canEditReceivedFields || canEditValidationFields) && (
                     <button type="submit" disabled={isSubmitting} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none disabled:opacity-50">
                         {isSubmitting ? 'Saving...' : (mode === 'upload' ? 'Save & Send to Transit' : 'Save')}
                     </button>

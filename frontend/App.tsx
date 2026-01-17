@@ -48,6 +48,7 @@ import SupervisorEnterTrips from './pages/Supervisor/EnterTrips';
 import SupervisorDailyExpensesForm from './pages/Supervisor/DailyExpensesForm';
 import SupervisorSiteExpenses from './pages/Supervisor/SiteExpenses';
 import SupervisorAdvancesForm from './pages/Supervisor/AdvancesForm';
+import TripImport from './pages/TripImport';
 
 const ProtectedLayout: React.FC = () => (
   <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST]}>
@@ -89,6 +90,11 @@ const AppRoutes: React.FC = () => (
             <DailyTrips />
         </ProtectedRoute>
        } />
+      <Route path="/trip-import" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <TripImport />
+        </ProtectedRoute>
+      } />
       <Route path="/enter-trips" element={
         <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR]}>
           <SupervisorEnterTrips />

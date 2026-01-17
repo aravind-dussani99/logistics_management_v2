@@ -151,7 +151,7 @@ const Payments: React.FC = () => {
         subtitle="Track payment and receipt entries by head account and rate party."
         filters={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
         onFilterChange={(next) => setFilters(prev => ({ ...prev, ...next }))}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={['date']}
         pageAction={{ label: 'Add Payment', action: handleAdd }}
       />

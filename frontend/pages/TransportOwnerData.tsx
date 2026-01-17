@@ -103,7 +103,7 @@ const TransportOwnerDataPage: React.FC = () => {
         subtitle="Manage transport owner profiles with GST details."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Transport & Owner', action: handleAdd }}
       />
 

@@ -78,6 +78,7 @@ export interface Trip {
   pendingRequestAt?: string;
   rateOverrideEnabled?: boolean;
   rateOverride?: TripRateOverride | null;
+  activityCount?: number;
 }
 
 export interface TripRateOverride {
@@ -110,6 +111,7 @@ export interface TripActivity {
   tripId: number;
   action: string;
   message: string;
+  attachments?: TripUploadFile[] | null;
   actorName: string;
   actorRole: string;
   createdAt: string;

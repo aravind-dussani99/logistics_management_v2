@@ -89,7 +89,7 @@ const Ledger: React.FC = () => {
                 subtitle="Showing recent transactions. Select a smaller date range for faster searching."
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
                 pageAction={{ label: 'Add Entry', action: handleAddEntry }}
             />

@@ -8,9 +8,10 @@ import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
-import { Trip, Advance, DailyExpense, Role } from '../types';
+import { Trip, Advance, DailyExpense, Role, Notification } from '../types';
 import { formatCurrency } from '../utils';
 import SupervisorTripForm from '../components/SupervisorTripForm';
+import TripHistoryDialog from '../components/TripHistoryDialog';
 import ReceiveTripForm from '../components/ReceiveTripForm';
 import RequestDialog from '../components/RequestDialog';
 import AlertDialog from '../components/AlertDialog';
@@ -35,6 +36,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
     const [isPrinting, setIsPrinting] = useState(false);
+    const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
     useEffect(() => {
         const state = location.state as { reportType?: ReportType } | null;
         if (state?.reportType) {
@@ -86,6 +88,23 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             window.removeEventListener('afterprint', afterPrint);
         };
     }, []);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const notificationId = params.get('notificationId');
+        if (!notificationId) return;
+        notificationApi.getById(notificationId).then(note => {
+            setActiveNotification(note);
+            if (note.tripId) {
+                const trip = trips.find(t => t.id === note.tripId);
+                if (trip) {
+                    openModal(`Trip #${trip.id} History`, <TripHistoryDialog trip={trip} notification={note} onClose={closeModal} />);
+                }
+            }
+        }).catch(error => {
+            console.error('Failed to load notification', error);
+        });
+    }, [location.search, trips, openModal, closeModal]);
 
     const handleExport = () => {
         let headers: string[] = [];
@@ -139,9 +158,13 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             case 'site-expenses': data = allExpenses.filter(expense => expense.siteExpense); break;
         }
 
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
+
         return (data || []).filter(item => {
-            if (filters.dateFrom && item.date < filters.dateFrom) return false;
-            if (filters.dateTo && item.date > filters.dateTo) return false;
+            const itemDate = item?.date ? new Date(item.date) : null;
+            if (fromDate && itemDate && itemDate < fromDate) return false;
+            if (toDate && itemDate && itemDate > toDate) return false;
             if (reportType === 'received') {
                 const status = (item.status || '').toLowerCase();
                 if (!['in transit', 'pending validation', 'completed', 'validated', 'trip completed'].includes(status)) return false;
@@ -355,14 +378,15 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         switch(reportType) {
             case 'trips':
             case 'received': {
-                const headers = mode === 'dashboard'
-                    ? ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions']
+                const headers = mode === 'dashboard' 
+                    ? ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'] 
                     : ['Date', 'Vehicle', 'Customer', 'Material', 'Quarry', 'Net Weight', 'Status'];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip, index: number) => (
                     <tr key={t.id}>
                         {mode === 'dashboard' ? (
                             <>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{index + 1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{t.id}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer || '-'}</td>
@@ -386,12 +410,18 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             return (
                                                 <>
                                                     <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                    {(t.activityCount ?? 0) > 0 && (
+                                                        <button onClick={() => openModal(`Trip #${t.id} History`, <TripHistoryDialog trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">History</button>
+                                                    )}
                                                     {isPendingUpload && (
                                                         <>
                                                             <button onClick={() => openModal(`Upload Trip #${t.id}`, <SupervisorTripForm mode="upload" trip={t} onClose={closeModal} onSubmitSuccess={loadTrips} />)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Upload</button>
                                                             <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                                             <button onClick={() => deleteTrip(t.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
                                                         </>
+                                                    )}
+                                                    {!isPendingUpload && !isPendingValidation && !isCompleted && (
+                                                        <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                                     )}
                                                     {!isPendingUpload && !isCompleted && (
                                                         <button
@@ -412,6 +442,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             return (
                                                 <>
                                                     <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                    {(t.activityCount ?? 0) > 0 && (
+                                                        <button onClick={() => openModal(`Trip #${t.id} History`, <TripHistoryDialog trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">History</button>
+                                                    )}
                                                     {isInTransit && (
                                                         <>
                                                             <button onClick={() => handleReceive(t)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Receive</button>
@@ -439,7 +472,12 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             );
                                         }
                                         return (
-                                            <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                            <>
+                                                <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                {(t.activityCount ?? 0) > 0 && (
+                                                    <button onClick={() => openModal(`Trip #${t.id} History`, <TripHistoryDialog trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">History</button>
+                                                )}
+                                            </>
                                         );
                                     })()}
                                     {canManageTrips && (
@@ -543,13 +581,13 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 title={mode === 'dashboard' ? 'Dashboard' : 'Consolidated Reports'}
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now
                 showFilters={['date']}
                 showAddAction={false}
             />
             <main className="pt-6">
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-                     <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-wrap gap-4">
+                    <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-wrap gap-4">
                         <div className="flex items-center gap-4">
                             <h2 className="text-xl font-semibold">Report Data</h2>
                             <select value={reportType} onChange={e => setReportType(e.target.value as ReportType)} className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary">
@@ -572,6 +610,15 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                             onPageChange={setCurrentPage}
                         />
                     </div>
+                    {activeNotification && (
+                        <div className="px-4 py-2 text-sm bg-amber-50 text-amber-900 border-b dark:border-gray-700">
+                            <div className="font-semibold">
+                                Trip request from {activeNotification.requesterName || 'Supervisor'}
+                                {activeNotification.requesterContact ? ` - ${activeNotification.requesterContact}` : ''}
+                            </div>
+                            <div className="mt-1">{activeNotification.message}</div>
+                        </div>
+                    )}
                     {renderTable()}
                 </div>
             </main>

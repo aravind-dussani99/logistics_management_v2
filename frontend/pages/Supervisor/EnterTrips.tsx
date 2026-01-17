@@ -17,7 +17,7 @@ const SupervisorEnterTrips: React.FC = () => {
         title="Enter Trips"
         filters={filters}
         onFilterChange={setFilters}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={[]}
         showAddAction={false}
       />

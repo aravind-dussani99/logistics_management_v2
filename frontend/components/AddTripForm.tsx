@@ -90,14 +90,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     const formRef = useRef<HTMLFormElement>(null);
     const { currentUser } = useAuth();
     const {
-        addTrip,
-        addVendorCustomer,
-        addMineQuarry,
-        addRoyaltyOwnerProfile,
-        addTransportOwnerProfile,
-        addVehicleMaster,
-        addSiteLocation,
-        addMaterialTypeDefinition,
+        addTripAtomic,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -113,6 +106,8 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     const [files, setFiles] = useState<{ [key: string]: string }>({});
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [masterSaveError, setMasterSaveError] = useState('');
+    const [tripSaveError, setTripSaveError] = useState('');
     const ONE_OFF_VALUE = '__oneoff__';
     const isPrivileged = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [oneOffSelection, setOneOffSelection] = useState({
@@ -144,6 +139,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         vehicleNumber: { vehicleType: '', ownerName: '', contactNumber: '', capacity: '', remarks: '' },
     });
     const [masterErrors, setMasterErrors] = useState<{ [key: string]: string }>({});
+
     const [rateError, setRateError] = useState('');
     const [rateOverrideEnabled, setRateOverrideEnabled] = useState(false);
     const [rateOverride, setRateOverride] = useState<TripRateOverride>({
@@ -217,6 +213,8 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setMasterSaveError('');
+        setTripSaveError('');
         if (!validate()) {
             console.log('Validation failed');
             return;
@@ -233,25 +231,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         }
 
         setIsSubmitting(true);
-        const createdSites = new Map<string, string>();
         const normalizeSiteName = (value?: string) => (value || '').trim();
-        const findSiteId = (name: string) => {
-            const key = name.toLowerCase();
-            return createdSites.get(key) || siteLocations.find(site => site.name.toLowerCase() === key)?.id || '';
-        };
-        const ensureSiteLocation = async (name: string, type: 'pickup' | 'drop-off' | 'both') => {
-            if (!name) return;
-            const existingId = findSiteId(name);
-            if (existingId) return;
-            const newSite = await addSiteLocation({
-                name,
-                type,
-                address: '',
-                pointOfContact: '',
-                remarks: '',
-            });
-            createdSites.set(name.toLowerCase(), newSite.id);
-        };
 
         const suggestName = (label: string, value: string, candidates: string[]) => {
             const trimmed = normalizeMatchValue(value);
@@ -268,15 +248,8 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
         const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
         const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
-        if (pickupName && dropOffName && pickupName.toLowerCase() === dropOffName.toLowerCase()) {
-            await ensureSiteLocation(pickupName, 'both');
-        } else {
-            await ensureSiteLocation(pickupName, 'pickup');
-            await ensureSiteLocation(dropOffName, 'drop-off');
-        }
         const netWeight = parseFloat(formData.netWeight) || 0;
         
-        const selectedVehicle = vehicles.find(v => v.vehicleNumber === formData.vehicleNumber);
         const resolvedCustomerName = oneOffSelection.customer
             ? suggestName('Vendor & Customer', oneOffValues.customer, vendorCustomers.map(item => item.name))
             : normalizeMatchValue(formData.customer);
@@ -302,49 +275,16 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         const existingMaterial = materialTypeDefinitions.find(item => item.name.trim().toLowerCase() === materialName.toLowerCase());
         const resolvedMaterial = existingMaterial?.name || materialName;
 
-        try {
-            if (materialName && !existingMaterial) {
-                await addMaterialTypeDefinition({ name: materialName, remarks: '' });
-            }
-            if (oneOffSelection.customer && saveToMaster.customer && !existingCustomer && resolvedCustomerName) {
-                await addVendorCustomer({
-                    ...oneOffMaster.customer,
-                    name: resolvedCustomerName,
-                });
-            }
-            if (oneOffSelection.quarryName && saveToMaster.quarryName && !existingQuarry && resolvedQuarryName) {
-                await addMineQuarry({
-                    ...oneOffMaster.quarryName,
-                    name: resolvedQuarryName,
-                });
-            }
-            if (oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName && !existingRoyalty && resolvedRoyaltyName) {
-                await addRoyaltyOwnerProfile({
-                    ...oneOffMaster.royaltyOwnerName,
-                    name: resolvedRoyaltyName,
-                });
-            }
-            if (oneOffSelection.transporterName && saveToMaster.transporterName && !existingTransport && resolvedTransportName) {
-                await addTransportOwnerProfile({
-                    ...oneOffMaster.transporterName,
-                    name: resolvedTransportName,
-                });
-            }
-            if (oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber && !existingVehicle && resolvedVehicleNumber) {
-                await addVehicleMaster({
-                    vehicleNumber: resolvedVehicleNumber,
-                    vehicleType: oneOffMaster.vehicleNumber.vehicleType,
-                    ownerName: oneOffMaster.vehicleNumber.ownerName,
-                    contactNumber: oneOffMaster.vehicleNumber.contactNumber,
-                    capacity: Number(oneOffMaster.vehicleNumber.capacity || 0),
-                    remarks: oneOffMaster.vehicleNumber.remarks,
-                });
-            }
-        } catch (error) {
-            console.error('Failed to save one-off master data', error);
-            setIsSubmitting(false);
-            return;
-        }
+        const createMasters = {
+            vendorCustomer: Boolean(oneOffSelection.customer && saveToMaster.customer && !existingCustomer && resolvedCustomerName),
+            mineQuarry: Boolean(oneOffSelection.quarryName && saveToMaster.quarryName && !existingQuarry && resolvedQuarryName),
+            royaltyOwner: Boolean(oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName && !existingRoyalty && resolvedRoyaltyName),
+            transportOwner: Boolean(oneOffSelection.transporterName && saveToMaster.transporterName && !existingTransport && resolvedTransportName),
+            vehicleMaster: Boolean(oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber && !existingVehicle && resolvedVehicleNumber),
+            materialType: Boolean(materialName && !existingMaterial),
+            pickupPlace: Boolean(pickupName),
+            dropOffPlace: Boolean(dropOffName),
+        };
 
         const newTripData: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'> = {
             date: formData.date,
@@ -362,7 +302,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
             material: resolvedMaterial,
             vehicleNumber: resolvedVehicleNumber,
             vehicleIsOneOff: Boolean(resolvedVehicleNumber) && !existingVehicle,
-            transporterName: existingTransport?.name || resolvedTransportName || selectedVehicle?.ownerName || '',
+            transporterName: existingTransport?.name || resolvedTransportName || '',
             transportOwnerIsOneOff: Boolean(resolvedTransportName) && !existingTransport,
             emptyWeight: 0, 
             grossWeight: netWeight, 
@@ -378,10 +318,11 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         };
 
         try {
-            await addTrip(newTripData);
+            await addTripAtomic(newTripData, createMasters);
             onClose();
         } catch (error) {
             console.error("Failed to add trip", error);
+            setTripSaveError('Failed to save the trip. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -412,12 +353,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                 [field]: isOneOff ? '' : value,
                 [`${field === 'customer' ? 'vendorCustomerIsOneOff' : field === 'quarryName' ? 'mineQuarryIsOneOff' : field === 'royaltyOwnerName' ? 'royaltyOwnerIsOneOff' : field === 'transporterName' ? 'transportOwnerIsOneOff' : 'vehicleIsOneOff'}`]: isOneOff,
             } as typeof prev;
-            if (!isOneOff && field === 'vehicleNumber') {
-                const vehicle = vehicles.find(item => item.vehicleNumber === value);
-                updated.transporterName = vehicle?.ownerName || '';
-                const owner = transportOwnerProfiles.find(item => item.name === updated.transporterName);
-                updated.transportOwnerMobileNumber = owner?.contactNumber || '';
-            }
             if (!isOneOff && field === 'transporterName') {
                 const owner = transportOwnerProfiles.find(item => item.name === value);
                 updated.transportOwnerMobileNumber = owner?.contactNumber || '';
@@ -492,6 +427,11 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     return (
         <form ref={formRef} onSubmit={handleSubmit} noValidate className="p-8">
             <div className="space-y-10">
+                {(masterSaveError || tripSaveError) && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {masterSaveError || tripSaveError}
+                    </div>
+                )}
                 <div>
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">1. Enter Details</h3>
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">

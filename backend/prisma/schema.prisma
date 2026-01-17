@@ -413,6 +413,7 @@ model TripActivityRecord {
   tripId    Int
   action    String
   message   String
+  attachments Json?
   actorName String
   actorRole String
   createdAt DateTime @default(now())

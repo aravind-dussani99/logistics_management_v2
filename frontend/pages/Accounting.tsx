@@ -47,10 +47,14 @@ const Accounting: React.FC = () => {
     }, [loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
 
     const allDataForFilters = useMemo(() => {
-        const uniqueRoyaltyOwnersNames = Array.from(new Set(allTrips.map(t => t.royaltyOwnerName)));
-        const customerRates = customers.map(c => ({ customer: c.name, id: c.id, material: '', rate: '', from: '', to: '', active: false, rejectionPercent: '', rejectionRemarks: '', locationFrom: '', locationTo: '' }));
-        return { quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwnersNames };
-    }, [allTrips, quarries, vehicles, customers]);
+        return {
+            vehicles: vehicles.map(item => ({ id: item.id, vehicleNumber: item.vehicleNumber })),
+            transportOwners: transportOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+            customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
+            quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
+            royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+        };
+    }, [vehicles, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
     
     const filteredTrips = useMemo(() => {
         return allTrips.filter(trip => {

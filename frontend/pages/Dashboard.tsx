@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Link, Navigate } from 'react-router-dom';
 import StatCard from '../components/StatCard';
-import { Trip, Role, QuarryOwner, VehicleOwner, CustomerRate } from '../types';
+import { Trip, Role } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { Filters } from '../components/FilterPanel';
@@ -42,10 +42,16 @@ const Dashboard: React.FC = () => {
         return <SupervisorTripReport />;
     }
     
-    const { trips, refreshKey, loadTrips } = useData();
+    const { trips, refreshKey, loadTrips, loadTripMasters, vehicleMasters, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
 
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
-    const [allData, setAllData] = useState<{ quarries: QuarryOwner[]; vehicles: VehicleOwner[]; customers: CustomerRate[]; royaltyOwners: string[] }>({ quarries: [], vehicles: [], customers: [], royaltyOwners: [] });
+    const [allData, setAllData] = useState({
+        vehicles: [] as { id?: string; vehicleNumber: string }[],
+        transportOwners: [] as { id?: string; name: string }[],
+        customers: [] as { id?: string; name: string }[],
+        quarries: [] as { id?: string; name: string }[],
+        royaltyOwners: [] as { id?: string; name: string }[],
+    });
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
@@ -55,58 +61,19 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         loadTrips();
-    }, [loadTrips, refreshKey]);
+        loadTripMasters();
+    }, [loadTrips, loadTripMasters, refreshKey]);
 
     useEffect(() => {
         setAllTrips(trips);
-
-        const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
-        const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
-        const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
-        const uniqueCustomers = Array.from(new Set(trips.map(t => t.customer).filter(Boolean)));
-
-        const vehicles = uniqueVehicles.map((vehicleNumber, index) => ({
-            id: `vehicle-${index}-${vehicleNumber}`,
-            ownerName: '',
-            vehicleNumber,
-            vehicleType: '',
-            vehicleCapacity: 0,
-            contactNumber: '',
-            address: '',
-            openingBalance: 0,
-            rates: [],
-        }));
-        const quarries = uniqueQuarries.map((quarryName, index) => ({
-            id: `quarry-${index}-${quarryName}`,
-            ownerName: quarryName,
-            quarryName,
-            quarryArea: 0,
-            contactNumber: '',
-            address: '',
-            openingBalance: 0,
-            rates: [],
-        }));
-        const customerRatesForFilter = uniqueCustomers.map((customer, index) => ({
-            customer,
-            id: `customer-${index}-${customer}`,
-            material: '',
-            rate: '',
-            from: '',
-            to: '',
-            active: false,
-            rejectionPercent: '',
-            rejectionRemarks: '',
-            locationFrom: '',
-            locationTo: '',
-        }));
-
         setAllData({
-            quarries,
-            vehicles,
-            customers: customerRatesForFilter,
-            royaltyOwners: uniqueRoyaltyOwners as string[],
+            vehicles: vehicleMasters.map(item => ({ id: item.id, vehicleNumber: item.vehicleNumber })),
+            transportOwners: transportOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+            customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
+            quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
+            royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
         });
-    }, [trips, refreshKey]);
+    }, [trips, refreshKey, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
 
     const calculateStatsForPeriod = (trips: Trip[]): Stats => {
          return trips.reduce((acc, trip) => {

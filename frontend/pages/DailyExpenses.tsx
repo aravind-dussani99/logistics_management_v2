@@ -234,7 +234,7 @@ const DailyExpenses: React.FC = () => {
                 subtitle={`Current Balance: ${formatCurrency(currentBalance)}`}
                 filters={filters as any}
                 onFilterChange={(f) => setFilters(f as any)}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }} // Mock data, not used
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Mock data, not used
                 pageAction={{ label: 'Add Transaction', action: handleAddExpense }}
             />
 

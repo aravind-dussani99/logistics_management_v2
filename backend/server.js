@@ -76,7 +76,7 @@ const getUserContact = (user) => user?.mobileNumber || '';
 const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
 const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
 
-const logTripActivity = async ({ tripId, action, message, user }) => {
+const logTripActivity = async ({ tripId, action, message, user, attachments }) => {
   if (!tripId) return;
   try {
     await prisma.tripActivityRecord.create({
@@ -84,6 +84,7 @@ const logTripActivity = async ({ tripId, action, message, user }) => {
         tripId: Number(tripId),
         action,
         message,
+        attachments: attachments || undefined,
         actorName: getUserDisplayName(user) || 'System',
         actorRole: user?.role || 'SYSTEM',
       },
@@ -358,6 +359,18 @@ const normalizeUploadField = async ({ fieldValue, trip, req, fieldKey }) => {
   }
 
   return JSON.stringify(updated);
+};
+
+const normalizeActivityAttachments = async ({ attachments, trip, req }) => {
+  if (!attachments || (Array.isArray(attachments) && attachments.length === 0)) return [];
+  const stored = await normalizeUploadField({
+    fieldValue: attachments,
+    trip,
+    req,
+    fieldKey: 'activity_attachment',
+  });
+  if (!stored) return [];
+  return parseUploadList(stored);
 };
 
 const isGsUrl = (value) => typeof value === 'string' && value.startsWith('gs://');
@@ -2027,8 +2040,13 @@ app.get('/api/trips', async (req, res) => {
     const where = {};
     // No pickup/dropoff restriction for supervisors at this stage.
     const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
+    const activityCounts = await prisma.tripActivityRecord.groupBy({
+      by: ['tripId'],
+      _count: { _all: true },
+    });
+    const activityMap = new Map(activityCounts.map(entry => [entry.tripId, entry._count._all]));
     const hydrated = await Promise.all(trips.map(async (trip) => {
-      const updated = { ...trip };
+      const updated = { ...trip, activityCount: activityMap.get(trip.id) || 0 };
       for (const field of UPLOAD_FIELDS) {
         if (trip[field]) {
           updated[field] = await resolveUploadList(trip[field]);
@@ -2044,9 +2062,6 @@ app.get('/api/trips', async (req, res) => {
 });
 
 app.get('/api/trips/:id/activity', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   const { id } = req.params;
   try {
     const entries = await prisma.tripActivityRecord.findMany({
@@ -2057,6 +2072,60 @@ app.get('/api/trips/:id/activity', async (req, res) => {
   } catch (error) {
     console.error('Failed to list trip activity', error);
     res.status(500).json({ error: 'Failed to list trip activity' });
+  }
+});
+
+app.post('/api/trips/:id/activity', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const { id } = req.params;
+  const {
+    message = '',
+    action = 'comment',
+    attachments = [],
+    notifyRole = null,
+    notifyUser = null,
+  } = req.body || {};
+  if (!message && (!Array.isArray(attachments) || attachments.length === 0)) {
+    return res.status(400).json({ error: 'Message or attachments are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const storedAttachments = await normalizeActivityAttachments({ attachments, trip, req });
+    const entry = await prisma.tripActivityRecord.create({
+      data: {
+        tripId: Number(id),
+        action,
+        message,
+        attachments: storedAttachments.length > 0 ? storedAttachments : undefined,
+        actorName: getUserDisplayName(req.user) || 'System',
+        actorRole: req.user?.role || 'SYSTEM',
+      },
+    });
+    if (notifyRole || notifyUser) {
+      await prisma.notificationRecord.create({
+        data: {
+          message: `Trip #${id} update from ${getUserDisplayName(req.user) || 'User'}${message ? `: ${message}` : ''}`.trim(),
+          type: 'info',
+          timestamp: new Date(),
+          read: false,
+          targetRole: notifyRole || null,
+          targetUser: notifyUser || null,
+          tripId: Number(id),
+          requestType: 'comment',
+          requesterName: getUserDisplayName(req.user),
+          requesterRole: req.user?.role || null,
+          requesterContact: getUserContact(req.user),
+          requestMessage: message || '',
+        },
+      });
+    }
+    res.status(201).json(entry);
+  } catch (error) {
+    console.error('Failed to create trip activity', error);
+    res.status(500).json({ error: 'Failed to create trip activity' });
   }
 });
 
@@ -2225,9 +2294,256 @@ app.post('/api/trips', async (req, res) => {
   }
 });
 
+app.post('/api/trips/atomic', async (req, res) => {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const payload = req.body || {};
+  const data = payload.trip || payload;
+  const createMasters = payload.createMasters || {};
+  if (!data.date || !data.customer) {
+    return res.status(400).json({ error: 'Date and customer are required.' });
+  }
+
+  const normalizeVehicleNumber = (value = '') =>
+    String(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+  const findMerchantType = async (tx) => {
+    const existing = await tx.merchantType.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (existing) return existing.id;
+    const created = await tx.merchantType.create({ data: { name: 'General', remarks: 'Auto-created for trip entries.' } });
+    return created.id;
+  };
+
+  try {
+    const createdTrip = await prisma.$transaction(async (tx) => {
+      const merchantTypeId = await findMerchantType(tx);
+      const pickupName = (data.pickupPlace || '').trim();
+      const dropOffName = (data.dropOffPlace || '').trim();
+
+      const pickupLocation = pickupName
+        ? await tx.siteLocation.findFirst({ where: { name: { equals: pickupName, mode: 'insensitive' } } })
+        : null;
+      const dropOffLocation = dropOffName
+        ? await tx.siteLocation.findFirst({ where: { name: { equals: dropOffName, mode: 'insensitive' } } })
+        : null;
+
+      const shouldCreatePickup = Boolean(createMasters.pickupPlace ?? true);
+      const shouldCreateDropOff = Boolean(createMasters.dropOffPlace ?? true);
+
+      const ensuredPickup = !pickupName || pickupLocation
+        ? pickupLocation
+        : shouldCreatePickup
+          ? await tx.siteLocation.create({
+              data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
+            })
+          : null;
+
+      const ensuredDropOff = !dropOffName || dropOffLocation
+        ? dropOffLocation
+        : shouldCreateDropOff
+          ? await tx.siteLocation.create({
+              data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
+            })
+          : null;
+
+      const lookupByName = async (model, name, allowCreate, defaults = {}) => {
+        if (!name) return null;
+        const existing = await model.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
+        if (existing) return existing;
+        if (!allowCreate) return null;
+        return model.create({ data: { merchantTypeId, name, ...defaults } });
+      };
+
+      const customerName = (data.customer || '').trim();
+      const quarryName = (data.quarryName || '').trim();
+      const royaltyName = (data.royaltyOwnerName || '').trim();
+      const transportName = (data.transporterName || '').trim();
+      const materialName = (data.material || '').trim();
+      const normalizedVehicle = normalizeVehicleNumber(data.vehicleNumber || '');
+
+      const vendorCustomer = await lookupByName(tx.vendorCustomer, customerName, Boolean(createMasters.vendorCustomer ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredDropOff?.id || ensuredPickup?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const mineQuarry = await lookupByName(tx.mineQuarry, quarryName, Boolean(createMasters.mineQuarry ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const royaltyOwner = await lookupByName(tx.royaltyOwnerProfile, royaltyName, Boolean(createMasters.royaltyOwner ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+      const transportOwner = await lookupByName(tx.transportOwnerProfile, transportName, Boolean(createMasters.transportOwner ?? true), {
+        contactNumber: '',
+        email: '',
+        siteLocationId: ensuredPickup?.id || ensuredDropOff?.id || null,
+        companyName: '',
+        gstOptIn: false,
+        gstNumber: '',
+        gstDetails: '',
+        remarks: '',
+      });
+
+      const materialType = materialName
+        ? await tx.materialTypeDefinition.findFirst({ where: { name: { equals: materialName, mode: 'insensitive' } } })
+        : null;
+      const ensuredMaterial = !materialName || materialType
+        ? materialType
+        : Boolean(createMasters.materialType ?? true)
+          ? await tx.materialTypeDefinition.create({ data: { name: materialName, remarks: '' } })
+          : null;
+
+      const existingVehicle = normalizedVehicle
+        ? await tx.vehicleMaster.findFirst({ where: { vehicleNumber: normalizedVehicle } })
+        : null;
+      const ensuredVehicle = !normalizedVehicle || existingVehicle
+        ? existingVehicle
+        : Boolean(createMasters.vehicleMaster ?? true)
+          ? await tx.vehicleMaster.create({
+              data: {
+                vehicleNumber: normalizedVehicle,
+                vehicleType: '',
+                capacity: 0,
+                ownerName: '',
+                contactNumber: '',
+                remarks: '',
+              },
+            })
+          : null;
+
+      const trip = await tx.tripRecord.create({
+        data: {
+          date: new Date(data.date),
+          place: data.place || '',
+          pickupPlace: pickupName,
+          dropOffPlace: dropOffName,
+          vendorName: data.vendorName || '',
+          vendorCustomerIsOneOff: Boolean(data.vendorCustomerIsOneOff),
+          customer: vendorCustomer?.name || customerName,
+          invoiceDCNumber: data.invoiceDCNumber || '',
+          quarryName: mineQuarry?.name || quarryName,
+          mineQuarryIsOneOff: Boolean(data.mineQuarryIsOneOff),
+          royaltyOwnerName: royaltyOwner?.name || royaltyName,
+          royaltyOwnerIsOneOff: Boolean(data.royaltyOwnerIsOneOff),
+          material: ensuredMaterial?.name || materialName,
+          vehicleNumber: ensuredVehicle?.vehicleNumber || normalizedVehicle,
+          vehicleIsOneOff: Boolean(data.vehicleIsOneOff),
+          transporterName: transportOwner?.name || transportName,
+          transportOwnerIsOneOff: Boolean(data.transportOwnerIsOneOff),
+          transportOwnerMobileNumber: data.transportOwnerMobileNumber || '',
+          emptyWeight: Number(data.emptyWeight || 0),
+          grossWeight: Number(data.grossWeight || 0),
+          netWeight: Number(data.netWeight || 0),
+          royaltyNumber: data.royaltyNumber || '',
+          royaltyTons: Number(data.royaltyTons || 0),
+          royaltyM3: Number(data.royaltyM3 || 0),
+          deductionPercentage: Number(data.deductionPercentage || 0),
+          sizeChangePercentage: Number(data.sizeChangePercentage || 0),
+          tonnage: Number(data.tonnage || 0),
+          revenue: Number(data.revenue || 0),
+          materialCost: Number(data.materialCost || 0),
+          transportCost: Number(data.transportCost || 0),
+          royaltyCost: Number(data.royaltyCost || 0),
+          profit: Number(data.profit || 0),
+          paymentStatus: data.paymentStatus || 'unpaid',
+          agent: data.agent || '',
+          status: data.status || 'pending upload',
+          createdBy: getUserDisplayName(req.user),
+          rateOverrideEnabled: Boolean(data.rateOverrideEnabled),
+          rateOverride: data.rateOverride || null,
+        },
+      });
+      return trip;
+    });
+    res.status(201).json(createdTrip);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create trip with masters';
+    console.error('Failed to create trip with masters', message, error);
+    res.status(500).json({ error: message });
+  }
+});
+
 app.put('/api/trips/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body || {};
+  const role = req.user?.role || '';
+  const sanitizedData = { ...data };
+  const entryFieldKeys = [
+    'date',
+    'place',
+    'pickupPlace',
+    'dropOffPlace',
+    'vendorName',
+    'vendorCustomerIsOneOff',
+    'customer',
+    'invoiceDCNumber',
+    'quarryName',
+    'mineQuarryIsOneOff',
+    'royaltyOwnerName',
+    'royaltyOwnerIsOneOff',
+    'material',
+    'vehicleNumber',
+    'vehicleIsOneOff',
+    'transporterName',
+    'transportOwnerIsOneOff',
+    'transportOwnerMobileNumber',
+    'emptyWeight',
+    'grossWeight',
+    'netWeight',
+    'royaltyNumber',
+    'royaltyTons',
+    'royaltyM3',
+    'deductionPercentage',
+    'sizeChangePercentage',
+    'tonnage',
+    'agent',
+  ];
+  const receivedFieldKeys = [
+    'receivedDate',
+    'receivedBy',
+    'receivedByRole',
+    'endEmptyWeight',
+    'endGrossWeight',
+    'endNetWeight',
+    'endWaymentSlipUpload',
+    'weightDifferenceReason',
+  ];
+  const validationFieldKeys = [
+    'validatedBy',
+    'validatedAt',
+    'validationComments',
+  ];
+  if (role === 'PICKUP_SUPERVISOR') {
+    [...receivedFieldKeys, ...validationFieldKeys].forEach((field) => {
+      delete sanitizedData[field];
+    });
+  } else if (role === 'DROPOFF_SUPERVISOR') {
+    [...entryFieldKeys, ...validationFieldKeys].forEach((field) => {
+      delete sanitizedData[field];
+    });
+  }
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    delete sanitizedData.createdBy;
+  }
   try {
     const existingTrip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!existingTrip) {
@@ -2239,14 +2555,14 @@ app.put('/api/trips/:id', async (req, res) => {
     }
     const tripForUploads = {
       ...existingTrip,
-      ...data,
-      date: data.date ? new Date(data.date) : existingTrip.date,
+      ...sanitizedData,
+      date: sanitizedData.date ? new Date(sanitizedData.date) : existingTrip.date,
     };
     const uploadUpdates = {};
     for (const field of UPLOAD_FIELDS) {
-      if (data[field] !== undefined) {
+      if (sanitizedData[field] !== undefined) {
         uploadUpdates[field] = await normalizeUploadField({
-          fieldValue: data[field],
+          fieldValue: sanitizedData[field],
           trip: tripForUploads,
           req,
           fieldKey: field,
@@ -2256,80 +2572,80 @@ app.put('/api/trips/:id', async (req, res) => {
     const trip = await prisma.tripRecord.update({
       where: { id: Number(id) },
       data: {
-        date: data.date ? new Date(data.date) : undefined,
-        place: data.place,
-        pickupPlace: data.pickupPlace,
-        dropOffPlace: data.dropOffPlace,
-        vendorName: data.vendorName,
-        vendorCustomerIsOneOff: data.vendorCustomerIsOneOff !== undefined ? Boolean(data.vendorCustomerIsOneOff) : undefined,
-        customer: data.customer,
-        invoiceDCNumber: data.invoiceDCNumber,
-        quarryName: data.quarryName,
-        mineQuarryIsOneOff: data.mineQuarryIsOneOff !== undefined ? Boolean(data.mineQuarryIsOneOff) : undefined,
-        royaltyOwnerName: data.royaltyOwnerName,
-        royaltyOwnerIsOneOff: data.royaltyOwnerIsOneOff !== undefined ? Boolean(data.royaltyOwnerIsOneOff) : undefined,
-        material: data.material,
-        vehicleNumber: data.vehicleNumber,
-        vehicleIsOneOff: data.vehicleIsOneOff !== undefined ? Boolean(data.vehicleIsOneOff) : undefined,
-        transporterName: data.transporterName,
-        transportOwnerIsOneOff: data.transportOwnerIsOneOff !== undefined ? Boolean(data.transportOwnerIsOneOff) : undefined,
-        transportOwnerMobileNumber: data.transportOwnerMobileNumber,
-        emptyWeight: data.emptyWeight !== undefined ? Number(data.emptyWeight) : undefined,
-        grossWeight: data.grossWeight !== undefined ? Number(data.grossWeight) : undefined,
-        netWeight: data.netWeight !== undefined ? Number(data.netWeight) : undefined,
-        royaltyNumber: data.royaltyNumber,
-        royaltyTons: data.royaltyTons !== undefined ? Number(data.royaltyTons) : undefined,
-        royaltyM3: data.royaltyM3 !== undefined ? Number(data.royaltyM3) : undefined,
-        deductionPercentage: data.deductionPercentage !== undefined ? Number(data.deductionPercentage) : undefined,
-        sizeChangePercentage: data.sizeChangePercentage !== undefined ? Number(data.sizeChangePercentage) : undefined,
-        tonnage: data.tonnage !== undefined ? Number(data.tonnage) : undefined,
-        revenue: data.revenue !== undefined ? Number(data.revenue) : undefined,
-        materialCost: data.materialCost !== undefined ? Number(data.materialCost) : undefined,
-        transportCost: data.transportCost !== undefined ? Number(data.transportCost) : undefined,
-        royaltyCost: data.royaltyCost !== undefined ? Number(data.royaltyCost) : undefined,
-        profit: data.profit !== undefined ? Number(data.profit) : undefined,
-        paymentStatus: data.paymentStatus,
-        agent: data.agent,
-        status: data.status,
-        createdBy: data.createdBy,
+        date: sanitizedData.date ? new Date(sanitizedData.date) : undefined,
+        place: sanitizedData.place,
+        pickupPlace: sanitizedData.pickupPlace,
+        dropOffPlace: sanitizedData.dropOffPlace,
+        vendorName: sanitizedData.vendorName,
+        vendorCustomerIsOneOff: sanitizedData.vendorCustomerIsOneOff !== undefined ? Boolean(sanitizedData.vendorCustomerIsOneOff) : undefined,
+        customer: sanitizedData.customer,
+        invoiceDCNumber: sanitizedData.invoiceDCNumber,
+        quarryName: sanitizedData.quarryName,
+        mineQuarryIsOneOff: sanitizedData.mineQuarryIsOneOff !== undefined ? Boolean(sanitizedData.mineQuarryIsOneOff) : undefined,
+        royaltyOwnerName: sanitizedData.royaltyOwnerName,
+        royaltyOwnerIsOneOff: sanitizedData.royaltyOwnerIsOneOff !== undefined ? Boolean(sanitizedData.royaltyOwnerIsOneOff) : undefined,
+        material: sanitizedData.material,
+        vehicleNumber: sanitizedData.vehicleNumber,
+        vehicleIsOneOff: sanitizedData.vehicleIsOneOff !== undefined ? Boolean(sanitizedData.vehicleIsOneOff) : undefined,
+        transporterName: sanitizedData.transporterName,
+        transportOwnerIsOneOff: sanitizedData.transportOwnerIsOneOff !== undefined ? Boolean(sanitizedData.transportOwnerIsOneOff) : undefined,
+        transportOwnerMobileNumber: sanitizedData.transportOwnerMobileNumber,
+        emptyWeight: sanitizedData.emptyWeight !== undefined ? Number(sanitizedData.emptyWeight) : undefined,
+        grossWeight: sanitizedData.grossWeight !== undefined ? Number(sanitizedData.grossWeight) : undefined,
+        netWeight: sanitizedData.netWeight !== undefined ? Number(sanitizedData.netWeight) : undefined,
+        royaltyNumber: sanitizedData.royaltyNumber,
+        royaltyTons: sanitizedData.royaltyTons !== undefined ? Number(sanitizedData.royaltyTons) : undefined,
+        royaltyM3: sanitizedData.royaltyM3 !== undefined ? Number(sanitizedData.royaltyM3) : undefined,
+        deductionPercentage: sanitizedData.deductionPercentage !== undefined ? Number(sanitizedData.deductionPercentage) : undefined,
+        sizeChangePercentage: sanitizedData.sizeChangePercentage !== undefined ? Number(sanitizedData.sizeChangePercentage) : undefined,
+        tonnage: sanitizedData.tonnage !== undefined ? Number(sanitizedData.tonnage) : undefined,
+        revenue: sanitizedData.revenue !== undefined ? Number(sanitizedData.revenue) : undefined,
+        materialCost: sanitizedData.materialCost !== undefined ? Number(sanitizedData.materialCost) : undefined,
+        transportCost: sanitizedData.transportCost !== undefined ? Number(sanitizedData.transportCost) : undefined,
+        royaltyCost: sanitizedData.royaltyCost !== undefined ? Number(sanitizedData.royaltyCost) : undefined,
+        profit: sanitizedData.profit !== undefined ? Number(sanitizedData.profit) : undefined,
+        paymentStatus: sanitizedData.paymentStatus,
+        agent: sanitizedData.agent,
+        status: sanitizedData.status,
+        createdBy: sanitizedData.createdBy,
         ...uploadUpdates,
-        receivedDate: data.receivedDate ? new Date(data.receivedDate) : data.receivedDate,
-        receivedBy: data.receivedBy,
-        receivedByRole: data.receivedByRole,
-        endEmptyWeight: data.endEmptyWeight !== undefined ? Number(data.endEmptyWeight) : undefined,
-        endGrossWeight: data.endGrossWeight !== undefined ? Number(data.endGrossWeight) : undefined,
-        endNetWeight: data.endNetWeight !== undefined ? Number(data.endNetWeight) : undefined,
-        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? data.endWaymentSlipUpload,
-        weightDifferenceReason: data.weightDifferenceReason,
-        validatedBy: data.validatedBy,
-        validatedAt: data.validatedAt ? new Date(data.validatedAt) : data.validatedAt,
-        validationComments: data.validationComments,
-        pendingRequestType: data.pendingRequestType,
-        pendingRequestMessage: data.pendingRequestMessage,
-        pendingRequestBy: data.pendingRequestBy,
-        pendingRequestRole: data.pendingRequestRole,
-        pendingRequestAt: data.pendingRequestAt ? new Date(data.pendingRequestAt) : data.pendingRequestAt,
-        rateOverrideEnabled: data.rateOverrideEnabled !== undefined ? Boolean(data.rateOverrideEnabled) : undefined,
-        rateOverride: data.rateOverride,
+        receivedDate: sanitizedData.receivedDate ? new Date(sanitizedData.receivedDate) : sanitizedData.receivedDate,
+        receivedBy: sanitizedData.receivedBy,
+        receivedByRole: sanitizedData.receivedByRole,
+        endEmptyWeight: sanitizedData.endEmptyWeight !== undefined ? Number(sanitizedData.endEmptyWeight) : undefined,
+        endGrossWeight: sanitizedData.endGrossWeight !== undefined ? Number(sanitizedData.endGrossWeight) : undefined,
+        endNetWeight: sanitizedData.endNetWeight !== undefined ? Number(sanitizedData.endNetWeight) : undefined,
+        endWaymentSlipUpload: uploadUpdates.endWaymentSlipUpload ?? sanitizedData.endWaymentSlipUpload,
+        weightDifferenceReason: sanitizedData.weightDifferenceReason,
+        validatedBy: sanitizedData.validatedBy,
+        validatedAt: sanitizedData.validatedAt ? new Date(sanitizedData.validatedAt) : sanitizedData.validatedAt,
+        validationComments: sanitizedData.validationComments,
+        pendingRequestType: sanitizedData.pendingRequestType,
+        pendingRequestMessage: sanitizedData.pendingRequestMessage,
+        pendingRequestBy: sanitizedData.pendingRequestBy,
+        pendingRequestRole: sanitizedData.pendingRequestRole,
+        pendingRequestAt: sanitizedData.pendingRequestAt ? new Date(sanitizedData.pendingRequestAt) : sanitizedData.pendingRequestAt,
+        rateOverrideEnabled: sanitizedData.rateOverrideEnabled !== undefined ? Boolean(sanitizedData.rateOverrideEnabled) : undefined,
+        rateOverride: sanitizedData.rateOverride,
       },
     });
-    if (data.status && data.status !== existingTrip.status) {
+    if (sanitizedData.status && sanitizedData.status !== existingTrip.status) {
       await logTripActivity({
         tripId: trip.id,
         action: 'status_change',
-        message: `Status changed from ${existingTrip.status || 'unknown'} to ${data.status}.`,
+        message: `Status changed from ${existingTrip.status || 'unknown'} to ${sanitizedData.status}.`,
         user: req.user,
       });
     }
-    if (data.pendingRequestType && data.pendingRequestType !== existingTrip.pendingRequestType) {
+    if (sanitizedData.pendingRequestType && sanitizedData.pendingRequestType !== existingTrip.pendingRequestType) {
       await logTripActivity({
         tripId: trip.id,
         action: 'request',
-        message: `Request ${data.pendingRequestType}${data.pendingRequestMessage ? `: ${data.pendingRequestMessage}` : ''}`,
+        message: `Request ${sanitizedData.pendingRequestType}${sanitizedData.pendingRequestMessage ? `: ${sanitizedData.pendingRequestMessage}` : ''}`,
         user: req.user,
       });
     }
-    if (data.validationComments) {
+    if (sanitizedData.validationComments) {
       await logTripActivity({
         tripId: trip.id,
         action: 'validation',
@@ -2338,8 +2654,8 @@ app.put('/api/trips/:id', async (req, res) => {
       });
     }
     const clearingRequest =
-      Object.prototype.hasOwnProperty.call(data, 'pendingRequestType')
-      && (data.pendingRequestType === null || data.pendingRequestType === '');
+      Object.prototype.hasOwnProperty.call(sanitizedData, 'pendingRequestType')
+      && (sanitizedData.pendingRequestType === null || sanitizedData.pendingRequestType === '');
     if (clearingRequest && existingTrip.pendingRequestBy) {
       await prisma.notificationRecord.create({
         data: {
@@ -2353,7 +2669,7 @@ app.put('/api/trips/:id', async (req, res) => {
           requestType: 'update-resolved',
           requesterName: getUserDisplayName(req.user),
           requesterRole: req.user?.role || null,
-          requestMessage: data.validationComments || '',
+          requestMessage: sanitizedData.validationComments || '',
           requesterContact: getUserContact(req.user),
         },
       });
@@ -2505,11 +2821,25 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
 });
 
 app.delete('/api/trips/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
   const { id } = req.params;
   try {
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+      const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
+      if (!trip) {
+        return res.status(404).json({ error: 'Trip not found' });
+      }
+      const isPickupSupervisor = req.user?.role === 'PICKUP_SUPERVISOR';
+      const status = (trip.status || '').toLowerCase();
+      const isPendingUpload = status === 'pending upload' || status === 'pending';
+      const actorName = getUserDisplayName(req.user);
+      const actorUsername = req.user?.username || '';
+      const createdBy = trip.createdBy || '';
+      const matchesCreator = [actorName, actorUsername].some(value => value && value.toLowerCase() === createdBy.toLowerCase());
+      const canDelete = isPickupSupervisor && isPendingUpload && matchesCreator;
+      if (!canDelete) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
     await prisma.tripRecord.delete({ where: { id: Number(id) } });
     res.status(204).end();
   } catch (error) {
@@ -2598,6 +2928,42 @@ app.delete('/api/vehicle-masters/:id', async (req, res) => {
   } catch (error) {
     console.error('Failed to delete vehicle', error);
     res.status(500).json({ error: 'Failed to delete vehicle' });
+  }
+});
+
+app.post('/api/merge/vehicle-masters', async (req, res) => {
+  const { sourceId, targetId } = req.body || {};
+  if (!sourceId || !targetId) {
+    return res.status(400).json({ error: 'Source and target vehicle IDs are required.' });
+  }
+  if (sourceId === targetId) {
+    return res.status(400).json({ error: 'Source and target must be different.' });
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      const source = await tx.vehicleMaster.findUnique({ where: { id: sourceId } });
+      const target = await tx.vehicleMaster.findUnique({ where: { id: targetId } });
+      if (!source || !target) {
+        const missing = !source ? 'source' : 'target';
+        throw new Error(`NOT_FOUND:${missing}`);
+      }
+      await tx.tripRecord.updateMany({
+        where: { vehicleNumber: source.vehicleNumber },
+        data: { vehicleNumber: target.vehicleNumber },
+      });
+      await tx.transportOwnerVehicle.updateMany({
+        where: { vehicleNumber: source.vehicleNumber },
+        data: { vehicleNumber: target.vehicleNumber },
+      });
+      await tx.vehicleMaster.delete({ where: { id: sourceId } });
+    });
+    res.json({ status: 'ok' });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('NOT_FOUND')) {
+      return res.status(404).json({ error: 'Source or target vehicle not found.' });
+    }
+    console.error('Failed to merge vehicle records', error);
+    res.status(500).json({ error: 'Failed to merge vehicle records' });
   }
 });
 

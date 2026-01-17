@@ -89,7 +89,7 @@ const MaterialTypesPage: React.FC = () => {
         subtitle="Define material categories for rate cards."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Material Type', action: handleAdd }}
       />
 

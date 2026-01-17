@@ -90,7 +90,7 @@ const SiteLocationsPage: React.FC = () => {
         subtitle="Manage pickup and drop-off sites for trips and rate cards."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Site', action: handleAddSite }}
       />
 

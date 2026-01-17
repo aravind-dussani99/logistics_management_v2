@@ -77,6 +77,16 @@ interface DataContextType {
   loading: boolean;
   
   addTrip: (trip: Omit<NewTripData, 'createdBy'>) => Promise<void>;
+  addTripAtomic: (trip: Omit<NewTripData, 'createdBy'>, createMasters?: {
+    vendorCustomer?: boolean;
+    mineQuarry?: boolean;
+    royaltyOwner?: boolean;
+    transportOwner?: boolean;
+    vehicleMaster?: boolean;
+    materialType?: boolean;
+    pickupPlace?: boolean;
+    dropOffPlace?: boolean;
+  }) => Promise<void>;
   updateTrip: (tripId: number, tripData: Partial<Trip>) => Promise<void>;
   deleteTrip: (tripId: number) => Promise<void>;
 
@@ -104,6 +114,7 @@ interface DataContextType {
   addVehicleMaster: (vehicle: Omit<VehicleMaster, 'id'>) => Promise<void>;
   updateVehicleMaster: (id: string, vehicle: Omit<VehicleMaster, 'id'>) => Promise<void>;
   deleteVehicleMaster: (id: string) => Promise<void>;
+  mergeVehicleMaster: (sourceId: string, targetId: string) => Promise<void>;
   
   addVehicleOwner: (vehicleOwner: Omit<VehicleOwner, 'id'>) => Promise<void>;
   updateVehicleOwner: (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => Promise<void>;
@@ -132,7 +143,7 @@ interface DataContextType {
   deleteSiteLocation: (id: string) => Promise<void>;
   mergeSiteLocation: (sourceId: string, targetId: string) => Promise<void>;
 
-  addMerchantType: (data: Omit<MerchantType, 'id'>) => Promise<void>;
+  addMerchantType: (data: Omit<MerchantType, 'id'>) => Promise<MerchantType>;
   updateMerchantType: (id: string, data: Omit<MerchantType, 'id'>) => Promise<void>;
   deleteMerchantType: (id: string) => Promise<void>;
 
@@ -542,7 +553,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(false);
   }, [currentUser]);
 
-  const addTrip = async (trip: Omit<NewTripData, 'createdBy'>) => {
+  const buildTripPayload = (trip: Omit<NewTripData, 'createdBy'>) => {
     if (!currentUser) throw new Error("User not authenticated");
     const getRatePartyIdByName = (type: string, name?: string) => {
       if (!name) return '';
@@ -618,7 +629,18 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       royaltyCost,
       profit,
     };
+    return newTripData;
+  };
+
+  const addTrip = async (trip: Omit<NewTripData, 'createdBy'>) => {
+    const newTripData = buildTripPayload(trip);
     const createdTrip = await tripApi.create(newTripData);
+    setTrips(prev => [createdTrip, ...prev]);
+  }
+
+  const addTripAtomic = async (trip: Omit<NewTripData, 'createdBy'>, createMasters = {}) => {
+    const newTripData = buildTripPayload(trip);
+    const createdTrip = await tripApi.createAtomic(newTripData, createMasters);
     setTrips(prev => [createdTrip, ...prev]);
   }
   
@@ -699,6 +721,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await vehicleMasterApi.remove(id);
     setVehicleMasters(prev => prev.filter(item => item.id !== id));
   };
+  const mergeVehicleMaster = async (sourceId: string, targetId: string) => {
+    await vehicleMasterApi.merge(sourceId, targetId);
+    refreshData();
+  };
 
   const getDailyExpenses = useCallback(async (supervisorName: string) => dailyExpenseApi.getBySupervisor(supervisorName), []);
   const addDailyExpense = async (expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => {
@@ -760,6 +786,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addMerchantType = async (data: Omit<MerchantType, 'id'>) => {
     const newType = await merchantTypeApi.create(data);
     setMerchantTypes(prev => [...prev, newType]);
+    return newType;
   };
   const updateMerchantType = async (id: string, data: Omit<MerchantType, 'id'>) => {
     const updatedType = await merchantTypeApi.update(id, data);
@@ -979,6 +1006,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     accountCategories,
     loading,
     addTrip,
+    addTripAtomic,
     updateTrip,
     deleteTrip,
     addAdvance,
@@ -1000,6 +1028,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addVehicleMaster,
     updateVehicleMaster,
     deleteVehicleMaster,
+    mergeVehicleMaster,
     addVehicleOwner,
     updateVehicleOwner,
     deleteVehicleOwner,

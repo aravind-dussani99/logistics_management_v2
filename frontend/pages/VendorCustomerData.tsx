@@ -103,7 +103,7 @@ const VendorCustomerDataPage: React.FC = () => {
         subtitle="Manage vendor and customer profiles with GST details."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Vendor & Customer', action: handleAdd }}
       />
 

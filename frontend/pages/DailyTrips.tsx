@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import DataTable from '../components/DataTable';
-import { Trip, Role, QuarryOwner, VehicleOwner, CustomerRate, Notification } from '../types';
+import { Trip, Role, Notification } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Filters } from '../components/FilterPanel';
 import Pagination from '../components/Pagination';
@@ -10,6 +10,7 @@ import { formatDateDisplay, safeToFixed } from '../utils';
 import { useLocation } from 'react-router-dom';
 import { useUI } from '../contexts/UIContext';
 import SupervisorTripForm from '../components/SupervisorTripForm';
+import TripHistoryDialog from '../components/TripHistoryDialog';
 import AlertDialog from '../components/AlertDialog';
 import RequestDialog from '../components/RequestDialog';
 import { notificationApi } from '../services/notificationApi';
@@ -28,20 +29,39 @@ const getMtdRange = () => {
 
 const DailyTrips: React.FC = () => {
     const { currentUser } = useAuth();
-    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips } = useData();
+    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips, loadTripMasters, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
-    const [allData, setAllData] = useState<{ quarries: QuarryOwner[]; vehicles: VehicleOwner[]; customers: CustomerRate[], royaltyOwners: string[] }>({ quarries: [], vehicles: [], customers: [], royaltyOwners: [] });
+    const [allData, setAllData] = useState({
+        vehicles: [] as { id?: string; vehicleNumber: string }[],
+        transportOwners: [] as { id?: string; name: string }[],
+        customers: [] as { id?: string; name: string }[],
+        quarries: [] as { id?: string; name: string }[],
+        royaltyOwners: [] as { id?: string; name: string }[],
+    });
     const [activeRequest, setActiveRequest] = useState<Notification | null>(null);
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed' | 'trip completed'>('all');
+    const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
+    const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
 
     useEffect(() => {
         loadTrips();
-    }, [loadTrips, refreshKey]);
+        loadTripMasters();
+    }, [loadTrips, loadTripMasters, refreshKey]);
+
+    useEffect(() => {
+        setAllData({
+            vehicles: vehicleMasters.map(item => ({ id: item.id, vehicleNumber: item.vehicleNumber })),
+            transportOwners: transportOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+            customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
+            quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
+            royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+        });
+    }, [vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
 
     const handleValidate = (trip: Trip) => {
         openModal('Validate Trip', (
@@ -188,7 +208,7 @@ const DailyTrips: React.FC = () => {
             if (note.tripId) {
                 const targetTrip = trips.find(t => t.id === note.tripId);
                 if (targetTrip) {
-                    openModal(`Trip #${targetTrip.id}`, <SupervisorTripForm mode="view" trip={targetTrip} onClose={closeModal} />);
+                    openModal(`Trip #${targetTrip.id} History`, <TripHistoryDialog trip={targetTrip} notification={note} onClose={closeModal} />);
                 }
             }
         }).catch(error => {
@@ -234,7 +254,7 @@ const DailyTrips: React.FC = () => {
 
     const totalPages = Math.ceil(filteredTrips.length / TRIPS_PER_PAGE);
 
-    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
 
     const dateRangeSubtitle = useMemo(() => {
         if (!filters.dateFrom && !filters.dateTo) return "Showing all trips";
@@ -292,6 +312,7 @@ const DailyTrips: React.FC = () => {
                         return (
                         <tr key={trip.id} className={isRequestedTrip ? 'bg-amber-50 dark:bg-amber-900/20' : undefined}>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * TRIPS_PER_PAGE + index + 1}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{trip.id}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.invoiceDCNumber || '-'}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer || '-'}</td>
@@ -318,41 +339,51 @@ const DailyTrips: React.FC = () => {
                                 >
                                     View
                                 </button>
+                                {(trip.activityCount ?? 0) > 0 && (
+                                    <button
+                                        onClick={() => openModal(`Trip #${trip.id} History`, <TripHistoryDialog trip={trip} onClose={closeModal} />)}
+                                        className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                                    >
+                                        History
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)}
                                     className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
                                 >
                                     Edit
                                 </button>
-                                <button
-                                    onClick={() => {
-                                        openModal('Delete Trip', (
-                                            <AlertDialog
-                                                message="Delete this trip? This action cannot be undone."
-                                                confirmLabel="Delete"
-                                                cancelLabel="Cancel"
-                                                onCancel={closeModal}
-                                                onConfirm={async () => {
-                                                    await notificationApi.create({
-                                                        message: `Trip #${trip.id} deleted by Admin.`,
-                                                        type: 'info',
-                                                        targetRole: Role.PICKUP_SUPERVISOR,
-                                                        targetUser: trip.createdBy || null,
-                                                        tripId: trip.id,
-                                                        requestType: 'delete',
-                                                        requesterName: currentUser?.name || 'Admin',
-                                                        requesterRole: currentUser?.role || Role.ADMIN,
-                                                    });
-                                                    await deleteTrip(trip.id);
-                                                    closeModal();
-                                                }}
-                                            />
-                                        ));
-                                    }}
-                                    className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
-                                >
-                                    Delete
-                                </button>
+                                {(isAdminLike || (isPickupSupervisor && (trip.status || '').toLowerCase() === 'pending upload')) && (
+                                    <button
+                                        onClick={() => {
+                                            openModal('Delete Trip', (
+                                                <AlertDialog
+                                                    message="Delete this trip? This action cannot be undone."
+                                                    confirmLabel="Delete"
+                                                    cancelLabel="Cancel"
+                                                    onCancel={closeModal}
+                                                    onConfirm={async () => {
+                                                        await notificationApi.create({
+                                                            message: `Trip #${trip.id} deleted by Admin.`,
+                                                            type: 'info',
+                                                            targetRole: Role.PICKUP_SUPERVISOR,
+                                                            targetUser: trip.createdBy || null,
+                                                            tripId: trip.id,
+                                                            requestType: 'delete',
+                                                            requesterName: currentUser?.name || 'Admin',
+                                                            requesterRole: currentUser?.role || Role.ADMIN,
+                                                        });
+                                                        await deleteTrip(trip.id);
+                                                        closeModal();
+                                                    }}
+                                                />
+                                            ));
+                                        }}
+                                        className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                                    >
+                                        Delete
+                                    </button>
+                                )}
                                 {(trip.status || '').toLowerCase() === 'pending validation' && (
                                     <>
                                         <button

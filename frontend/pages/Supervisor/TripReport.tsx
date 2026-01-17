@@ -14,6 +14,7 @@ import RequestDialog from '../../components/RequestDialog';
 import { useLocation } from 'react-router-dom';
 import { notificationApi } from '../../services/notificationApi';
 import { Notification } from '../../types';
+import AlertDialog from '../../components/AlertDialog';
 
 const SUPERVISOR_TRIPS_PER_PAGE = 10;
 
@@ -68,10 +69,12 @@ const SupervisorTripReport: React.FC = () => {
     }, [location.search, trips, openModal, closeModal]);
     
     const filteredTrips = useMemo(() => {
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
         return myTrips.filter(trip => {
-            const tripDate = trip.date ? trip.date.split('T')[0] : '';
-            if (filters.dateFrom && tripDate < filters.dateFrom) return false;
-            if (filters.dateTo && tripDate > filters.dateTo) return false;
+            const tripDate = trip.date ? new Date(trip.date) : null;
+            if (fromDate && tripDate && tripDate < fromDate) return false;
+            if (toDate && tripDate && tripDate > toDate) return false;
             return true;
         });
     }, [myTrips, filters]);
@@ -100,9 +103,18 @@ const SupervisorTripReport: React.FC = () => {
     };
 
     const handleDelete = async (tripId: number) => {
-        if (window.confirm('Are you sure you want to delete this trip entry?')) {
-            await deleteTrip(tripId);
-        }
+        openModal('Delete Trip', (
+            <AlertDialog
+                message="Delete this trip? This action cannot be undone."
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
+                onCancel={closeModal}
+                onConfirm={async () => {
+                    await deleteTrip(tripId);
+                    closeModal();
+                }}
+            />
+        ));
     };
 
     const handleRequestUpdate = async (trip: Trip) => {
@@ -167,7 +179,7 @@ const SupervisorTripReport: React.FC = () => {
         }
     }
     
-    const headers = ['S. No.', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
+    const headers = ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'];
 
     return (
         <div className="relative">
@@ -176,7 +188,7 @@ const SupervisorTripReport: React.FC = () => {
                 subtitle={`You have entered ${myTrips.length} trips.`}
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Enter Trip', action: handleEnterTrip }}
             />
             <main className="pt-6">
@@ -218,6 +230,7 @@ const SupervisorTripReport: React.FC = () => {
                         renderRow={(trip: Trip, index: number) => (
                             <tr key={trip.id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * SUPERVISOR_TRIPS_PER_PAGE + index + 1}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{trip.id}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(trip.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.invoiceDCNumber || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{trip.customer || '-'}</td>

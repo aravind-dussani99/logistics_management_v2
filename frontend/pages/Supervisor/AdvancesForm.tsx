@@ -27,7 +27,7 @@ const SupervisorAdvancesForm: React.FC = () => {
         title="Advances"
         filters={filters}
         onFilterChange={setFilters}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={[]}
         showAddAction={false}
       />

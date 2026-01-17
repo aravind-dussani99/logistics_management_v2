@@ -81,7 +81,7 @@ const MerchantsPage: React.FC = () => {
         subtitle="Maintain merchant details with site and GST information."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Merchant', action: handleAdd }}
       />
 
