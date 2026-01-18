@@ -424,13 +424,17 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                                         <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                                                     )}
                                                     {!isPendingUpload && !isCompleted && (
-                                                        <button
-                                                            onClick={() => handleRequestUpdate(t)}
-                                                            className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'update') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                            disabled={t.pendingRequestType === 'update'}
-                                                        >
-                                                            {t.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                                        </button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleRequestUpdate(t)}
+                                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                                            >
+                                                                Request Update
+                                                            </button>
+                                                            {t.pendingRequestType === 'update' && (
+                                                                <span className="text-xxs font-semibold text-amber-300">Update requested</span>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {isCompleted && (
                                                         <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
@@ -457,13 +461,17 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                                         </>
                                                     )}
                                                     {isPendingValidation && (
-                                                        <button
-                                                            onClick={() => handleRequestUpdate(t)}
-                                                            className={`px-3 py-2 text-sm font-medium rounded-md ${(t.pendingRequestType === 'update') ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                                            disabled={t.pendingRequestType === 'update'}
-                                                        >
-                                                            {t.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                                        </button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleRequestUpdate(t)}
+                                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                                            >
+                                                                Request Update
+                                                            </button>
+                                                            {t.pendingRequestType === 'update' && (
+                                                                <span className="text-xxs font-semibold text-amber-300">Update requested</span>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {isCompleted && (
                                                         <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>

@@ -8,9 +8,15 @@ export interface Filters {
     customer?: string;
     quarry?: string;
     royalty?: string;
+    vendor?: string;
+    transportOwner?: string;
+    mine?: string;
+    material?: string;
 }
 
-export type FilterField = 'date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty';
+export type FilterField = 'date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material';
+
+export const DEFAULT_MORE_FILTERS: FilterField[] = ['vehicle', 'vendor', 'transportOwner', 'mine', 'material', 'royalty'];
 
 interface FilterPanelProps {
     filters: Filters;
@@ -21,6 +27,8 @@ interface FilterPanelProps {
         customers: { id?: string; name: string }[];
         quarries: { id?: string; name: string }[];
         royaltyOwners: { id?: string; name: string }[];
+        mineQuarries?: { id?: string; name: string }[];
+        materials?: { id?: string; name: string }[];
     };
     visibleFields?: FilterField[];
 }
@@ -28,9 +36,11 @@ interface FilterPanelProps {
 const defaultVisibleFields: FilterField[] = ['date', 'vehicle', 'transporter', 'customer', 'quarry', 'royalty'];
 
 const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, visibleFields = defaultVisibleFields }) => {
-    const { vehicles, transportOwners, customers, quarries, royaltyOwners } = data;
+    const { vehicles, transportOwners, customers, quarries, royaltyOwners, mineQuarries = [], materials = [] } = data;
     const uniqueTransporters = Array.from(new Set((transportOwners || []).map(item => item.name))).filter(Boolean);
-    const uniqueCustomers = Array.from(new Set(customers.map(item => item.name))).filter(Boolean);
+    const uniqueVendors = Array.from(new Set(customers.map(item => item.name))).filter(Boolean);
+    const uniqueMines = Array.from(new Set(mineQuarries.map(item => item.name))).filter(Boolean);
+    const uniqueMaterials = Array.from(new Set(materials.map(item => item.name))).filter(Boolean);
 
     const handleFilterChange = (key: keyof Filters, value: string) => {
         setFilters(prev => ({ ...prev, [key]: value }));
@@ -82,7 +92,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <label htmlFor="vehicle" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Vehicle</label>
                     <select id="vehicle" className={baseInputClass} value={filters.vehicle || ''} onChange={e => handleFilterChange('vehicle', e.target.value)}>
                         <option value="">All Vehicles</option>
-                        {vehicles.map(v => <option key={v.id || v.vehicleNumber} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
+                        {vehicles.map(v => <option key={`vehicle-${v.id || v.vehicleNumber}`} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
                     </select>
                 </div>
             )}
@@ -91,7 +101,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <label htmlFor="transporter" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transporter</label>
                     <select id="transporter" className={baseInputClass} value={filters.transporter || ''} onChange={e => handleFilterChange('transporter', e.target.value)}>
                         <option value="">All Transporters</option>
-                        {uniqueTransporters.map(t => <option key={t} value={t}>{t}</option>)}
+                        {uniqueTransporters.map(t => <option key={`transporter-${t}`} value={t}>{t}</option>)}
                     </select>
                 </div>
             )}
@@ -100,7 +110,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <label htmlFor="customer" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer</label>
                     <select id="customer" className={baseInputClass} value={filters.customer || ''} onChange={e => handleFilterChange('customer', e.target.value)}>
                         <option value="">All Customers</option>
-                        {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
+                        {uniqueVendors.map(c => <option key={`customer-${c}`} value={c}>{c}</option>)}
                     </select>
                 </div>
             )}
@@ -109,7 +119,43 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <label htmlFor="quarry" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quarry</label>
                     <select id="quarry" className={baseInputClass} value={filters.quarry || ''} onChange={e => handleFilterChange('quarry', e.target.value)}>
                         <option value="">All Quarries</option>
-                        {quarries.map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
+                        {quarries.map(q => <option key={`quarry-${q.id || q.name}`} value={q.name}>{q.name}</option>)}
+                    </select>
+                </div>
+            )}
+            {fields.has('vendor') && (
+                <div>
+                    <label htmlFor="vendor" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Vendor & Customer Name</label>
+                    <select id="vendor" className={baseInputClass} value={filters.vendor || ''} onChange={e => handleFilterChange('vendor', e.target.value)}>
+                        <option value="">All Vendors</option>
+                        {uniqueVendors.map(vendor => <option key={`vendor-${vendor}`} value={vendor}>{vendor}</option>)}
+                    </select>
+                </div>
+            )}
+            {fields.has('transportOwner') && (
+                <div>
+                    <label htmlFor="transportOwner" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transport & Owner Name</label>
+                    <select id="transportOwner" className={baseInputClass} value={filters.transportOwner || ''} onChange={e => handleFilterChange('transportOwner', e.target.value)}>
+                        <option value="">All Transport Owners</option>
+                        {transportOwners.map(owner => <option key={`transportOwner-${owner.id || owner.name}`} value={owner.name}>{owner.name}</option>)}
+                    </select>
+                </div>
+            )}
+            {fields.has('mine') && (
+                <div>
+                    <label htmlFor="mine" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Mine & Quarry Name</label>
+                    <select id="mine" className={baseInputClass} value={filters.mine || ''} onChange={e => handleFilterChange('mine', e.target.value)}>
+                        <option value="">All Mines/Quarries</option>
+                        {uniqueMines.map(mine => <option key={`mine-${mine}`} value={mine}>{mine}</option>)}
+                    </select>
+                </div>
+            )}
+            {fields.has('material') && (
+                <div>
+                    <label htmlFor="material" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Material Type</label>
+                    <select id="material" className={baseInputClass} value={filters.material || ''} onChange={e => handleFilterChange('material', e.target.value)}>
+                        <option value="">All Materials</option>
+                        {uniqueMaterials.map(material => <option key={`material-${material}`} value={material}>{material}</option>)}
                     </select>
                 </div>
             )}
@@ -118,7 +164,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <label htmlFor="royalty" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Royalty</label>
                     <select id="royalty" className={baseInputClass} value={filters.royalty || ''} onChange={e => handleFilterChange('royalty', e.target.value)}>
                         <option value="">All Royalty</option>
-                        {royaltyOwners.map(r => <option key={r.id || r.name} value={r.name}>{r.name}</option>)}
+                        {royaltyOwners.map(r => <option key={`royalty-${r.id || r.name}`} value={r.name}>{r.name}</option>)}
                     </select>
                 </div>
             )}

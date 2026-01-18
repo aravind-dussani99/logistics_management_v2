@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useUI } from '../contexts/UIContext';
-import FilterPanel, { Filters, FilterField } from './FilterPanel';
+import FilterPanel, { Filters, FilterField, DEFAULT_MORE_FILTERS } from './FilterPanel';
 import { Role } from '../types';
 import AddTripForm from './AddTripForm';
 import AddVehicleForm from './AddVehicleForm';
@@ -24,6 +24,8 @@ interface PageHeaderProps {
         customers: { id?: string; name: string }[];
         quarries: { id?: string; name: string }[];
         royaltyOwners: { id?: string; name: string }[];
+        mineQuarries?: { id?: string; name: string }[];
+        materials?: { id?: string; name: string }[];
     };
     pageAction?: {
         label: string;
@@ -130,18 +132,32 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     const quarries = filterData?.quarries ?? [];
     const royaltyOwners = filterData?.royaltyOwners ?? [];
 
+    const materials = filterData?.materials ?? [];
+    const mineQuarries = filterData?.mineQuarries ?? [];
     const safeFilterData = {
         vehicles,
         transportOwners,
         customers,
         quarries,
         royaltyOwners,
+        materials,
+        mineQuarries,
     };
 
     const uniqueTransporters = useMemo(() => {
         const names = transportOwners.map(item => item?.name || '');
         return Array.from(new Set(names)).filter(Boolean);
     }, [transportOwners]);
+
+    const moreFilterFields = useMemo<FilterField[] | undefined>(() => {
+        if (showMoreFilters.length > 0) {
+            return Array.from(new Set<FilterField>([...showMoreFilters, ...DEFAULT_MORE_FILTERS]));
+        }
+        if (showFilters.length > 0) {
+            return Array.from(new Set<FilterField>([...showFilters as FilterField[], ...DEFAULT_MORE_FILTERS]));
+        }
+        return undefined;
+    }, [showFilters, showMoreFilters]);
 
     const filterComponents = {
         date: (
@@ -195,7 +211,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                                         filters={filters}
                                         setFilters={onFilterChange}
                                         data={safeFilterData}
-                                        visibleFields={showMoreFilters.length ? showMoreFilters : (showFilters.length ? showFilters : undefined)}
+                                        visibleFields={moreFilterFields}
                                     />
                                 </div>
                             )}

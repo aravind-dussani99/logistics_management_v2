@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
         return <SupervisorTripReport />;
     }
     
-    const { trips, refreshKey, loadTrips, loadTripMasters, vehicleMasters, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles } = useData();
+    const { trips, refreshKey, loadTrips, loadTripMasters, vehicleMasters, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles, materialTypeDefinitions } = useData();
 
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
     const [allData, setAllData] = useState({
@@ -51,6 +51,8 @@ const Dashboard: React.FC = () => {
         customers: [] as { id?: string; name: string }[],
         quarries: [] as { id?: string; name: string }[],
         royaltyOwners: [] as { id?: string; name: string }[],
+        mineQuarries: [] as { id?: string; name: string }[],
+        materials: [] as { id?: string; name: string }[],
     });
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
@@ -72,8 +74,10 @@ const Dashboard: React.FC = () => {
             customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
             quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
             royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+            mineQuarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
+            materials: materialTypeDefinitions.map(item => ({ id: item.id, name: item.name })),
         });
-    }, [trips, refreshKey, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
+    }, [trips, refreshKey, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles, materialTypeDefinitions]);
 
     const calculateStatsForPeriod = (trips: Trip[]): Stats => {
          return trips.reduce((acc, trip) => {
@@ -96,9 +100,13 @@ const Dashboard: React.FC = () => {
             if (fromDate && tripDate < fromDate) return false;
             if (toDate && tripDate > toDate) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
+            if (filters.vendor && trip.customer !== filters.vendor) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
+            if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
             if (filters.quarry && trip.quarryName !== filters.quarry) return false;
+            if (filters.mine && trip.quarryName !== filters.mine) return false;
+            if (filters.material && trip.material !== filters.material) return false;
             if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
             return true;
         });
@@ -208,7 +216,7 @@ const Dashboard: React.FC = () => {
                 onFilterChange={setFilters}
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
-                showMoreFilters={['vehicle', 'customer', 'royalty']}
+                showMoreFilters={['vehicle', 'vendor', 'transportOwner', 'mine', 'material', 'royalty']}
                 showAddAction={false}
             />
             

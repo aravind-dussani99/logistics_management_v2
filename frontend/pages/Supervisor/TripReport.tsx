@@ -254,24 +254,32 @@ const SupervisorTripReport: React.FC = () => {
                                 ) : trip.status === 'in transit' ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                        <button
-                                            onClick={() => handleRequestUpdate(trip)}
-                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                            disabled={trip.pendingRequestType === 'update'}
-                                        >
-                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleRequestUpdate(trip)}
+                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                            >
+                                                Request Update
+                                            </button>
+                                            {trip.pendingRequestType === 'update' && (
+                                                <span className="text-xxs font-semibold text-amber-300">Update requested</span>
+                                            )}
+                                        </div>
                                     </>
                                 ) : trip.status === 'pending validation' ? (
                                     <>
                                         <button onClick={() => handleView(trip)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                                        <button
-                                            onClick={() => handleRequestUpdate(trip)}
-                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                            disabled={trip.pendingRequestType === 'update'}
-                                        >
-                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleRequestUpdate(trip)}
+                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                            >
+                                                Request Update
+                                            </button>
+                                            {trip.pendingRequestType === 'update' && (
+                                                <span className="text-xxs font-semibold text-amber-300">Update requested</span>
+                                            )}
+                                        </div>
                                     </>
                                 ) : ['completed', 'validated', 'trip completed'].includes(trip.status) ? (
                                     <>

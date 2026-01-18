@@ -262,25 +262,29 @@ const ReceivedTrips: React.FC = () => {
                                         </>
                                     )}
                                     {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && (trip.status || '').toLowerCase() !== 'in transit' && !['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
-                                        <button
-                                            onClick={() => {
-                                                openModal('Request Update', (
-                                                    <RequestDialog
-                                                        title={`Request update for Trip #${trip.id}`}
-                                                        confirmLabel="Send Request"
-                                                        onCancel={closeModal}
-                                                        onConfirm={async (reason) => {
-                                                            await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
-                                                            closeModal();
-                                                        }}
-                                                    />
-                                                ));
-                                            }}
-                                            className={`px-3 py-2 text-sm font-medium rounded-md ${trip.pendingRequestType === 'update' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'text-amber-900 bg-amber-200 hover:bg-amber-300'}`}
-                                            disabled={trip.pendingRequestType === 'update'}
-                                        >
-                                            {trip.pendingRequestType === 'update' ? 'Update Requested' : 'Request Update'}
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    openModal('Request Update', (
+                                                        <RequestDialog
+                                                            title={`Request update for Trip #${trip.id}`}
+                                                            confirmLabel="Send Request"
+                                                            onCancel={closeModal}
+                                                            onConfirm={async (reason) => {
+                                                                await tripApi.requestUpdate(trip.id, { requestedBy: currentUser.name, requestedByRole: currentUser.role, requestedByContact: currentUser.mobileNumber || '', reason });
+                                                                closeModal();
+                                                            }}
+                                                        />
+                                                    ));
+                                                }}
+                                                className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300"
+                                            >
+                                                Request Update
+                                            </button>
+                                            {trip.pendingRequestType === 'update' && (
+                                                <span className="text-xxs font-semibold text-amber-300">Update requested</span>
+                                            )}
+                                        </div>
                                     )}
                                     {(currentUser?.role === Role.DROPOFF_SUPERVISOR) && ['completed', 'validated', 'trip completed'].includes((trip.status || '').toLowerCase()) && (
                                         <button

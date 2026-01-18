@@ -29,7 +29,7 @@ const getMtdRange = () => {
 
 const DailyTrips: React.FC = () => {
     const { currentUser } = useAuth();
-    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips, loadTripMasters, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles } = useData();
+    const { refreshKey, trips, updateTrip, deleteTrip, loadTrips, loadTripMasters, vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles, materialTypeDefinitions } = useData();
     const { openModal, closeModal } = useUI();
     const location = useLocation();
     const [allTrips, setAllTrips] = useState<Trip[]>([]);
@@ -39,6 +39,8 @@ const DailyTrips: React.FC = () => {
         customers: [] as { id?: string; name: string }[],
         quarries: [] as { id?: string; name: string }[],
         royaltyOwners: [] as { id?: string; name: string }[],
+        mineQuarries: [] as { id?: string; name: string }[],
+        materials: [] as { id?: string; name: string }[],
     });
     const [activeRequest, setActiveRequest] = useState<Notification | null>(null);
     
@@ -60,8 +62,10 @@ const DailyTrips: React.FC = () => {
             customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
             quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
             royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
+            mineQuarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
+            materials: materialTypeDefinitions.map(item => ({ id: item.id, name: item.name })),
         });
-    }, [vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
+    }, [vehicleMasters, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles, materialTypeDefinitions]);
 
     const handleValidate = (trip: Trip) => {
         openModal('Validate Trip', (
@@ -226,9 +230,13 @@ const DailyTrips: React.FC = () => {
             if (fromDate && tripDate < fromDate) return false;
             if (toDate && tripDate > toDate) return false;
             if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
+            if (filters.vendor && trip.customer !== filters.vendor) return false;
             if (filters.transporter && trip.transporterName !== filters.transporter) return false;
+            if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
             if (filters.customer && trip.customer !== filters.customer) return false;
             if (filters.quarry && trip.quarryName !== filters.quarry) return false;
+            if (filters.mine && trip.quarryName !== filters.mine) return false;
+            if (filters.material && trip.material !== filters.material) return false;
             if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
             if (statusFilter !== 'all') {
                 const status = (trip.status || '').toLowerCase();
@@ -276,7 +284,7 @@ const DailyTrips: React.FC = () => {
                 onFilterChange={setFilters}
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
-                showMoreFilters={['vehicle', 'customer', 'royalty']}
+                showMoreFilters={['vehicle', 'vendor', 'transportOwner', 'mine', 'material', 'royalty']}
                 pageAction={{ label: 'Enter Trip', action: openTripEntry }}
             />
 

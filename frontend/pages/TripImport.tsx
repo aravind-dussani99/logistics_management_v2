@@ -100,6 +100,8 @@ const TripImport: React.FC = () => {
   const [failedRows, setFailedRows] = useState<ParsedTrip[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [excludedRowNumbers, setExcludedRowNumbers] = useState<number[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   useEffect(() => {
     loadTrips();
@@ -113,9 +115,27 @@ const TripImport: React.FC = () => {
     }, new Map<string, number>());
   }, [rows]);
 
+  const formatKeyDate = (value: string | null | undefined) => {
+    if (!value) return '';
+    const normalized = new Date(value);
+    if (Number.isNaN(normalized.getTime())) return '';
+    return normalized.toISOString().split('T')[0];
+  };
+
   const existingKeys = useMemo(() => {
-    return new Set(trips.map(trip => `${trip.date}|${trip.invoiceDCNumber}|${trip.vehicleNumber}`));
+    return new Set(trips.map(trip => `${formatKeyDate(trip.date)}|${trip.invoiceDCNumber}`));
   }, [trips]);
+
+  const excludedRowsSet = useMemo(() => new Set(excludedRowNumbers), [excludedRowNumbers]);
+  const duplicateRows = useMemo(() => parsedTrips.filter(row => row.duplicate && !excludedRowsSet.has(row.rowNumber)), [parsedTrips, excludedRowsSet]);
+  const readyRows = useMemo(() => parsedTrips.filter(row => !row.duplicate && !excludedRowsSet.has(row.rowNumber)), [parsedTrips, excludedRowsSet]);
+  const totalDuplicateCount = parsedTrips.filter(row => row.duplicate).length;
+  const toggleExcludeRow = (rowNumber: number) => {
+    setExcludedRowNumbers(prev => (prev.includes(rowNumber) ? prev : [...prev, rowNumber]));
+  };
+  const excludeAllDuplicates = () => {
+    setExcludedRowNumbers(prev => Array.from(new Set([...prev, ...duplicateRows.map(row => row.rowNumber)])));
+  };
 
   useEffect(() => {
     if (rows.length > 0) {
@@ -134,6 +154,8 @@ const TripImport: React.FC = () => {
     setParsedTrips([]);
     setErrors([]);
     setFailedRows([]);
+    setExcludedRowNumbers([]);
+    setShowDuplicateDialog(false);
   };
 
   const validateAndParse = () => {
@@ -177,7 +199,7 @@ const TripImport: React.FC = () => {
         return;
       }
 
-      const key = `${date}|${invoiceNumber}|${vehicleNumber}`;
+      const key = `${date}|${invoiceNumber}`;
       const isDuplicate = existingKeys.has(key) || fileKeys.has(key);
       if (!fileKeys.has(key)) {
         fileKeys.add(key);
@@ -217,6 +239,8 @@ const TripImport: React.FC = () => {
 
     setErrors(parseErrors);
     setParsedTrips(parsed);
+    setExcludedRowNumbers([]);
+    setShowDuplicateDialog(false);
   };
 
   const handleImport = async () => {
@@ -227,10 +251,11 @@ const TripImport: React.FC = () => {
       return;
     }
     setIsSubmitting(true);
-    const rowsToImport = parsedTrips.filter(trip => !trip.duplicate);
+    const rowsToImport = readyRows;
     if (rowsToImport.length === 0) {
       setIsSubmitting(false);
-      setSubmitMessage('No new trips to import (duplicates detected).');
+      const hasPendingDuplicates = duplicateRows.length > 0;
+      setSubmitMessage(hasPendingDuplicates ? 'No trips selected for import because duplicates remain. Remove them first.' : 'No new trips to import.');
       return;
     }
     let successCount = 0;
@@ -255,7 +280,7 @@ const TripImport: React.FC = () => {
     }
     setIsSubmitting(false);
     setFailedRows(failed);
-    const duplicateCount = parsedTrips.filter(row => row.duplicate).length;
+    const duplicateCount = totalDuplicateCount;
     setSubmitMessage([
       `Imported ${successCount} trips.`,
       duplicateCount ? `${duplicateCount} duplicates skipped.` : '',
@@ -335,6 +360,32 @@ const TripImport: React.FC = () => {
             </div>
           )}
 
+          {duplicateRows.length > 0 && (
+            <div className="rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 space-y-2">
+              <p className="font-semibold">Duplicate Invoice & Date combinations detected.</p>
+              <p className="text-xs text-yellow-800">
+                {duplicateRows.length} row{duplicateRows.length > 1 ? 's' : ''} share invoice/DC + date values that already exist.
+                Remove them before importing or exclude them from the preview.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={excludeAllDuplicates}
+                  className="px-3 py-1 text-xs font-semibold text-yellow-900 border border-yellow-400 rounded-md hover:bg-yellow-100"
+                >
+                  Remove duplicates
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicateDialog(true)}
+                  className="px-3 py-1 text-xs font-semibold text-yellow-900 border border-yellow-400 rounded-md hover:bg-yellow-100"
+                >
+                  View duplicates
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleImport}
@@ -378,11 +429,23 @@ const TripImport: React.FC = () => {
                       <td className="px-3 py-1">{row.data.customer}</td>
                       <td className="px-3 py-1">{row.data.vehicleNumber}</td>
                       <td className="px-3 py-1">{row.data.netWeight}</td>
-                      <td className="px-3 py-1">
+                      <td className="px-3 py-1 space-y-1">
                         {row.duplicate ? (
-                          <span className="text-xxs font-semibold text-red-600">Duplicate</span>
+                          <div className="text-xxs font-semibold text-red-600">Duplicate</div>
                         ) : (
-                          <span className="text-xxs font-semibold text-emerald-600">Ready</span>
+                          <div className="text-xxs font-semibold text-emerald-600">Ready</div>
+                        )}
+                        {excludedRowsSet.has(row.rowNumber) && (
+                          <div className="text-xxs font-semibold text-gray-500">Excluded</div>
+                        )}
+                        {row.duplicate && !excludedRowsSet.has(row.rowNumber) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExcludeRow(row.rowNumber)}
+                            className="text-xxs font-medium text-blue-600 hover:underline"
+                          >
+                            Remove from import
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -406,6 +469,58 @@ const TripImport: React.FC = () => {
           </ul>
         </div>
       </main>
+      {showDuplicateDialog && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Duplicate rows</h3>
+              <button
+                type="button"
+                onClick={() => setShowDuplicateDialog(false)}
+                className="text-xs uppercase text-gray-500 hover:text-gray-900 dark:hover:text-gray-200"
+              >
+                Close
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              These rows share the same invoice/DC and date. You can exclude any of them without editing the CSV.
+            </p>
+            <ul className="space-y-2 text-xs text-gray-700 dark:text-gray-200 max-h-64 overflow-y-auto">
+              {duplicateRows.map(row => (
+                <li key={`dup-${row.rowNumber}`} className="flex justify-between items-center">
+                  <span>Row {row.rowNumber} · {row.data.invoiceDCNumber || 'No Invoice'} · {row.data.date}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleExcludeRow(row.rowNumber)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    Exclude
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  excludeAllDuplicates();
+                  setShowDuplicateDialog(false);
+                }}
+                className="px-3 py-1 text-xs font-semibold text-gray-200 bg-primary rounded-md hover:bg-primary-dark"
+              >
+                Remove all
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDuplicateDialog(false)}
+                className="px-3 py-1 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
