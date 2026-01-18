@@ -10,7 +10,7 @@ interface SupervisorTripFormProps {
     mode: 'enter' | 'upload' | 'edit' | 'view';
     trip?: TripType;
     onClose: () => void;
-    onSubmitSuccess?: () => void;
+    onSubmitSuccess?: (trip?: TripType) => void;
 }
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, isReadOnly?: boolean, children?: React.ReactNode }> = ({ label, isReadOnly, ...props }) => {
@@ -321,6 +321,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         setMasterSaveError('');
         setSubmitError('');
         setIsSubmitting(true);
+        let createdTrip: TripType | undefined;
         try {
             if (mode === 'enter') {
                 const normalizeSiteName = (value?: string) => (value || '').trim();
@@ -398,7 +399,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     rateOverrideEnabled: rateOverrideEnabled,
                     rateOverride: rateOverrideEnabled ? rateOverride : null,
                 };
-                await addTripAtomic(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>, createMasters);
+                createdTrip = await addTripAtomic(tripPayload as Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>, createMasters);
             } else if (mode === 'upload' || mode === 'edit') {
                 let resolvedMaterial = formData.material;
                 if (mode === 'edit') {
@@ -449,7 +450,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                 }
             }
             onClose();
-            onSubmitSuccess?.();
+            onSubmitSuccess?.(createdTrip);
         } catch (error) {
             console.error("Failed to save trip", error);
             setSubmitError('Failed to save the trip. Please try again.');
@@ -993,9 +994,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
             </div>
 
             <div className="pt-8 flex justify-end space-x-3">
-                <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
-                    {isReadOnly ? 'Close' : 'Cancel'}
-                </button>
+                        <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
+                            {isReadOnly ? 'Close' : 'Re-set'}
+                        </button>
                 {!isReadOnly && (mode === 'upload' || canEditEntryFields || canEditReceivedFields || canEditValidationFields) && (
                     <button type="submit" disabled={isSubmitting} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none disabled:opacity-50">
                         {isSubmitting ? 'Saving...' : (mode === 'upload' ? 'Save & Send to Transit' : 'Save')}

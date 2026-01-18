@@ -642,6 +642,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const newTripData = buildTripPayload(trip);
     const createdTrip = await tripApi.createAtomic(newTripData, createMasters);
     setTrips(prev => [createdTrip, ...prev]);
+    return createdTrip;
   }
   
   const updateTrip = async (tripId: number, tripData: Partial<Trip>) => {

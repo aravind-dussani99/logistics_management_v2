@@ -11,6 +11,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const { currentUser, logout } = useAuth();
   const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   
   const sections = [
@@ -21,9 +22,9 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/trips', icon: 'bus-outline', name: 'Trip Management', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR] },
-        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-      ],
+        ],
     },
     {
       title: 'Financial Operations',
@@ -32,6 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/accounting', icon: 'calculator-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/report', icon: 'document-text-outline', name: 'Report', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/capital', icon: 'wallet-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
@@ -76,6 +78,15 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   ];
 
   const isDropOffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  const siteManagerItems = [
+    { to: '/site-manager/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
+    { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
+    { to: '/site-manager/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
+    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/payments', icon: 'card-outline', name: 'Payments' },
+    { to: '/site-manager/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+  ];
+
   const supervisorItems = isDropOffSupervisor
     ? [
         { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
@@ -133,7 +144,9 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           </div>
         </div>
         <nav className="flex-grow mt-10 px-2 space-y-4 overflow-y-auto pr-2">
-          {isSupervisor
+        {isSiteManager
+          ? siteManagerItems.map(item => <NavItem key={item.name} {...item} />)
+          : isSupervisor
             ? supervisorItems.map(item => <NavItem key={item.name} {...item} />)
             : sections.map(section => {
                 const visibleItems = section.items.filter(item => currentUser && item.roles.includes(currentUser.role));

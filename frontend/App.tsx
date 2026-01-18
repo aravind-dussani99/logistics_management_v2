@@ -1,7 +1,8 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
+import ReportDashboard from './pages/Dashboard';
+import DashboardPlaceholder from './pages/DashboardPlaceholder';
 import DailyTrips from './pages/DailyTrips';
 import Accounting from './pages/Accounting';
 import Royalty from './pages/Royalty';
@@ -27,6 +28,9 @@ import DailyExpenses from './pages/DailyExpenses';
 import ReceivedTrips from './pages/ReceivedTrips';
 import Advances from './pages/Advances';
 import Reports from './pages/Reports';
+import SiteManagerDashboard from './pages/SiteManagerDashboard';
+import TripRates from './pages/TripRates';
+import DailyPayments from './pages/DailyPayments';
 import Materials from './pages/Materials';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
@@ -62,7 +66,7 @@ const ProtectedLayout: React.FC = () => (
 const RoleBasedDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
-  return isSupervisor ? <SupervisorDashboard /> : <Dashboard />;
+  return isSupervisor ? <SupervisorDashboard /> : <DashboardPlaceholder />;
 };
 
 const RoleBasedDailyExpenses: React.FC = () => {
@@ -84,6 +88,11 @@ const AppRoutes: React.FC = () => (
     <Route element={<ProtectedLayout />}>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<RoleBasedDashboard />} />
+      <Route path="/report" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <ReportDashboard />
+        </ProtectedRoute>
+      } />
       <Route path="/financials" element={<Financials />} />
       <Route path="/account-ledger" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><AccountLedgerOverview /></ProtectedRoute>} />
       <Route path="/trips" element={
@@ -101,8 +110,18 @@ const AppRoutes: React.FC = () => (
           <TripFeed />
         </ProtectedRoute>
       } />
+      <Route path="/site-manager/dashboard" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <SiteManagerDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-manager/trip-rates" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <TripRates />
+        </ProtectedRoute>
+      } />
       <Route path="/enter-trips" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR]}>
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER]}>
           <SupervisorEnterTrips />
         </ProtectedRoute>
       } />
@@ -116,16 +135,21 @@ const AppRoutes: React.FC = () => (
           <RoleBasedAdvances />
         </ProtectedRoute>
       } />
-       <Route path="/reports" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+      <Route path="/reports" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Reports />
         </ProtectedRoute>
       } />
       <Route path="/accounting" element={<Accounting />} />
       <Route path="/ledger" element={<Navigate to="/payments" replace />} />
       <Route path="/payments" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Payments />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-manager/daily-payments" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <DailyPayments />
         </ProtectedRoute>
       } />
       <Route path="/profile" element={<Profile />} />
@@ -133,7 +157,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/royalty" element={<Royalty />} />
       <Route path="/royalty-stock" element={<RoyaltyStock />} />
       <Route path="/daily-expenses" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <RoleBasedDailyExpenses />
         </ProtectedRoute>
       } />

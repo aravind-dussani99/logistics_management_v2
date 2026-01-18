@@ -51,6 +51,10 @@ const DailyTrips: React.FC = () => {
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
 
     useEffect(() => {
+        setCurrentPage(1);
+    }, [filters, statusFilter]);
+
+    useEffect(() => {
         loadTrips();
         loadTripMasters();
     }, [loadTrips, loadTripMasters, refreshKey]);
@@ -249,9 +253,6 @@ const DailyTrips: React.FC = () => {
             return true;
         });
 
-        if (currentPage !== 1) {
-            setCurrentPage(1);
-        }
         return filtered;
     }, [allTrips, filters, statusFilter]);
 

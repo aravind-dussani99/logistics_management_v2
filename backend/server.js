@@ -74,7 +74,7 @@ const hasRole = (user, roles) => Boolean(user && roles.includes(user.role));
 const getUserDisplayName = (user) => user?.name || user?.username || '';
 const getUserContact = (user) => user?.mobileNumber || '';
 const isSupervisorRole = (role) => role === 'PICKUP_SUPERVISOR' || role === 'DROPOFF_SUPERVISOR';
-const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
+const USER_ROLES = ['ADMIN', 'ACCOUNTANT', 'MANAGER', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR', 'GUEST'];
 
 const logTripActivity = async ({ tripId, action, message, user, attachments }) => {
   if (!tripId) return;
@@ -229,7 +229,7 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.get('/api/admin/config', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER'])) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -425,7 +425,7 @@ const resolveUploadList = async (value) => {
 };
 
 app.put('/api/admin/config', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER'])) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -1438,7 +1438,7 @@ app.get('/api/advances', async (req, res) => {
 });
 
 app.post('/api/advances', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const {
@@ -1490,7 +1490,7 @@ app.post('/api/advances', async (req, res) => {
 });
 
 app.put('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1544,7 +1544,7 @@ app.put('/api/advances/:id', async (req, res) => {
 });
 
 app.delete('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1558,7 +1558,7 @@ app.delete('/api/advances/:id', async (req, res) => {
 });
 
 app.get('/api/advances/export', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
@@ -1587,7 +1587,7 @@ app.get('/api/advances/export', async (req, res) => {
 });
 
 app.get('/api/payments', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { ratePartyType, ratePartyId, tripId } = req.query;
@@ -1610,7 +1610,7 @@ app.get('/api/payments', async (req, res) => {
 });
 
 app.post('/api/payments', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const {
@@ -1667,7 +1667,7 @@ app.post('/api/payments', async (req, res) => {
 });
 
 app.put('/api/payments/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1725,7 +1725,7 @@ app.put('/api/payments/:id', async (req, res) => {
 });
 
 app.delete('/api/payments/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1740,7 +1740,7 @@ app.delete('/api/payments/:id', async (req, res) => {
 
 app.get('/api/daily-expenses', async (req, res) => {
   const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
-  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER']);
   const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   if (!supervisorName) {
     return res.status(400).json({ error: 'Supervisor name is required.' });
@@ -1782,7 +1782,7 @@ app.get('/api/daily-expenses', async (req, res) => {
 });
 
 app.get('/api/daily-expenses/all', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   try {
@@ -1817,7 +1817,7 @@ app.get('/api/daily-expenses/all', async (req, res) => {
 });
 
 app.post('/api/daily-expenses', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const {
@@ -1904,7 +1904,7 @@ app.post('/api/daily-expenses', async (req, res) => {
 });
 
 app.put('/api/daily-expenses/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1980,7 +1980,7 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
 });
 
 app.delete('/api/daily-expenses/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -1998,7 +1998,7 @@ app.delete('/api/daily-expenses/:id', async (req, res) => {
 
 app.get('/api/daily-expenses/export', async (req, res) => {
   const requestedName = req.query.supervisor ? String(req.query.supervisor) : '';
-  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT']);
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER']);
   const supervisorName = isAdmin ? requestedName : getUserDisplayName(req.user);
   try {
     const where = {
@@ -2076,7 +2076,7 @@ app.get('/api/trips/:id/activity', async (req, res) => {
 });
 
 app.post('/api/trips/:id/activity', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const { id } = req.params;
@@ -2132,7 +2132,7 @@ app.post('/api/trips/:id/activity', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
-    const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER']);
+  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER']);
     const effectiveRole = isAdmin ? role : (req.user?.role || role);
     const effectiveUser = isAdmin ? user : (getUserDisplayName(req.user) || user);
     const where = {
@@ -2222,7 +2222,7 @@ app.get('/api/notifications/:id', async (req, res) => {
 
 app.post('/api/trips', async (req, res) => {
   const data = req.body || {};
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   if (!data.date || !data.customer) {
@@ -2295,7 +2295,7 @@ app.post('/api/trips', async (req, res) => {
 });
 
 app.post('/api/trips/atomic', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR'])) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   const payload = req.body || {};
@@ -2546,7 +2546,7 @@ app.put('/api/trips/:id', async (req, res) => {
       delete sanitizedData[field];
     });
   }
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
     delete sanitizedData.createdBy;
   }
   try {
@@ -2555,7 +2555,7 @@ app.put('/api/trips/:id', async (req, res) => {
       res.status(404).json({ error: 'Trip not found' });
       return;
     }
-    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const tripForUploads = {
@@ -2785,7 +2785,7 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
     const message = `Issue raised for Trip #${trip.id} (${trip.invoiceDCNumber || 'No Invoice'}) by ${requestedBy}.${reason ? ` Reason: ${reason}` : ''}`;
-    const targets = ['ADMIN', 'MANAGER', 'ACCOUNTANT'];
+    const targets = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'];
     const notifications = await Promise.all(targets.map(targetRole => prisma.notificationRecord.create({
       data: {
         message,
@@ -2828,7 +2828,7 @@ app.post('/api/trips/:id/raise-issue', async (req, res) => {
 app.delete('/api/trips/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT'])) {
+    if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
       const trip = await prisma.tripRecord.findUnique({ where: { id: Number(id) } });
       if (!trip) {
         return res.status(404).json({ error: 'Trip not found' });
