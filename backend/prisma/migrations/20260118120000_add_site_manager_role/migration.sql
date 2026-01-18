@@ -1,0 +1,2 @@
+-- AlterUserRoleEnum
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'SITE_MANAGER';

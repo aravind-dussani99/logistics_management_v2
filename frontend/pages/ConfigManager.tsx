@@ -63,7 +63,7 @@ const ConfigManager: React.FC = () => {
         subtitle="Update frontend runtime config stored in GCS."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={undefined}
       />
 

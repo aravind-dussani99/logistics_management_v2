@@ -54,3 +54,52 @@ export const formatDateDisplay = (value?: string): string => {
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
 };
+
+const normalizeMatchKey = (value: string): string =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+const levenshteinDistance = (a: string, b: string): number => {
+    if (a === b) return 0;
+    if (!a) return b.length;
+    if (!b) return a.length;
+    const matrix: number[][] = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
+    for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
+    for (let i = 1; i <= a.length; i += 1) {
+        for (let j = 1; j <= b.length; j += 1) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+    return matrix[a.length][b.length];
+};
+
+export const findBestFuzzyMatch = (
+    input: string,
+    candidates: string[],
+    maxDistanceRatio: number = 0.34
+): { name: string; ratio: number } | null => {
+    const normalizedInput = normalizeMatchKey(input);
+    if (!normalizedInput) return null;
+    let bestMatch: { name: string; ratio: number } | null = null;
+    candidates.forEach(candidate => {
+        const normalizedCandidate = normalizeMatchKey(candidate);
+        if (!normalizedCandidate) return;
+        const distance = levenshteinDistance(normalizedInput, normalizedCandidate);
+        const ratio = distance / Math.max(normalizedInput.length, normalizedCandidate.length, 1);
+        if (!bestMatch || ratio < bestMatch.ratio) {
+            bestMatch = { name: candidate, ratio };
+        }
+    });
+    if (bestMatch && bestMatch.ratio <= maxDistanceRatio) {
+        return bestMatch;
+    }
+    return null;
+};
+
+export const normalizeMatchValue = (value?: string): string =>
+    (value || '').trim().replace(/\s+/g, ' ');

@@ -339,7 +339,7 @@ const AccountLedgerOverview: React.FC = () => {
         subtitle="Rate party balances, trips, and payments summary"
         filters={[]}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Export CSV', action: exportCsv }}
         secondaryAction={{ label: 'Export PDF', action: exportPdf }}
       />

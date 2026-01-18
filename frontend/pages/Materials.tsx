@@ -53,7 +53,7 @@ const MaterialsPage: React.FC = () => {
         subtitle="Manage material types and their base costs."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Material', action: handleAddMaterial }}
       />
 

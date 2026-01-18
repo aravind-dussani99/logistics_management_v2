@@ -38,7 +38,7 @@ const RoyaltyStockPage: React.FC = () => {
                 subtitle={`Current Balance: ${safeToFixed(balance)} m³`}
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Purchase', action: handleAddPurchase }}
             />
 

@@ -4,11 +4,13 @@ import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
+import MergeDialog from '../components/MergeDialog';
+import AlertDialog from '../components/AlertDialog';
 
 const ITEMS_PER_PAGE = 10;
 
 const SiteLocationsPage: React.FC = () => {
-  const { siteLocations, addSiteLocation, updateSiteLocation, deleteSiteLocation, loadSiteLocations, refreshKey } = useData();
+  const { siteLocations, addSiteLocation, updateSiteLocation, deleteSiteLocation, mergeSiteLocation, loadSiteLocations, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,6 +54,26 @@ const SiteLocationsPage: React.FC = () => {
     await deleteSiteLocation(id);
   };
 
+  const handleMerge = (site: SiteLocation) => {
+    const options = siteLocations.filter(item => item.id !== site.id).map(item => ({ id: item.id, name: item.name }));
+    if (options.length === 0) {
+      openModal('Merge Site Location', <AlertDialog message="No other record available to merge into." onConfirm={closeModal} />);
+      return;
+    }
+    openModal('Merge Site Location', (
+      <MergeDialog
+        sourceLabel="Site Location"
+        sourceName={site.name}
+        options={options}
+        onConfirm={async (targetId) => {
+          await mergeSiteLocation(site.id, targetId);
+          closeModal();
+        }}
+        onClose={closeModal}
+      />
+    ));
+  };
+
   useEffect(() => {
     loadSiteLocations();
   }, [loadSiteLocations, refreshKey]);
@@ -68,7 +90,7 @@ const SiteLocationsPage: React.FC = () => {
         subtitle="Manage pickup and drop-off sites for trips and rate cards."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Site', action: handleAddSite }}
       />
 
@@ -110,6 +132,7 @@ const SiteLocationsPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{site.remarks || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button onClick={() => handleEditSite(site)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                      <button onClick={() => handleMerge(site)} className="px-3 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700">Merge</button>
                       <button onClick={() => handleDelete(site.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
                     </td>
                   </tr>

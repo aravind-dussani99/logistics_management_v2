@@ -86,7 +86,7 @@ const Capital: React.FC = () => {
                 subtitle="Track your investments, loans, bank balances, and other capital accounts."
                 filters={{}}
                 onFilterChange={() => {}}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
             />
 
             <main className="pt-6 space-y-8">

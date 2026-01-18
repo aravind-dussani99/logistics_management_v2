@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/mockApi';
+import { findBestFuzzyMatch, normalizeMatchValue } from '../utils';
 import { useData } from '../contexts/DataContext';
 import { Trip, TripRateOverride, Role } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -80,7 +81,6 @@ const initialFormData = {
     transportOwnerMobileNumber: '',
     netWeight: '0',
     royaltyNumber: '',
-    royaltyM3: '',
     deductionPercentage: '0',
     sizeChangePercentage: '0',
     agent: '',
@@ -90,12 +90,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     const formRef = useRef<HTMLFormElement>(null);
     const { currentUser } = useAuth();
     const {
-        addTrip,
-        addVendorCustomer,
-        addMineQuarry,
-        addRoyaltyOwnerProfile,
-        addTransportOwnerProfile,
-        addVehicleMaster,
+        addTripAtomic,
         loadTripMasters,
         vehicles,
         materialTypeDefinitions,
@@ -111,6 +106,8 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     const [files, setFiles] = useState<{ [key: string]: string }>({});
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [masterSaveError, setMasterSaveError] = useState('');
+    const [tripSaveError, setTripSaveError] = useState('');
     const ONE_OFF_VALUE = '__oneoff__';
     const isPrivileged = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const [oneOffSelection, setOneOffSelection] = useState({
@@ -142,6 +139,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         vehicleNumber: { vehicleType: '', ownerName: '', contactNumber: '', capacity: '', remarks: '' },
     });
     const [masterErrors, setMasterErrors] = useState<{ [key: string]: string }>({});
+
     const [rateError, setRateError] = useState('');
     const [rateOverrideEnabled, setRateOverrideEnabled] = useState(false);
     const [rateOverride, setRateOverride] = useState<TripRateOverride>({
@@ -200,7 +198,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
 
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
-        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'netWeight', 'pickupPlace', 'dropOffPlace'];
+        const requiredFields: (keyof typeof initialFormData)[] = ['date', 'customer', 'quarryName', 'material', 'netWeight'];
         
         requiredFields.forEach(field => {
             if (!formData[field] || (field === 'netWeight' && parseFloat(formData[field]) <= 0)) {
@@ -215,6 +213,8 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setMasterSaveError('');
+        setTripSaveError('');
         if (!validate()) {
             console.log('Validation failed');
             return;
@@ -231,75 +231,84 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         }
 
         setIsSubmitting(true);
+        const normalizeSiteName = (value?: string) => (value || '').trim();
+
+        const suggestName = (label: string, value: string, candidates: string[]) => {
+            const trimmed = normalizeMatchValue(value);
+            if (!trimmed) return trimmed;
+            const exact = candidates.find(item => item.trim().toLowerCase() === trimmed.toLowerCase());
+            if (exact) return exact;
+            const suggestion = findBestFuzzyMatch(trimmed, candidates);
+            if (suggestion && window.confirm(`"${trimmed}" looks similar to "${suggestion.name}" for ${label}.\nUse "${suggestion.name}" instead?`)) {
+                return suggestion.name;
+            }
+            return trimmed;
+        };
+
+        const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
+        const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
+        const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
         const netWeight = parseFloat(formData.netWeight) || 0;
         
-        const selectedVehicle = vehicles.find(v => v.vehicleNumber === formData.vehicleNumber);
+        const resolvedCustomerName = oneOffSelection.customer
+            ? suggestName('Vendor & Customer', oneOffValues.customer, vendorCustomers.map(item => item.name))
+            : normalizeMatchValue(formData.customer);
+        const resolvedQuarryName = oneOffSelection.quarryName
+            ? suggestName('Mine & Quarry', oneOffValues.quarryName, mineQuarries.map(item => item.name))
+            : normalizeMatchValue(formData.quarryName);
+        const resolvedRoyaltyName = oneOffSelection.royaltyOwnerName
+            ? suggestName('Royalty Owner', oneOffValues.royaltyOwnerName, royaltyOwnerProfiles.map(item => item.name))
+            : normalizeMatchValue(formData.royaltyOwnerName);
+        const resolvedTransportName = oneOffSelection.transporterName
+            ? suggestName('Transport Owner', oneOffValues.transporterName, transportOwnerProfiles.map(item => item.name))
+            : normalizeMatchValue(formData.transporterName);
+        const resolvedVehicleNumber = oneOffSelection.vehicleNumber
+            ? normalizeMatchValue(oneOffValues.vehicleNumber).toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : normalizeMatchValue(formData.vehicleNumber).toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        const existingCustomer = vendorCustomers.find(item => item.name.toLowerCase() === resolvedCustomerName.toLowerCase());
+        const existingQuarry = mineQuarries.find(item => item.name.toLowerCase() === resolvedQuarryName.toLowerCase());
+        const existingRoyalty = royaltyOwnerProfiles.find(item => item.name.toLowerCase() === resolvedRoyaltyName.toLowerCase());
+        const existingTransport = transportOwnerProfiles.find(item => item.name.toLowerCase() === resolvedTransportName.toLowerCase());
+        const existingVehicle = vehicles.find(item => item.vehicleNumber?.toLowerCase() === resolvedVehicleNumber.toLowerCase());
         
-        try {
-            if (oneOffSelection.customer && saveToMaster.customer) {
-                await addVendorCustomer({
-                    ...oneOffMaster.customer,
-                    name: oneOffValues.customer,
-                });
-            }
-            if (oneOffSelection.quarryName && saveToMaster.quarryName) {
-                await addMineQuarry({
-                    ...oneOffMaster.quarryName,
-                    name: oneOffValues.quarryName,
-                });
-            }
-            if (oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName) {
-                await addRoyaltyOwnerProfile({
-                    ...oneOffMaster.royaltyOwnerName,
-                    name: oneOffValues.royaltyOwnerName,
-                });
-            }
-            if (oneOffSelection.transporterName && saveToMaster.transporterName) {
-                await addTransportOwnerProfile({
-                    ...oneOffMaster.transporterName,
-                    name: oneOffValues.transporterName,
-                });
-            }
-            if (oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber) {
-                await addVehicleMaster({
-                    vehicleNumber: oneOffValues.vehicleNumber,
-                    vehicleType: oneOffMaster.vehicleNumber.vehicleType,
-                    ownerName: oneOffMaster.vehicleNumber.ownerName,
-                    contactNumber: oneOffMaster.vehicleNumber.contactNumber,
-                    capacity: Number(oneOffMaster.vehicleNumber.capacity || 0),
-                    remarks: oneOffMaster.vehicleNumber.remarks,
-                });
-            }
-        } catch (error) {
-            console.error('Failed to save one-off master data', error);
-            setIsSubmitting(false);
-            return;
-        }
+        const existingMaterial = materialTypeDefinitions.find(item => item.name.trim().toLowerCase() === materialName.toLowerCase());
+        const resolvedMaterial = existingMaterial?.name || materialName;
+
+        const createMasters = {
+            vendorCustomer: Boolean(oneOffSelection.customer && saveToMaster.customer && !existingCustomer && resolvedCustomerName),
+            mineQuarry: Boolean(oneOffSelection.quarryName && saveToMaster.quarryName && !existingQuarry && resolvedQuarryName),
+            royaltyOwner: Boolean(oneOffSelection.royaltyOwnerName && saveToMaster.royaltyOwnerName && !existingRoyalty && resolvedRoyaltyName),
+            transportOwner: Boolean(oneOffSelection.transporterName && saveToMaster.transporterName && !existingTransport && resolvedTransportName),
+            vehicleMaster: Boolean(oneOffSelection.vehicleNumber && saveToMaster.vehicleNumber && !existingVehicle && resolvedVehicleNumber),
+            materialType: Boolean(materialName && !existingMaterial),
+            pickupPlace: Boolean(pickupName),
+            dropOffPlace: Boolean(dropOffName),
+        };
 
         const newTripData: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'> = {
             date: formData.date,
-            place: formData.place || formData.dropOffPlace,
-            pickupPlace: formData.pickupPlace,
-            dropOffPlace: formData.dropOffPlace,
-            vendorName: formData.quarryName, 
-            vendorCustomerIsOneOff: oneOffSelection.customer,
-            customer: formData.customer,
+            place: dropOffName || formData.place,
+            pickupPlace: pickupName,
+            dropOffPlace: dropOffName,
+            vendorName: existingQuarry?.name || resolvedQuarryName, 
+            vendorCustomerIsOneOff: Boolean(resolvedCustomerName) && !existingCustomer,
+            customer: existingCustomer?.name || resolvedCustomerName,
             invoiceDCNumber: formData.invoiceDCNumber,
-            quarryName: formData.quarryName,
-            mineQuarryIsOneOff: oneOffSelection.quarryName,
-            royaltyOwnerName: formData.royaltyOwnerName,
-            royaltyOwnerIsOneOff: oneOffSelection.royaltyOwnerName,
-            material: formData.material,
-            vehicleNumber: formData.vehicleNumber,
-            vehicleIsOneOff: oneOffSelection.vehicleNumber,
-            transporterName: formData.transporterName || selectedVehicle?.ownerName || '',
-            transportOwnerIsOneOff: oneOffSelection.transporterName,
+            quarryName: existingQuarry?.name || resolvedQuarryName,
+            mineQuarryIsOneOff: Boolean(resolvedQuarryName) && !existingQuarry,
+            royaltyOwnerName: existingRoyalty?.name || resolvedRoyaltyName,
+            royaltyOwnerIsOneOff: Boolean(resolvedRoyaltyName) && !existingRoyalty,
+            material: resolvedMaterial,
+            vehicleNumber: resolvedVehicleNumber,
+            vehicleIsOneOff: Boolean(resolvedVehicleNumber) && !existingVehicle,
+            transporterName: existingTransport?.name || resolvedTransportName || '',
+            transportOwnerIsOneOff: Boolean(resolvedTransportName) && !existingTransport,
             emptyWeight: 0, 
             grossWeight: netWeight, 
             netWeight: netWeight,
             royaltyNumber: formData.royaltyNumber,
             royaltyTons: netWeight, 
-            royaltyM3: parseFloat(formData.royaltyM3) || 0,
             deductionPercentage: parseFloat(formData.deductionPercentage) || 0,
             sizeChangePercentage: parseFloat(formData.sizeChangePercentage) || 0,
             tonnage: netWeight,
@@ -309,10 +318,11 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         };
 
         try {
-            await addTrip(newTripData);
+            await addTripAtomic(newTripData, createMasters);
             onClose();
         } catch (error) {
             console.error("Failed to add trip", error);
+            setTripSaveError('Failed to save the trip. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -320,12 +330,15 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
-        const updated = { ...formData, [id]: value };
+        const nextValue = id === 'vehicleNumber'
+            ? value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : value;
+        const updated = { ...formData, [id]: nextValue };
         if (id === 'dropOffPlace') {
-            updated.place = value;
+            updated.place = nextValue;
         }
         if (id === 'transporterName') {
-            const owner = transportOwnerProfiles.find(item => item.name === value);
+            const owner = transportOwnerProfiles.find(item => item.name === nextValue);
             updated.transportOwnerMobileNumber = owner?.contactNumber || '';
         }
         setFormData(updated);
@@ -340,12 +353,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                 [field]: isOneOff ? '' : value,
                 [`${field === 'customer' ? 'vendorCustomerIsOneOff' : field === 'quarryName' ? 'mineQuarryIsOneOff' : field === 'royaltyOwnerName' ? 'royaltyOwnerIsOneOff' : field === 'transporterName' ? 'transportOwnerIsOneOff' : 'vehicleIsOneOff'}`]: isOneOff,
             } as typeof prev;
-            if (!isOneOff && field === 'vehicleNumber') {
-                const vehicle = vehicles.find(item => item.vehicleNumber === value);
-                updated.transporterName = vehicle?.ownerName || '';
-                const owner = transportOwnerProfiles.find(item => item.name === updated.transporterName);
-                updated.transportOwnerMobileNumber = owner?.contactNumber || '';
-            }
             if (!isOneOff && field === 'transporterName') {
                 const owner = transportOwnerProfiles.find(item => item.name === value);
                 updated.transportOwnerMobileNumber = owner?.contactNumber || '';
@@ -361,8 +368,11 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     };
 
     const handleOneOffValueChange = (field: keyof typeof oneOffValues, value: string) => {
-        setOneOffValues(prev => ({ ...prev, [field]: value }));
-        setFormData(prev => ({ ...prev, [field]: value } as typeof prev));
+        const nextValue = field === 'vehicleNumber'
+            ? value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+            : value;
+        setOneOffValues(prev => ({ ...prev, [field]: nextValue }));
+        setFormData(prev => ({ ...prev, [field]: nextValue } as typeof prev));
     };
 
     const handleMasterFieldChange = (field: keyof typeof oneOffMaster, key: string, value: string | boolean) => {
@@ -417,22 +427,28 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
     return (
         <form ref={formRef} onSubmit={handleSubmit} noValidate className="p-8">
             <div className="space-y-10">
+                {(masterSaveError || tripSaveError) && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {masterSaveError || tripSaveError}
+                    </div>
+                )}
                 <div>
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">1. Enter Details</h3>
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                         <InputField label="Date" id="date" type="date" required error={errors.date} value={formData.date} onChange={handleInputChange}/>
-                        <InputField label="Pickup Place" id="pickupPlace" type="select" value={formData.pickupPlace} onChange={handleInputChange}>
-                            <option value="">Select Pickup</option>
+                        <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace} onChange={handleInputChange}/>
+                        <datalist id="pickupPlace-options">
                             {pickupSites.map(site => (
-                                <option key={site.id} value={site.name}>{site.name}</option>
+                                <option key={site.id} value={site.name} />
                             ))}
-                        </InputField>
-                        <InputField label="Drop-off Place" id="dropOffPlace" type="select" value={formData.dropOffPlace} onChange={handleInputChange}>
-                            <option value="">Select Drop-off</option>
+                        </datalist>
+                        <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace} onChange={handleInputChange}/>
+                        <datalist id="dropOffPlace-options">
                             {dropOffSites.map(site => (
-                                <option key={site.id} value={site.name}>{site.name}</option>
+                                <option key={site.id} value={site.name} />
                             ))}
-                        </InputField>
+
+                        </datalist>
                         <InputField
                             label="Vendor & Customer Name"
                             id="customer"
@@ -555,10 +571,10 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                                 )}
                             </>
                         )}
-                        <InputField label="Material Type" id="material" type="select" required error={errors.material} value={formData.material} onChange={handleInputChange}>
-                             <option value="">Select Material</option>
-                             {materialTypeDefinitions.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
-                        </InputField>
+                        <InputField label="Material Type" id="material" type="text" required error={errors.material} value={formData.material} onChange={handleInputChange} list="material-type-options" />
+                        <datalist id="material-type-options">
+                             {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
+                        </datalist>
                         <InputField label="Vehicle Number" id="vehicleNumber" type="select" error={errors.vehicleNumber} value={oneOffSelection.vehicleNumber ? ONE_OFF_VALUE : formData.vehicleNumber} onChange={(event) => handleOneOffSelect('vehicleNumber', event.target.value)}>
                             <option value="">Select Vehicle</option>
                             {vehicles.map(v => <option key={v.id} value={v.vehicleNumber}>{v.vehicleNumber} ({v.ownerName})</option>)}
@@ -631,7 +647,6 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                         <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight} onChange={handleInputChange} error={errors.netWeight} required />
                         <InputField label="Deduction %" id="deductionPercentage" type="number" step="0.01" value={formData.deductionPercentage} onChange={handleInputChange} />
                         <InputField label="Royalty Number" id="royaltyNumber" type="text" placeholder="e.g., R-9876" value={formData.royaltyNumber} onChange={handleInputChange}/>
-                        <InputField label="Royalty M3" id="royaltyM3" type="number" step="0.01" placeholder="e.g., 14" value={formData.royaltyM3} onChange={handleInputChange}/>
                         <InputField label="Size Change %" id="sizeChangePercentage" type="number" step="0.01" value={formData.sizeChangePercentage} onChange={handleInputChange} />
                     </div>
                 </div>

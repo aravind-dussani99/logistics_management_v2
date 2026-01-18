@@ -78,6 +78,7 @@ export interface Trip {
   pendingRequestAt?: string;
   rateOverrideEnabled?: boolean;
   rateOverride?: TripRateOverride | null;
+  activityCount?: number;
 }
 
 export interface TripRateOverride {
@@ -110,6 +111,7 @@ export interface TripActivity {
   tripId: number;
   action: string;
   message: string;
+  attachments?: TripUploadFile[] | null;
   actorName: string;
   actorRole: string;
   createdAt: string;
@@ -187,6 +189,7 @@ export enum Role {
     ADMIN = 'ADMIN',
     MANAGER = 'MANAGER',
     ACCOUNTANT = 'ACCOUNTANT',
+    SITE_MANAGER = 'SITE_MANAGER',
     PICKUP_SUPERVISOR = 'PICKUP_SUPERVISOR',
     DROPOFF_SUPERVISOR = 'DROPOFF_SUPERVISOR',
     GUEST = 'GUEST',
@@ -225,6 +228,7 @@ export interface Notification {
     requesterName?: string | null;
     requesterRole?: string | null;
     requestMessage?: string | null;
+    requesterContact?: string | null;
 }
 
 export interface DailySummary {
@@ -372,15 +376,15 @@ export interface MineQuarryData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface VendorCustomerData {
@@ -388,15 +392,15 @@ export interface VendorCustomerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface RoyaltyOwnerData {
@@ -404,15 +408,15 @@ export interface RoyaltyOwnerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface TransportOwnerData {
@@ -420,15 +424,15 @@ export interface TransportOwnerData {
     merchantTypeId: string;
     merchantTypeName?: string;
     name: string;
-    contactNumber: string;
-    email: string;
-    siteLocationId: string;
+    contactNumber?: string | null;
+    email?: string | null;
+    siteLocationId?: string | null;
     siteLocationName?: string;
-    companyName: string;
+    companyName?: string | null;
     gstOptIn: boolean;
-    gstNumber: string;
-    gstDetails: string;
-    remarks: string;
+    gstNumber?: string | null;
+    gstDetails?: string | null;
+    remarks?: string | null;
 }
 
 export interface TransportOwnerVehicle {

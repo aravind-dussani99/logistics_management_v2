@@ -25,6 +25,22 @@ export const tripApi = {
     });
     return handleResponse(response) as Promise<Trip>;
   },
+  createAtomic: async (data: Omit<Trip, 'id'>, createMasters?: {
+    vendorCustomer?: boolean;
+    mineQuarry?: boolean;
+    royaltyOwner?: boolean;
+    transportOwner?: boolean;
+    vehicleMaster?: boolean;
+    materialType?: boolean;
+    pickupPlace?: boolean;
+    dropOffPlace?: boolean;
+  }): Promise<Trip> => {
+    const response = await authFetch(`${basePath}/atomic`, {
+      method: 'POST',
+      body: JSON.stringify({ trip: data, createMasters }),
+    });
+    return handleResponse(response) as Promise<Trip>;
+  },
   update: async (id: number, data: Partial<Trip>): Promise<Trip> => {
     const response = await authFetch(`${basePath}/${id}`, {
       method: 'PUT',
@@ -36,25 +52,32 @@ export const tripApi = {
     const response = await authFetch(`${basePath}/${id}/activity`);
     return handleResponse(response) as Promise<TripActivity[]>;
   },
+  createActivity: async (id: number, data: { message?: string; action?: string; attachments?: { name: string; url: string }[]; notifyRole?: string | null; notifyUser?: string | null }): Promise<TripActivity> => {
+    const response = await authFetch(`${basePath}/${id}/activity`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response) as Promise<TripActivity>;
+  },
   remove: async (id: number): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}`, { method: 'DELETE' });
     await handleResponse(response);
   },
-  requestDelete: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  requestDelete: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/request-delete`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
     await handleResponse(response);
   },
-  requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  requestUpdate: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/request-update`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
     await handleResponse(response);
   },
-  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string }): Promise<void> => {
+  raiseIssue: async (id: number, data: { requestedBy: string; reason?: string; requestedByRole?: string; requestedByContact?: string }): Promise<void> => {
     const response = await authFetch(`${basePath}/${id}/raise-issue`, {
       method: 'POST',
       body: JSON.stringify(data),

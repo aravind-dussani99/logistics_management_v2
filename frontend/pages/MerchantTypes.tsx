@@ -67,7 +67,7 @@ const MerchantTypesPage: React.FC = () => {
         subtitle="Define merchant categories for consistent data entry."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Merchant Type', action: handleAdd }}
       />
 

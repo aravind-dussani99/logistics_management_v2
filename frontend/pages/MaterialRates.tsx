@@ -227,7 +227,7 @@ const MaterialRatesPage: React.FC = () => {
         subtitle="Maintain material rate cards by party and location."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Material Rate', action: handleAdd }}
       />
 

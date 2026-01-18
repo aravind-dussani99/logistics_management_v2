@@ -4,11 +4,13 @@ import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
+import MergeDialog from '../components/MergeDialog';
+import AlertDialog from '../components/AlertDialog';
 
 const ITEMS_PER_PAGE = 10;
 
 const MaterialTypesPage: React.FC = () => {
-  const { materialTypeDefinitions, addMaterialTypeDefinition, updateMaterialTypeDefinition, deleteMaterialTypeDefinition, loadMaterialTypeDefinitions, refreshKey } = useData();
+  const { materialTypeDefinitions, addMaterialTypeDefinition, updateMaterialTypeDefinition, deleteMaterialTypeDefinition, mergeMaterialTypeDefinition, loadMaterialTypeDefinitions, refreshKey } = useData();
   const { openModal, closeModal } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,6 +53,26 @@ const MaterialTypesPage: React.FC = () => {
     await deleteMaterialTypeDefinition(id);
   };
 
+  const handleMerge = (materialType: MaterialTypeDefinition) => {
+    const options = materialTypeDefinitions.filter(item => item.id !== materialType.id).map(item => ({ id: item.id, name: item.name }));
+    if (options.length === 0) {
+      openModal('Merge Material Type', <AlertDialog message="No other record available to merge into." onConfirm={closeModal} />);
+      return;
+    }
+    openModal('Merge Material Type', (
+      <MergeDialog
+        sourceLabel="Material Type"
+        sourceName={materialType.name}
+        options={options}
+        onConfirm={async (targetId) => {
+          await mergeMaterialTypeDefinition(materialType.id, targetId);
+          closeModal();
+        }}
+        onClose={closeModal}
+      />
+    ));
+  };
+
   useEffect(() => {
     loadMaterialTypeDefinitions();
   }, [loadMaterialTypeDefinitions, refreshKey]);
@@ -67,7 +89,7 @@ const MaterialTypesPage: React.FC = () => {
         subtitle="Define material categories for rate cards."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Material Type', action: handleAdd }}
       />
 
@@ -107,6 +129,7 @@ const MaterialTypesPage: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{materialType.remarks || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button onClick={() => handleEdit(materialType)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                      <button onClick={() => handleMerge(materialType)} className="px-3 py-2 text-sm font-medium text-white bg-amber-600 rounded-md hover:bg-amber-700">Merge</button>
                       <button onClick={() => handleDelete(materialType.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
                     </td>
                   </tr>

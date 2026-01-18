@@ -67,7 +67,7 @@ const AccountTypesPage: React.FC = () => {
         subtitle="Define available bank account types for merchants."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Account Type', action: handleAdd }}
       />
 

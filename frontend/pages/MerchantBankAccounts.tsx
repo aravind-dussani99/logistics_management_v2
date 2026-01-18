@@ -126,7 +126,7 @@ const MerchantBankAccountsPage: React.FC = () => {
         subtitle="Track merchant bank account information for payments."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Add Bank Account', action: handleAdd }}
       />
 

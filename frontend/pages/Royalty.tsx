@@ -75,7 +75,7 @@ const RoyaltyPage: React.FC = () => {
                 title="Royalty Management"
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Owner', action: handleAddRoyaltyOwner }}
             />
             

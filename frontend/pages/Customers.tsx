@@ -75,7 +75,7 @@ const CustomersPage: React.FC = () => {
                 title="Customer Management"
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Customer', action: handleAddCustomer }}
             />
             

@@ -18,6 +18,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (modalContent) {
       closeModal();
     }
+    setSidebarOpen(false);
+    document.body.style.pointerEvents = '';
+    document.body.style.overflow = '';
   }, [location.pathname, location.search, closeModal]);
 
   return (

@@ -1,7 +1,8 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
+import ReportDashboard from './pages/Dashboard';
+import DashboardPlaceholder from './pages/DashboardPlaceholder';
 import DailyTrips from './pages/DailyTrips';
 import Accounting from './pages/Accounting';
 import Royalty from './pages/Royalty';
@@ -11,7 +12,7 @@ import Transport from './pages/Transport';
 import Login from './pages/Login';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Role } from './types';
 import Financials from './pages/Financials';
@@ -27,6 +28,9 @@ import DailyExpenses from './pages/DailyExpenses';
 import ReceivedTrips from './pages/ReceivedTrips';
 import Advances from './pages/Advances';
 import Reports from './pages/Reports';
+import SiteManagerDashboard from './pages/SiteManagerDashboard';
+import TripRates from './pages/TripRates';
+import DailyPayments from './pages/DailyPayments';
 import Materials from './pages/Materials';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
@@ -43,6 +47,13 @@ import MaterialTypes from './pages/MaterialTypes';
 import MaterialRates from './pages/MaterialRates';
 import TripData from './pages/TripData';
 import ConfigManager from './pages/ConfigManager';
+import SupervisorDashboard from './pages/Supervisor/Dashboard';
+import SupervisorEnterTrips from './pages/Supervisor/EnterTrips';
+import SupervisorDailyExpensesForm from './pages/Supervisor/DailyExpensesForm';
+import SupervisorSiteExpenses from './pages/Supervisor/SiteExpenses';
+import SupervisorAdvancesForm from './pages/Supervisor/AdvancesForm';
+import TripImport from './pages/TripImport';
+import TripFeed from './pages/TripFeed';
 
 const ProtectedLayout: React.FC = () => (
   <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST]}>
@@ -52,13 +63,36 @@ const ProtectedLayout: React.FC = () => (
   </ProtectedRoute>
 );
 
+const RoleBasedDashboard: React.FC = () => {
+  const { currentUser } = useAuth();
+  const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  return isSupervisor ? <SupervisorDashboard /> : <DashboardPlaceholder />;
+};
+
+const RoleBasedDailyExpenses: React.FC = () => {
+  const { currentUser } = useAuth();
+  const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  return isSupervisor ? <SupervisorDailyExpensesForm /> : <DailyExpenses />;
+};
+
+const RoleBasedAdvances: React.FC = () => {
+  const { currentUser } = useAuth();
+  const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
+  return isSupervisor ? <SupervisorAdvancesForm /> : <Advances />;
+};
+
 const AppRoutes: React.FC = () => (
   <Routes>
     <Route path="/login" element={<Login />} />
     
     <Route element={<ProtectedLayout />}>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/dashboard" element={<RoleBasedDashboard />} />
+      <Route path="/report" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <ReportDashboard />
+        </ProtectedRoute>
+      } />
       <Route path="/financials" element={<Financials />} />
       <Route path="/account-ledger" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><AccountLedgerOverview /></ProtectedRoute>} />
       <Route path="/trips" element={
@@ -66,6 +100,31 @@ const AppRoutes: React.FC = () => (
             <DailyTrips />
         </ProtectedRoute>
        } />
+      <Route path="/trip-import" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <TripImport />
+        </ProtectedRoute>
+      } />
+      <Route path="/trip-feed" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR]}>
+          <TripFeed />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-manager/dashboard" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <SiteManagerDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-manager/trip-rates" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <TripRates />
+        </ProtectedRoute>
+      } />
+      <Route path="/enter-trips" element={
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER]}>
+          <SupervisorEnterTrips />
+        </ProtectedRoute>
+      } />
       <Route path="/received" element={
         <ProtectedRoute roles={[Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <ReceivedTrips />
@@ -73,19 +132,24 @@ const AppRoutes: React.FC = () => (
       } />
       <Route path="/advances" element={
         <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <Advances />
+          <RoleBasedAdvances />
         </ProtectedRoute>
       } />
-       <Route path="/reports" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+      <Route path="/reports" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Reports />
         </ProtectedRoute>
       } />
       <Route path="/accounting" element={<Accounting />} />
       <Route path="/ledger" element={<Navigate to="/payments" replace />} />
       <Route path="/payments" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Payments />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-manager/daily-payments" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <DailyPayments />
         </ProtectedRoute>
       } />
       <Route path="/profile" element={<Profile />} />
@@ -93,8 +157,13 @@ const AppRoutes: React.FC = () => (
       <Route path="/royalty" element={<Royalty />} />
       <Route path="/royalty-stock" element={<RoyaltyStock />} />
       <Route path="/daily-expenses" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <DailyExpenses />
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <RoleBasedDailyExpenses />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-expenses" element={
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR]}>
+          <SupervisorSiteExpenses />
         </ProtectedRoute>
       } />
       <Route path="/customers" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Customers /></ProtectedRoute>} />

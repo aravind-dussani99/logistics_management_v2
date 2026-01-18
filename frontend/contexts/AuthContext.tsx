@@ -48,11 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('authToken', token);
       setCurrentUser(user);
       localStorage.setItem('currentUser', JSON.stringify(user));
-      if (user.role === 'DROPOFF_SUPERVISOR') {
-        navigate('/received');
-      } else {
-        navigate('/dashboard');
-      }
+      navigate('/dashboard');
       return true;
     } catch (error) {
       console.error('Login failed', error);

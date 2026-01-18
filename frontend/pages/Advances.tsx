@@ -86,7 +86,7 @@ const AdvancesPage: React.FC = () => {
                 subtitle="Track advance payments made for trips."
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
                 pageAction={{ label: 'Add Advance', action: handleAddAdvance }}
             />

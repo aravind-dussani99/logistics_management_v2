@@ -71,7 +71,7 @@ const TransportOwnerVehiclesPage: React.FC = () => {
         subtitle="Map vehicles to transport owners with effective dates."
         filters={{}}
         onFilterChange={() => {}}
-        filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         pageAction={{ label: 'Assign Vehicle', action: handleAdd }}
       />
 

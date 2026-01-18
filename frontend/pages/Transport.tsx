@@ -76,7 +76,7 @@ const TransportPage: React.FC = () => {
                 title="Transport Management"
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 pageAction={{ label: 'Add Transport', action: handleAddTransport }}
             />
             

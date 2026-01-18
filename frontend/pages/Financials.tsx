@@ -92,7 +92,7 @@ const Financials: React.FC = () => {
                 subtitle="Overview of logistics business accounts and balances."
                 filters={filters}
                 onFilterChange={setFilters}
-                filterData={{ vehicles: [], customers: [], quarries: [], royaltyOwners: [] }}
+                filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
                 showFilters={['date']}
                 showAddAction={false}
             />
