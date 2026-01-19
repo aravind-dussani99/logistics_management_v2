@@ -265,6 +265,7 @@ model MaterialRate {
   ratePartyId     String
   pickupLocationId  String
   dropOffLocationId String
+  tripId          Int?
   totalKm         Float
   ratePerKm       Float
   ratePerTon      Float
@@ -284,6 +285,7 @@ model MaterialRate {
   dropOffLocation SiteLocation @relation("DropOffLocation", fields: [dropOffLocationId], references: [id])
 
   @@index([ratePartyType, ratePartyId])
+  @@index([tripId])
 }
 
 model AdvanceRecord {
@@ -440,7 +442,7 @@ model PaymentRecord {
   toAccount       String?
   category        String?
   subCategory     String?
-  siteExpense     Boolean  @default(false)
+  paymentReceiptUpload String?
   voucherUploads  Json?
   availableBalance Float?
   closingBalance  Float?

@@ -79,12 +79,15 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
   const isDropOffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
   const siteManagerItems = [
-    { to: '/site-manager/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
+    { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
-    { to: '/site-manager/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
-    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
-    { to: '/site-manager/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+    { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+    { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview' },
+    { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
   ];
 
   const supervisorItems = isDropOffSupervisor

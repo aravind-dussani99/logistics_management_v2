@@ -462,8 +462,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const isViewMode = mode === 'view';
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+    const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
     const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
-    const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor);
+    const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor || isSiteManager);
     const canEditReceivedFields = !isViewMode && (isAdminLike || isDropoffSupervisor);
     const canEditValidationFields = !isViewMode && isAdminLike;
     const entryReadOnly = isViewMode || !canEditEntryFields;

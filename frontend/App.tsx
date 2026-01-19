@@ -56,7 +56,7 @@ import TripImport from './pages/TripImport';
 import TripFeed from './pages/TripFeed';
 
 const ProtectedLayout: React.FC = () => (
-  <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST]}>
+  <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER, Role.GUEST]}>
     <Layout>
       <Outlet />
     </Layout>
@@ -65,8 +65,14 @@ const ProtectedLayout: React.FC = () => (
 
 const RoleBasedDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
-  return isSupervisor ? <SupervisorDashboard /> : <DashboardPlaceholder />;
+  const role = currentUser?.role;
+  if (role === Role.PICKUP_SUPERVISOR || role === Role.DROPOFF_SUPERVISOR) {
+    return <SupervisorDashboard />;
+  }
+  if (role === Role.SITE_MANAGER) {
+    return <SiteManagerDashboard />;
+  }
+  return <DashboardPlaceholder />;
 };
 
 const RoleBasedDailyExpenses: React.FC = () => {
@@ -93,8 +99,16 @@ const AppRoutes: React.FC = () => (
           <ReportDashboard />
         </ProtectedRoute>
       } />
-      <Route path="/financials" element={<Financials />} />
-      <Route path="/account-ledger" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><AccountLedgerOverview /></ProtectedRoute>} />
+      <Route path="/financials" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <Financials />
+        </ProtectedRoute>
+      } />
+      <Route path="/account-ledger" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <AccountLedgerOverview />
+        </ProtectedRoute>
+      } />
       <Route path="/trips" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
             <DailyTrips />
@@ -110,12 +124,7 @@ const AppRoutes: React.FC = () => (
           <TripFeed />
         </ProtectedRoute>
       } />
-      <Route path="/site-manager/dashboard" element={
-        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <SiteManagerDashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/site-manager/trip-rates" element={
+      <Route path="/trip-rates" element={
         <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <TripRates />
         </ProtectedRoute>
@@ -145,6 +154,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/payments" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Payments />
+        </ProtectedRoute>
+      } />
+      <Route path="/daily-payments" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <DailyPayments />
         </ProtectedRoute>
       } />
       <Route path="/site-manager/daily-payments" element={

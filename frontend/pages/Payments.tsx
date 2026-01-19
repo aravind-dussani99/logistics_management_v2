@@ -112,7 +112,7 @@ const Payments: React.FC = () => {
   };
 
   const handleView = (payment: Payment) => {
-    openModal('View Payment', <PaymentForm initialData={payment} onSave={() => {}} onClose={closeModal} isViewMode />);
+    openModal('View Payment', <PaymentForm initialData={payment} onSave={() => { }} onClose={closeModal} isViewMode />);
   };
 
   const handleDelete = (payment: Payment) => {
@@ -189,7 +189,7 @@ const Payments: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {['S. No.', 'Date', 'Type', 'Head Account', 'From/To', 'Rate Party Type', 'Rate Party', 'Amount', 'Remarks', 'Actions'].map(header => (
+                  {['S. No.', 'Date', 'Type', 'Head Account', 'From', 'To', 'Via', 'Rate Party Type', 'Rate Party', 'Amount', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
                     </th>
@@ -207,11 +207,9 @@ const Payments: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.headAccount || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {payment.type === PaymentType.PAYMENT
-                        ? `To: ${payment.toAccount || '-'}` 
-                        : `From: ${payment.fromAccount || '-'}`}
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.fromAccount || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.toAccount || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.via || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.ratePartyType ? RATE_PARTY_LABELS[payment.ratePartyType as RatePartyType] : '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{getRatePartyName(payment)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${payment.type === PaymentType.PAYMENT ? 'text-red-500' : 'text-green-500'}`}>
@@ -227,7 +225,7 @@ const Payments: React.FC = () => {
                 ))}
                 {paginatedPayments.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={12} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                       No payments found for the selected filters.
                     </td>
                   </tr>

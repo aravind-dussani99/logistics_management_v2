@@ -327,6 +327,35 @@ const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) 
   return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
 };
 
+const storePaymentReceipt = async ({ buffer, mime, payment, req, sequence }) => {
+  const dateFolder = formatDateFolder(payment.date);
+  const ratePartyType = slugify(payment.ratePartyType || 'unknown');
+  const ratePartyName = slugify(payment.ratePartyName || 'unknown');
+  const tripId = payment.tripId || 'no-trip';
+  const ext = extensionFromMime(mime) || '.bin';
+  const suffix = sequence ? `_${sequence}` : '';
+  const fileName = `${dateFolder}_${ratePartyType}_${ratePartyName}_${tripId}${suffix}${ext}`;
+  const objectPath = path.posix.join(dateFolder, 'payments', fileName);
+
+  if (!ATTACHMENTS_BUCKET) {
+    const targetPath = path.join(UPLOADS_ROOT, objectPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, buffer);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return `${baseUrl}/uploads/${objectPath}`;
+  }
+
+  const file = storage.bucket(ATTACHMENTS_BUCKET).file(objectPath);
+  await file.save(buffer, {
+    contentType: mime || undefined,
+    resumable: false,
+    metadata: {
+      cacheControl: 'public, max-age=31536000',
+    },
+  });
+  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
 const toPublicUrl = (value) => {
   if (typeof value !== 'string') return value;
   const extracted = extractGsPath(value);
@@ -667,8 +696,8 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyType TEXT NOT NULL DEFAULT 'vendor-customer'`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyId TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyType TEXT NOT NULL DEFAULT 'vendor-customer'`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyId TEXT NOT NULL DEFAULT ''`).catch(() => { });
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS MineQuarry (
       id TEXT PRIMARY KEY,
@@ -775,6 +804,7 @@ const ensureMerchantTables = async () => {
       ratePartyId TEXT NOT NULL,
       pickupLocationId TEXT NOT NULL,
       dropOffLocationId TEXT NOT NULL,
+      tripId INTEGER,
       totalKm REAL NOT NULL,
       ratePerKm REAL NOT NULL,
       ratePerTon REAL NOT NULL,
@@ -790,7 +820,8 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN status TEXT NOT NULL DEFAULT 'Active'`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN status TEXT NOT NULL DEFAULT 'Active'`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN tripId INTEGER`).catch(() => { });
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS VehicleMaster (
       id TEXT PRIMARY KEY,
@@ -827,10 +858,10 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyId TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN remarks TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyId TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN remarks TEXT NOT NULL DEFAULT ''`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS DailyExpenseRecord (
@@ -853,12 +884,12 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyId TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN via TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN category TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN subCategory TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyId TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN via TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN category TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN subCategory TEXT NOT NULL DEFAULT ''`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS DailyExpenseOpeningBalance (
@@ -924,11 +955,11 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestMessage TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestBy TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestRole TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestAt TIMESTAMP`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestMessage TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestBy TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestRole TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestAt TIMESTAMP`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS NotificationRecord (
@@ -949,13 +980,13 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN targetUser TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN tripId INTEGER`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN targetUser TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN tripId INTEGER`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => { });
 };
 
 const ensureSeedData = async () => {
@@ -1618,43 +1649,66 @@ app.post('/api/payments', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
-    counterpartyName = '',
     amount = 0,
     type = 'PAYMENT',
-    method = '',
     remarks = '',
     via = '',
     fromAccount = '',
     toAccount = '',
     category = '',
     subCategory = '',
-    siteExpense = false,
     voucherUploads = null,
+    paymentReceiptUpload = null,
     tripId = null,
   } = req.body || {};
-  if (!date || !headAccount || !toAccount) {
-    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  if (!date) {
+    return res.status(400).json({ error: 'Date is required.' });
+  }
+  if (!ratePartyType || !ratePartyId) {
+    return res.status(400).json({ error: 'Rate party type and rate party are required.' });
   }
   try {
+    let processedReceiptUpload = paymentReceiptUpload;
+    if (paymentReceiptUpload) {
+      const list = parseUploadList(paymentReceiptUpload);
+      const updated = [];
+      let sequence = 0;
+      for (const item of list) {
+        const parsed = parseDataUrl(item.url);
+        if (!parsed) {
+          updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
+          continue;
+        }
+        sequence += 1;
+        const storedUrl = await storePaymentReceipt({
+          buffer: parsed.buffer,
+          mime: parsed.mime,
+          payment: { date, ratePartyType, ratePartyName: ratePartyId, tripId },
+          req,
+          sequence,
+        });
+        updated.push({ name: item.name, url: storedUrl });
+      }
+      processedReceiptUpload = updated.length > 0 ? JSON.stringify(updated) : null;
+    }
+
     const payment = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
         entryType: 'PAYMENT',
-        headAccount,
-        ratePartyType: ratePartyType || null,
-        ratePartyId: ratePartyId || null,
-        counterpartyName: counterpartyName || null,
+        headAccount: headAccount || null,
+        ratePartyType,
+        ratePartyId,
         amount: Number(amount) || 0,
         type,
-        method,
-        remarks,
-        via,
-        fromAccount,
-        toAccount,
-        category,
-        subCategory,
-        siteExpense: Boolean(siteExpense),
+        remarks: remarks || null,
+        via: via || null,
+        fromAccount: fromAccount || null,
+        toAccount: toAccount || null,
+        category: category || null,
+        subCategory: subCategory || null,
         voucherUploads,
+        paymentReceiptUpload: processedReceiptUpload,
         createdBy: getUserDisplayName(req.user),
         tripId: tripId ? Number(tripId) : null,
       },
@@ -1676,44 +1730,67 @@ app.put('/api/payments/:id', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
-    counterpartyName = '',
     amount = 0,
     type = 'PAYMENT',
-    method = '',
     remarks = '',
     via = '',
     fromAccount = '',
     toAccount = '',
     category = '',
     subCategory = '',
-    siteExpense = false,
     voucherUploads = null,
+    paymentReceiptUpload = null,
     tripId = null,
   } = req.body || {};
-  if (!date || !headAccount || !toAccount) {
-    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  if (!date) {
+    return res.status(400).json({ error: 'Date is required.' });
+  }
+  if (!ratePartyType || !ratePartyId) {
+    return res.status(400).json({ error: 'Rate party type and rate party are required.' });
   }
   try {
+    let processedReceiptUpload = paymentReceiptUpload;
+    if (paymentReceiptUpload) {
+      const list = parseUploadList(paymentReceiptUpload);
+      const updated = [];
+      let sequence = 0;
+      for (const item of list) {
+        const parsed = parseDataUrl(item.url);
+        if (!parsed) {
+          updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
+          continue;
+        }
+        sequence += 1;
+        const storedUrl = await storePaymentReceipt({
+          buffer: parsed.buffer,
+          mime: parsed.mime,
+          payment: { date, ratePartyType, ratePartyName: ratePartyId, tripId },
+          req,
+          sequence,
+        });
+        updated.push({ name: item.name, url: storedUrl });
+      }
+      processedReceiptUpload = updated.length > 0 ? JSON.stringify(updated) : null;
+    }
+
     const payment = await prisma.paymentRecord.update({
       where: { id },
       data: {
         date: new Date(date),
         entryType: 'PAYMENT',
-        headAccount,
-        ratePartyType: ratePartyType || null,
-        ratePartyId: ratePartyId || null,
-        counterpartyName: counterpartyName || null,
+        headAccount: headAccount || null,
+        ratePartyType,
+        ratePartyId,
         amount: Number(amount) || 0,
         type,
-        method,
-        remarks,
-        via,
-        fromAccount,
-        toAccount,
-        category,
-        subCategory,
-        siteExpense: Boolean(siteExpense),
+        remarks: remarks || null,
+        via: via || null,
+        fromAccount: fromAccount || null,
+        toAccount: toAccount || null,
+        category: category || null,
+        subCategory: subCategory || null,
         voucherUploads,
+        paymentReceiptUpload: processedReceiptUpload,
         tripId: tripId ? Number(tripId) : null,
       },
     });
@@ -1771,7 +1848,6 @@ app.get('/api/daily-expenses', async (req, res) => {
         availableBalance: expense.availableBalance ?? 0,
         closingBalance: expense.closingBalance ?? 0,
         type: expense.type,
-        siteExpense: Boolean(expense.siteExpense),
         voucherUploads: expense.voucherUploads,
       })),
     });
@@ -1807,7 +1883,6 @@ app.get('/api/daily-expenses/all', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     })));
   } catch (error) {
@@ -1834,7 +1909,6 @@ app.post('/api/daily-expenses', async (req, res) => {
     remarks = '',
     type = 'DEBIT',
     headAccount = '',
-    siteExpense = false,
     voucherUploads = null,
   } = req.body || {};
 
@@ -1871,7 +1945,6 @@ app.post('/api/daily-expenses', async (req, res) => {
         availableBalance,
         closingBalance,
         type,
-        siteExpense: Boolean(siteExpense),
         voucherUploads,
         createdBy: getUserDisplayName(req.user),
       },
@@ -1894,7 +1967,6 @@ app.post('/api/daily-expenses', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     });
   } catch (error) {
@@ -1922,7 +1994,6 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     remarks = '',
     type = 'DEBIT',
     headAccount = '',
-    siteExpense = false,
     voucherUploads = null,
   } = req.body || {};
 
@@ -1948,7 +2019,6 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
         subCategory,
         remarks,
         type,
-        siteExpense: Boolean(siteExpense),
         voucherUploads,
       },
     });
@@ -1970,7 +2040,6 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     });
   } catch (error) {
@@ -2132,7 +2201,7 @@ app.post('/api/trips/:id/activity', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
-  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER']);
+    const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER']);
     const effectiveRole = isAdmin ? role : (req.user?.role || role);
     const effectiveUser = isAdmin ? user : (getUserDisplayName(req.user) || user);
     const where = {
@@ -2335,16 +2404,16 @@ app.post('/api/trips/atomic', async (req, res) => {
         ? pickupLocation
         : shouldCreatePickup
           ? await tx.siteLocation.create({
-              data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
-            })
+            data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
+          })
           : null;
 
       const ensuredDropOff = !dropOffName || dropOffLocation
         ? dropOffLocation
         : shouldCreateDropOff
           ? await tx.siteLocation.create({
-              data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
-            })
+            data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
+          })
           : null;
 
       const lookupByName = async (model, name, allowCreate, defaults = {}) => {
@@ -2419,15 +2488,15 @@ app.post('/api/trips/atomic', async (req, res) => {
         ? existingVehicle
         : Boolean(createMasters.vehicleMaster ?? true)
           ? await tx.vehicleMaster.create({
-              data: {
-                vehicleNumber: normalizedVehicle,
-                vehicleType: '',
-                capacity: 0,
-                ownerName: '',
-                contactNumber: '',
-                remarks: '',
-              },
-            })
+            data: {
+              vehicleNumber: normalizedVehicle,
+              vehicleType: '',
+              capacity: 0,
+              ownerName: '',
+              contactNumber: '',
+              remarks: '',
+            },
+          })
           : null;
 
       const trip = await tx.tripRecord.create({
@@ -3003,6 +3072,83 @@ const getRatePartyName = async (ratePartyType, ratePartyId) => {
 
 const getBankAccountRatePartyName = async (ratePartyType, ratePartyId) => {
   return getRatePartyName(ratePartyType, ratePartyId);
+};
+
+const ensureMerchantType = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.merchantType.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.merchantType.create({
+    data: { name: trimmed, remarks: 'Auto-created from trip rates.' },
+  });
+};
+
+const ensureSiteLocation = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.siteLocation.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.siteLocation.create({
+    data: {
+      name: trimmed,
+      type: 'GENERIC',
+      address: '',
+      pointOfContact: '',
+      remarks: 'Auto-created from trip rates.',
+    },
+  });
+};
+
+const ensureMaterialType = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.materialTypeDefinition.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.materialTypeDefinition.create({
+    data: { name: trimmed, remarks: 'Auto-created from trip rates.' },
+  });
+};
+
+const ensureRateParty = async (tx, ratePartyType, name) => {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return null;
+  const merchantTypeNameMap = {
+    'vendor-customer': 'Vendor & Customer',
+    'mine-quarry': 'Mine & Quarry',
+    'royalty-owner': 'Royalty Owner',
+    'transport-owner': 'Transport & Owner',
+  };
+  const merchantType = await ensureMerchantType(tx, merchantTypeNameMap[ratePartyType] || 'Unknown');
+  switch (ratePartyType) {
+    case 'mine-quarry': {
+      const existing = await tx.mineQuarry.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.mineQuarry.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'vendor-customer': {
+      const existing = await tx.vendorCustomer.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.vendorCustomer.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'royalty-owner': {
+      const existing = await tx.royaltyOwnerProfile.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.royaltyOwnerProfile.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'transport-owner': {
+      const existing = await tx.transportOwnerProfile.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.transportOwnerProfile.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    default:
+      return null;
+  }
 };
 
 const getOrCreateOpeningBalance = async (supervisorName) => {
@@ -3687,6 +3833,128 @@ app.post('/api/merge/material-types', async (req, res) => {
     }
     console.error('Failed to merge material types', error);
     res.status(500).json({ error: 'Failed to merge material types' });
+  }
+});
+
+app.post('/api/trip-rates/apply', async (req, res) => {
+  const {
+    tripId,
+    ratePartyType,
+    ratePerTon,
+    applyScope = 'trip',
+    effectiveFrom,
+    effectiveTo,
+  } = req.body || {};
+  if (!tripId || !ratePartyType || ratePerTon === undefined) {
+    return res.status(400).json({ error: 'Trip, rate party, and rate per ton are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    const ratePartyNameByType = {
+      'vendor-customer': trip.customer,
+      'transport-owner': trip.transporterName,
+      'mine-quarry': trip.quarryName,
+      'royalty-owner': trip.royaltyOwnerName,
+    };
+    const partyName = ratePartyNameByType[ratePartyType];
+    if (!partyName) {
+      return res.status(400).json({ error: 'Trip does not include the selected rate party name.' });
+    }
+
+    const tripDate = new Date(trip.date);
+    const resolvedEffectiveFrom = effectiveFrom ? new Date(effectiveFrom) : tripDate;
+    let resolvedEffectiveTo = effectiveTo ? new Date(effectiveTo) : null;
+    if (applyScope === 'trip') {
+      resolvedEffectiveTo = resolvedEffectiveFrom;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const materialType = await ensureMaterialType(tx, trip.material);
+      const pickupLocation = await ensureSiteLocation(tx, trip.pickupPlace);
+      const dropOffLocation = await ensureSiteLocation(tx, trip.dropOffPlace);
+      const partyRecord = await ensureRateParty(tx, ratePartyType, partyName);
+      if (!partyRecord) {
+        throw new Error('RATE_PARTY_NOT_FOUND');
+      }
+
+      if (applyScope !== 'trip') {
+        const existingRates = await tx.materialRate.findMany({
+          where: {
+            ratePartyType,
+            ratePartyId: partyRecord.id,
+            materialTypeId: materialType.id,
+            pickupLocationId: pickupLocation.id,
+            dropOffLocationId: dropOffLocation.id,
+            tripId: null,
+          },
+        });
+        const overlapExists = existingRates.some(rate =>
+          hasMaterialRateOverlap(resolvedEffectiveFrom, resolvedEffectiveTo, rate.effectiveFrom, rate.effectiveTo)
+        );
+        if (overlapExists) {
+          throw new Error('RATE_OVERLAP');
+        }
+      }
+
+      const createdRate = await tx.materialRate.create({
+        data: {
+          materialTypeId: materialType.id,
+          ratePartyType,
+          ratePartyId: partyRecord.id,
+          pickupLocationId: pickupLocation.id,
+          dropOffLocationId: dropOffLocation.id,
+          tripId: applyScope === 'trip' ? trip.id : null,
+          totalKm: 0,
+          ratePerKm: 0,
+          ratePerTon: Number(ratePerTon || 0),
+          gstChargeable: false,
+          gstPercentage: 0,
+          gstAmount: 0,
+          totalRatePerTon: Number(ratePerTon || 0),
+          effectiveFrom: resolvedEffectiveFrom,
+          effectiveTo: resolvedEffectiveTo,
+          status: getMaterialRateStatus(resolvedEffectiveFrom, resolvedEffectiveTo),
+          remarks: applyScope === 'trip' ? `Trip rate for #${trip.id}` : 'Range rate from trip rates.',
+        },
+      });
+
+      const netWeight = Number(trip.netWeight || 0);
+      const rateAmount = netWeight * Number(ratePerTon || 0);
+      const tripUpdate = {};
+      if (ratePartyType === 'vendor-customer') tripUpdate.revenue = rateAmount;
+      if (ratePartyType === 'mine-quarry') tripUpdate.materialCost = rateAmount;
+      if (ratePartyType === 'transport-owner') tripUpdate.transportCost = rateAmount;
+      if (ratePartyType === 'royalty-owner') tripUpdate.royaltyCost = rateAmount;
+      const updatedTrip = await tx.tripRecord.update({
+        where: { id: trip.id },
+        data: tripUpdate,
+      });
+      const profit = Number(updatedTrip.revenue || 0) - Number(updatedTrip.materialCost || 0) - Number(updatedTrip.transportCost || 0) - Number(updatedTrip.royaltyCost || 0);
+      await tx.tripRecord.update({
+        where: { id: trip.id },
+        data: { profit },
+      });
+
+      return createdRate;
+    });
+
+    res.json({
+      ...result,
+      ratePartyName: await getRatePartyName(result.ratePartyType, result.ratePartyId),
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'RATE_OVERLAP') {
+        return res.status(409).json({ error: 'Overlapping rate exists for this party, material, and locations.' });
+      }
+      if (error.message === 'RATE_PARTY_NOT_FOUND') {
+        return res.status(400).json({ error: 'Unable to resolve rate party details.' });
+      }
+    }
+    console.error('Failed to apply trip rate', error);
+    res.status(500).json({ error: 'Failed to apply trip rate' });
   }
 });
 
