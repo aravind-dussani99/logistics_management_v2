@@ -1456,166 +1456,9 @@ app.delete('/api/account-types/:id', async (req, res) => {
   }
 });
 
-app.get('/api/advances', async (req, res) => {
-  try {
-    const advances = await prisma.advanceRecord.findMany({
-      orderBy: { date: 'desc' },
-    });
-    res.json(advances);
-  } catch (error) {
-    console.error('Failed to list advances', error);
-    res.status(500).json({ error: 'Failed to list advances' });
-  }
-});
-
-app.post('/api/advances', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const {
-    date,
-    tripId = null,
-    ratePartyType = null,
-    ratePartyId = null,
-    counterpartyName = '',
-    fromAccount,
-    toAccount,
-    place = '',
-    invoiceDCNumber = '',
-    ownerAndTransporterName = '',
-    vehicleNumber = '',
-    purpose,
-    amount = 0,
-    voucherSlipUpload = '',
-    remarks = '',
-  } = req.body || {};
-
-  if (!date || !fromAccount || !toAccount || !purpose) {
-    return res.status(400).json({ error: 'Date, from account, to account, and purpose are required.' });
-  }
-  try {
-    const advance = await prisma.advanceRecord.create({
-      data: {
-        date: new Date(date),
-        tripId: tripId ? Number(tripId) : null,
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
-        fromAccount,
-        toAccount,
-        place,
-        invoiceDCNumber,
-        ownerAndTransporterName,
-        vehicleNumber,
-        purpose,
-        amount: Number(amount) || 0,
-        voucherSlipUpload,
-        remarks,
-      },
-    });
-    res.status(201).json(advance);
-  } catch (error) {
-    console.error('Failed to create advance', error);
-    res.status(500).json({ error: 'Failed to create advance' });
-  }
-});
-
-app.put('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const { id } = req.params;
-  const {
-    date,
-    tripId = null,
-    ratePartyType = null,
-    ratePartyId = null,
-    counterpartyName = '',
-    fromAccount,
-    toAccount,
-    place = '',
-    invoiceDCNumber = '',
-    ownerAndTransporterName = '',
-    vehicleNumber = '',
-    purpose,
-    amount = 0,
-    voucherSlipUpload = '',
-    remarks = '',
-  } = req.body || {};
-
-  if (!date || !fromAccount || !toAccount || !purpose) {
-    return res.status(400).json({ error: 'Date, from account, to account, and purpose are required.' });
-  }
-  try {
-    const advance = await prisma.advanceRecord.update({
-      where: { id },
-      data: {
-        date: new Date(date),
-        tripId: tripId ? Number(tripId) : null,
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
-        fromAccount,
-        toAccount,
-        place,
-        invoiceDCNumber,
-        ownerAndTransporterName,
-        vehicleNumber,
-        purpose,
-        amount: Number(amount) || 0,
-        voucherSlipUpload,
-        remarks,
-      },
-    });
-    res.json(advance);
-  } catch (error) {
-    console.error('Failed to update advance', error);
-    res.status(500).json({ error: 'Failed to update advance' });
-  }
-});
-
-app.delete('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const { id } = req.params;
-  try {
-    await prisma.advanceRecord.delete({ where: { id } });
-    res.status(204).end();
-  } catch (error) {
-    console.error('Failed to delete advance', error);
-    res.status(500).json({ error: 'Failed to delete advance' });
-  }
-});
-
-app.get('/api/advances/export', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    const advances = await prisma.advanceRecord.findMany({ orderBy: { date: 'desc' } });
-    const header = ['Date', 'From', 'To', 'Purpose', 'Amount', 'Trip Id', 'Rate Party Type', 'Rate Party Id', 'Counterparty', 'Remarks'];
-    const rows = advances.map(item => ([
-      item.date.toISOString().split('T')[0],
-      item.fromAccount,
-      item.toAccount,
-      item.purpose,
-      item.amount,
-      item.tripId || '',
-      item.ratePartyType || '',
-      item.ratePartyId || '',
-      item.counterpartyName || '',
-      item.remarks || '',
-    ]));
-    const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="advances.csv"');
-    res.send(csv);
-  } catch (error) {
-    console.error('Failed to export advances', error);
-    res.status(500).json({ error: 'Failed to export advances' });
-  }
-});
+// Advances API endpoints have been deprecated.
+// Advances are now tracked within the PaymentRecord table (remarks field) or as standard payments.
+// Users should use the Payments interface.
 
 app.get('/api/payments', async (req, res) => {
   if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
@@ -3152,10 +2995,25 @@ const ensureRateParty = async (tx, ratePartyType, name) => {
 };
 
 const getOrCreateOpeningBalance = async (supervisorName) => {
-  const existing = await prisma.dailyExpenseOpeningBalance.findUnique({ where: { supervisorName } });
+  const existing = await prisma.paymentRecord.findFirst({
+    where: {
+      entryType: 'OPENING_BALANCE',
+      fromAccount: supervisorName
+    }
+  });
+
   if (existing) return existing.amount;
-  await prisma.dailyExpenseOpeningBalance.create({
-    data: { supervisorName, amount: 0 },
+
+  await prisma.paymentRecord.create({
+    data: {
+      date: new Date(),
+      entryType: 'OPENING_BALANCE',
+      fromAccount: supervisorName,
+      amount: 0,
+      type: 'CREDIT', // Opening balance credit
+      remarks: 'Initial Opening Balance',
+      createdBy: 'SYSTEM'
+    },
   });
   return 0;
 };

@@ -8,6 +8,4 @@
 */
 -- AlterTable
 ALTER TABLE "PaymentRecord" DROP COLUMN "siteExpense",
-ADD COLUMN     "paymentReceiptUpload" TEXT,
-ALTER COLUMN "ratePartyType" SET NOT NULL,
-ALTER COLUMN "ratePartyId" SET NOT NULL;
+ADD COLUMN     "paymentReceiptUpload" TEXT;

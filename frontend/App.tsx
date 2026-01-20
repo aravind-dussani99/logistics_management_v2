@@ -90,7 +90,7 @@ const RoleBasedAdvances: React.FC = () => {
 const AppRoutes: React.FC = () => (
   <Routes>
     <Route path="/login" element={<Login />} />
-    
+
     <Route element={<ProtectedLayout />}>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<RoleBasedDashboard />} />
@@ -111,9 +111,9 @@ const AppRoutes: React.FC = () => (
       } />
       <Route path="/trips" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-            <DailyTrips />
+          <DailyTrips />
         </ProtectedRoute>
-       } />
+      } />
       <Route path="/trip-import" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <TripImport />
@@ -139,11 +139,7 @@ const AppRoutes: React.FC = () => (
           <ReceivedTrips />
         </ProtectedRoute>
       } />
-      <Route path="/advances" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <RoleBasedAdvances />
-        </ProtectedRoute>
-      } />
+      {/* Advances route deprecated */}
       <Route path="/reports" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Reports />

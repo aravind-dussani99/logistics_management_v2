@@ -288,60 +288,9 @@ model MaterialRate {
   @@index([tripId])
 }
 
-model AdvanceRecord {
-  id                    String   @id @default(uuid())
-  date                  DateTime
-  tripId                Int?
-  ratePartyType         String?
-  ratePartyId           String?
-  counterpartyName      String
-  fromAccount           String
-  toAccount             String
-  place                 String
-  invoiceDCNumber       String
-  ownerAndTransporterName String
-  vehicleNumber         String
-  purpose               String
-  amount                Float
-  voucherSlipUpload     String
-  remarks               String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@index([date])
-  @@index([ratePartyType, ratePartyId])
-}
-
-model DailyExpenseRecord {
-  id               String   @id @default(uuid())
-  date             DateTime
-  from             String
-  to               String
-  via              String
-  ratePartyType    String?
-  ratePartyId      String?
-  counterpartyName String
-  amount           Float
-  category         String
-  subCategory      String
-  remarks          String
-  availableBalance Float
-  closingBalance   Float
-  type             String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([date])
-  @@index([from])
-}
-
-model DailyExpenseOpeningBalance {
-  id             String   @id @default(uuid())
-  supervisorName String   @unique
-  amount         Float
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
+// AdvanceRecord removed - merged into PaymentRecord
+// DailyExpenseRecord removed - merged into PaymentRecord
+// DailyExpenseOpeningBalance removed - merged into PaymentRecord
 
 model TripRecord {
   id                    Int      @id @default(autoincrement())
