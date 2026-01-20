@@ -234,6 +234,8 @@ jobs:
           fi
           npm install
           npx prisma generate
+          # Temporary fix for stalled migration
+          npx prisma migrate resolve --rolled-back 20260119200804_add_payment_receipt_remove_site_expense || true
           npx prisma migrate deploy
 
   lint-frontend:

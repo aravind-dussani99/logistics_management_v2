@@ -14,7 +14,7 @@ import { transportOwnerVehicleApi } from '../services/transportOwnerVehicleApi';
 import { materialTypeDefinitionApi } from '../services/materialTypeDefinitionApi';
 import { materialRateApi } from '../services/materialRateApi';
 import { vehicleMasterApi } from '../services/vehicleMasterApi';
-import { advanceApi } from '../services/advanceApi';
+// advanceApi import removed
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
 import { tripApi } from '../services/tripApi';
 import { paymentApi } from '../services/paymentApi';
@@ -28,7 +28,7 @@ interface DataContextType {
   loadTrips: () => Promise<void>;
   loadTripMasters: () => Promise<void>;
   loadLegacyMasters: () => Promise<void>;
-  loadAdvances: () => Promise<void>;
+  // loadAdvances removed
   loadPayments: () => Promise<void>;
   loadLedgerEntries: () => Promise<void>;
   loadAccounts: () => Promise<void>;
@@ -49,7 +49,7 @@ interface DataContextType {
   loadMaterialTypeDefinitions: () => Promise<void>;
   loadMaterialRates: () => Promise<void>;
   trips: Trip[];
-  advances: Advance[];
+  // advances removed
   payments: Payment[];
   ledgerEntries: LedgerEntry[];
   vehicles: VehicleOwner[];
@@ -75,7 +75,7 @@ interface DataContextType {
   accounts: Account[];
   accountCategories: AccountCategory[];
   loading: boolean;
-  
+
   addTrip: (trip: Omit<NewTripData, 'createdBy'>) => Promise<void>;
   addTripAtomic: (trip: Omit<NewTripData, 'createdBy'>, createMasters?: {
     vendorCustomer?: boolean;
@@ -90,18 +90,15 @@ interface DataContextType {
   updateTrip: (tripId: number, tripData: Partial<Trip>) => Promise<void>;
   deleteTrip: (tripId: number) => Promise<void>;
 
-  addAdvance: (advance: Omit<Advance, 'id'>) => Promise<void>;
-  updateAdvance: (id: string, data: Omit<Advance, 'id'>) => Promise<void>;
-  deleteAdvance: (id: string) => Promise<void>;
-
+  // Advance CRUD methods removed
   addPayment: (payment: Omit<Payment, 'id'>) => Promise<void>;
   updatePayment: (id: string, data: Omit<Payment, 'id'>) => Promise<void>;
   deletePayment: (id: string) => Promise<void>;
-  
+
   addLedgerEntry: (entry: Omit<LedgerEntry, 'id'>) => Promise<void>;
   updateLedgerEntry: (id: string, entry: Omit<LedgerEntry, 'id'>) => Promise<void>;
   deleteLedgerEntry: (id: string) => Promise<void>;
-  
+
   getDailyExpenses: (supervisorName: string) => Promise<{ expenses: DailyExpense[], openingBalance: number }>;
   addDailyExpense: (expense: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>) => Promise<void>;
   updateDailyExpense: (id: string, expense: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>) => Promise<void>;
@@ -115,14 +112,14 @@ interface DataContextType {
   updateVehicleMaster: (id: string, vehicle: Omit<VehicleMaster, 'id'>) => Promise<void>;
   deleteVehicleMaster: (id: string) => Promise<void>;
   mergeVehicleMaster: (sourceId: string, targetId: string) => Promise<void>;
-  
+
   addVehicleOwner: (vehicleOwner: Omit<VehicleOwner, 'id'>) => Promise<void>;
   updateVehicleOwner: (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => Promise<void>;
   deleteVehicleOwner: (id: string) => Promise<void>;
   addTransportRate: (transportId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateTransportRate: (transportId: string, rate: RateEntry) => Promise<void>;
   deleteTransportRate: (transportId: string, rateId: string) => Promise<void>;
-  
+
   addQuarryOwner: (quarryOwner: Omit<QuarryOwner, 'id'>) => Promise<void>;
   addQuarryRate: (quarryId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateQuarryRate: (quarryId: string, rate: RateEntry) => Promise<void>;
@@ -132,7 +129,7 @@ interface DataContextType {
   addRoyaltyRate: (royaltyId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateRoyaltyRate: (royaltyId: string, rate: RateEntry) => Promise<void>;
   deleteRoyaltyRate: (royaltyId: string, rateId: string) => Promise<void>;
-  
+
   addCustomer: (customer: Omit<Customer, 'id'>) => Promise<void>;
   addCustomerRate: (customerId: string, rate: Omit<RateEntry, 'id'>) => Promise<void>;
   updateCustomerRate: (customerId: string, rate: RateEntry) => Promise<void>;
@@ -212,7 +209,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [hasLoadedTrips, setHasLoadedTrips] = useState(false);
   const [hasLoadedTripMasters, setHasLoadedTripMasters] = useState(false);
   const [hasLoadedLegacyMasters, setHasLoadedLegacyMasters] = useState(false);
-  const [hasLoadedAdvances, setHasLoadedAdvances] = useState(false);
+
   const [hasLoadedPayments, setHasLoadedPayments] = useState(false);
   const [hasLoadedLedgerEntries, setHasLoadedLedgerEntries] = useState(false);
   const [hasLoadedAccounts, setHasLoadedAccounts] = useState(false);
@@ -234,7 +231,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [hasLoadedMaterialRates, setHasLoadedMaterialRates] = useState(false);
 
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [advances, setAdvances] = useState<Advance[]>([]);
+
   const [payments, setPayments] = useState<Payment[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOwner[]>([]);
@@ -269,7 +266,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHasLoadedTrips(false);
     setHasLoadedTripMasters(false);
     setHasLoadedLegacyMasters(false);
-    setHasLoadedAdvances(false);
+
     setHasLoadedPayments(false);
     setHasLoadedLedgerEntries(false);
     setHasLoadedAccounts(false);
@@ -350,12 +347,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHasLoadedLegacyMasters(true);
   }, [currentUser, hasLoadedLegacyMasters]);
 
-  const loadAdvances = useCallback(async () => {
-    if (!currentUser || hasLoadedAdvances) return;
-    const advancesData = await advanceApi.getAll();
-    setAdvances(advancesData);
-    setHasLoadedAdvances(true);
-  }, [currentUser, hasLoadedAdvances]);
+
 
   const loadPayments = useCallback(async () => {
     if (!currentUser || hasLoadedPayments) return;
@@ -498,57 +490,57 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     if (!currentUser) {
-        setTrips([]);
-        setAdvances([]);
-        setPayments([]);
-        setLedgerEntries([]);
-        setVehicles([]);
-        setQuarries([]);
-        setRoyaltyOwners([]);
-        setCustomers([]);
-        setCustomerRates([]);
-        setSiteLocations([]);
-        setMerchantTypes([]);
-        setMerchants([]);
-        setMerchantBankAccounts([]);
-        setAccountTypes([]);
-        setVehicleMasters([]);
-        setMineQuarries([]);
-        setVendorCustomers([]);
-        setRoyaltyOwnerProfiles([]);
-        setTransportOwnerProfiles([]);
-        setTransportOwnerVehicles([]);
-        setMaterialTypeDefinitions([]);
-        setMaterialRates([]);
-        setMaterials([]);
-        setRoyaltyStock([]);
-        setAccounts([]);
-        setAccountCategories([]);
-        setLoading(false);
-        setHasLoadedTrips(false);
-        setHasLoadedTripMasters(false);
-        setHasLoadedLegacyMasters(false);
-        setHasLoadedAdvances(false);
-        setHasLoadedPayments(false);
-        setHasLoadedLedgerEntries(false);
-        setHasLoadedAccounts(false);
-        setHasLoadedAccountCategories(false);
-        setHasLoadedMaterials(false);
-        setHasLoadedRoyaltyStock(false);
-        setHasLoadedSiteLocations(false);
-        setHasLoadedMerchantTypes(false);
-        setHasLoadedMerchants(false);
-        setHasLoadedMerchantBankAccounts(false);
-        setHasLoadedAccountTypes(false);
-        setHasLoadedVehicleMasters(false);
-        setHasLoadedMineQuarries(false);
-        setHasLoadedVendorCustomers(false);
-        setHasLoadedRoyaltyOwnerProfiles(false);
-        setHasLoadedTransportOwnerProfiles(false);
-        setHasLoadedTransportOwnerVehicles(false);
-        setHasLoadedMaterialTypeDefinitions(false);
-        setHasLoadedMaterialRates(false);
-        return;
+      setTrips([]);
+
+      setPayments([]);
+      setLedgerEntries([]);
+      setVehicles([]);
+      setQuarries([]);
+      setRoyaltyOwners([]);
+      setCustomers([]);
+      setCustomerRates([]);
+      setSiteLocations([]);
+      setMerchantTypes([]);
+      setMerchants([]);
+      setMerchantBankAccounts([]);
+      setAccountTypes([]);
+      setVehicleMasters([]);
+      setMineQuarries([]);
+      setVendorCustomers([]);
+      setRoyaltyOwnerProfiles([]);
+      setTransportOwnerProfiles([]);
+      setTransportOwnerVehicles([]);
+      setMaterialTypeDefinitions([]);
+      setMaterialRates([]);
+      setMaterials([]);
+      setRoyaltyStock([]);
+      setAccounts([]);
+      setAccountCategories([]);
+      setLoading(false);
+      setHasLoadedTrips(false);
+      setHasLoadedTripMasters(false);
+      setHasLoadedLegacyMasters(false);
+
+      setHasLoadedPayments(false);
+      setHasLoadedLedgerEntries(false);
+      setHasLoadedAccounts(false);
+      setHasLoadedAccountCategories(false);
+      setHasLoadedMaterials(false);
+      setHasLoadedRoyaltyStock(false);
+      setHasLoadedSiteLocations(false);
+      setHasLoadedMerchantTypes(false);
+      setHasLoadedMerchants(false);
+      setHasLoadedMerchantBankAccounts(false);
+      setHasLoadedAccountTypes(false);
+      setHasLoadedVehicleMasters(false);
+      setHasLoadedMineQuarries(false);
+      setHasLoadedVendorCustomers(false);
+      setHasLoadedRoyaltyOwnerProfiles(false);
+      setHasLoadedTransportOwnerProfiles(false);
+      setHasLoadedTransportOwnerVehicles(false);
+      setHasLoadedMaterialTypeDefinitions(false);
+      setHasLoadedMaterialRates(false);
+      return;
     }
     setLoading(false);
   }, [currentUser]);
@@ -644,7 +636,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setTrips(prev => [createdTrip, ...prev]);
     return createdTrip;
   }
-  
+
   const updateTrip = async (tripId: number, tripData: Partial<Trip>) => {
     const updatedTrip = await tripApi.update(tripId, tripData);
     setTrips(prev => prev.map(trip => trip.id === tripId ? updatedTrip : trip));
@@ -655,18 +647,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setTrips(prev => prev.filter(trip => trip.id !== tripId));
   };
 
-  const addAdvance = async (advance: Omit<Advance, 'id'>) => {
-    await advanceApi.create(advance);
-    refreshData();
-  };
-  const updateAdvance = async (id: string, data: Omit<Advance, 'id'>) => {
-    await advanceApi.update(id, data);
-    refreshData();
-  };
-  const deleteAdvance = async (id: string) => {
-    await advanceApi.remove(id);
-    refreshData();
-  };
+
 
   const addPayment = async (payment: Omit<Payment, 'id'>) => {
     await paymentApi.create(payment);
@@ -697,12 +678,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await api.deleteLedgerEntry(id);
     refreshData();
   };
-  
+
   const addAccount = async (account: Omit<Account, 'id'>) => {
     await api.addAccount(account);
     refreshData();
   };
-  
+
   const addAccountCategory = async (category: Omit<AccountCategory, 'id'>) => {
     await api.addAccountCategory(category);
     refreshData();
@@ -728,10 +709,10 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const getDailyExpenses = useCallback(async (supervisorName: string) => dailyExpenseApi.getBySupervisor(supervisorName), []);
-  const addDailyExpense = async (expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => {
+  const addDailyExpense = async (expense: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>) => {
     await dailyExpenseApi.create(expense);
   };
-  const updateDailyExpense = async (id: string, expense: Omit<DailyExpense, 'id'|'availableBalance'|'closingBalance'>) => {
+  const updateDailyExpense = async (id: string, expense: Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>) => {
     await dailyExpenseApi.update(id, expense);
   };
   const deleteDailyExpense = async (id: string) => {
@@ -951,7 +932,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addMaterial = async (material: Omit<Material, 'id'>) => { await api.addMaterial(material); refreshData(); };
   const updateMaterial = async (id: number, material: Omit<Material, 'id'>) => { await api.updateMaterial(id, material); refreshData(); };
   const deleteMaterial = async (id: number) => { await api.deleteMaterial(id); refreshData(); };
-  
+
   const getRoyaltyStock = async () => api.getRoyaltyStock();
   const addRoyaltyStock = async (stock: Omit<RoyaltyStock, 'id'>) => { await api.addRoyaltyStock(stock); refreshData(); };
 
@@ -959,7 +940,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadTrips,
     loadTripMasters,
     loadLegacyMasters,
-    loadAdvances,
+
     loadPayments,
     loadLedgerEntries,
     loadAccounts,
@@ -980,7 +961,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadMaterialTypeDefinitions,
     loadMaterialRates,
     trips,
-    advances,
+
     payments,
     ledgerEntries,
     vehicles,
@@ -1010,9 +991,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addTripAtomic,
     updateTrip,
     deleteTrip,
-    addAdvance,
-    updateAdvance,
-    deleteAdvance,
+
     addPayment,
     updatePayment,
     deletePayment,

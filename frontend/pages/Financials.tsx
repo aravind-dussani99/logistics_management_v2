@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
-import { DailySummary, FinancialStatus, DailyExpense, PaymentType } from '../types';
+import { DailySummary, FinancialStatus, DailyExpense, PaymentType, ChartData } from '../types';
 import { useData } from '../contexts/DataContext';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
@@ -12,21 +12,20 @@ import { dailyExpenseApi } from '../services/dailyExpenseApi';
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const Financials: React.FC = () => {
-    const { trips, advances, payments, loadTrips, loadAdvances, loadPayments, refreshKey } = useData();
+    const { trips, payments, loadTrips, loadPayments, refreshKey } = useData();
     const [filters, setFilters] = useState<Filters>({});
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
 
     useEffect(() => {
         loadTrips();
-        loadAdvances();
         loadPayments();
         dailyExpenseApi.getAll().then(setAllExpenses).catch(() => setAllExpenses([]));
-    }, [loadTrips, loadAdvances, loadPayments, refreshKey]);
+    }, [loadTrips, loadPayments, refreshKey]);
 
     const getAdvanceTotalForTrip = (tripId: number, ratePartyType: string) => {
-        return advances
-            .filter(advance => advance.tripId === tripId && advance.ratePartyType === ratePartyType)
-            .reduce((sum, advance) => sum + (advance.amount || 0), 0);
+        return payments
+            .filter(payment => payment.tripId === tripId && payment.ratePartyType === ratePartyType && payment.type === PaymentType.PAYMENT)
+            .reduce((sum, payment) => sum + (payment.amount || 0), 0);
     };
 
     const summary = useMemo<DailySummary>(() => {
@@ -46,7 +45,32 @@ const Financials: React.FC = () => {
         }, {} as Record<string, number>);
 
         const paymentAdjustments = payments.reduce((acc, item) => {
+            // If payment is linked to a trip, it's already counted in getAdvanceTotalForTrip (which subtracts from trip cost)
+            // But wait, "outstanding" = Cost - Paid.
+            // If we use getAdvanceTotalForTrip, we sum payments for that trip.
+            // If we use paymentAdjustments, we sum ALL payments for that party.
+            // Duplicate counting?
+            // The original logic had `advances` (per trip) AND `payments` (general).
+            // Now ALL are payments.
+            // If a payment has tripId, it counts towards that trip's logic.
+            // If it doesn't, it counts towards general balance?
+            // "Outstanding Customer" = (Sum of Rev - TripAdvances) - GeneralPayments?
+            // If "Advance" is just a Payment with TripID, then:
+            // "TripAdvances" = Payments with TripID.
+            // "GeneralPayments" = Payments without TripID?
+            // Or should we just sum (Total Cost - Total Payments)?
+            // The original logic:
+            // outstandingCustomer = (Sum(Rev - Advances)) - expenseAdj - paymentAdj.
+            // It seems `paymentAdjustments` included ALL payments.
+            // If `advances` were separate, they were NOT in `payments`.
+            // Now `advances` ARE in `payments`.
+            // So if I include them in `getAdvanceTotalForTrip`, I must EXCLUDE them from `paymentAdjustments`.
+
             if (!item.ratePartyType) return acc;
+
+            // Skip payments that are counted as trip advances to avoid double counting
+            if (item.tripId) return acc;
+
             const isCustomer = item.ratePartyType === 'vendor-customer';
             const amount = item.type === PaymentType.RECEIPT
                 ? (isCustomer ? item.amount : -item.amount)
@@ -72,7 +96,7 @@ const Financials: React.FC = () => {
             outstandingTransporter: Math.max(0, outstandingTransporter - (expenseAdjustments['transport-owner'] || 0) - (paymentAdjustments['transport-owner'] || 0)),
             outstandingQuarry: Math.max(0, outstandingQuarry - (expenseAdjustments['mine-quarry'] || 0) - (paymentAdjustments['mine-quarry'] || 0)),
         };
-    }, [trips, advances, allExpenses, payments]);
+    }, [trips, allExpenses, payments]);
 
     const costData = useMemo<ChartData[]>(() => {
         const transportCost = trips.reduce((sum, trip) => sum + (trip.transportCost || 0), 0);
@@ -96,7 +120,7 @@ const Financials: React.FC = () => {
                 showFilters={['date']}
                 showAddAction={false}
             />
-            
+
             <main className="pt-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard title="Total Trips" value={summary?.totalTrips.toString() || '0'} icon="bus-outline" color="bg-blue-500" />
