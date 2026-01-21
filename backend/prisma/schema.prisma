@@ -265,6 +265,7 @@ model MaterialRate {
   ratePartyId     String
   pickupLocationId  String
   dropOffLocationId String
+  tripId          Int?
   totalKm         Float
   ratePerKm       Float
   ratePerTon      Float
@@ -284,62 +285,12 @@ model MaterialRate {
   dropOffLocation SiteLocation @relation("DropOffLocation", fields: [dropOffLocationId], references: [id])
 
   @@index([ratePartyType, ratePartyId])
+  @@index([tripId])
 }
 
-model AdvanceRecord {
-  id                    String   @id @default(uuid())
-  date                  DateTime
-  tripId                Int?
-  ratePartyType         String?
-  ratePartyId           String?
-  counterpartyName      String
-  fromAccount           String
-  toAccount             String
-  place                 String
-  invoiceDCNumber       String
-  ownerAndTransporterName String
-  vehicleNumber         String
-  purpose               String
-  amount                Float
-  voucherSlipUpload     String
-  remarks               String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  @@index([date])
-  @@index([ratePartyType, ratePartyId])
-}
-
-model DailyExpenseRecord {
-  id               String   @id @default(uuid())
-  date             DateTime
-  from             String
-  to               String
-  via              String
-  ratePartyType    String?
-  ratePartyId      String?
-  counterpartyName String
-  amount           Float
-  category         String
-  subCategory      String
-  remarks          String
-  availableBalance Float
-  closingBalance   Float
-  type             String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([date])
-  @@index([from])
-}
-
-model DailyExpenseOpeningBalance {
-  id             String   @id @default(uuid())
-  supervisorName String   @unique
-  amount         Float
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
+// AdvanceRecord removed - merged into PaymentRecord
+// DailyExpenseRecord removed - merged into PaymentRecord
+// DailyExpenseOpeningBalance removed - merged into PaymentRecord
 
 model TripRecord {
   id                    Int      @id @default(autoincrement())
@@ -374,6 +325,10 @@ model TripRecord {
   materialCost          Float
   transportCost         Float
   royaltyCost           Float
+  rateMode              String   @default("activity")
+  allInCostPerTon        Float   @default(0)
+  allInCost             Float   @default(0)
+  customerRatePerTon    Float   @default(0)
   profit                Float
   paymentStatus         String
   agent                 String
@@ -430,17 +385,17 @@ model PaymentRecord {
   headAccount     String?
   ratePartyType   String?
   ratePartyId     String?
-  counterpartyName String?
   amount          Float
   type            String
-  method          String?
   remarks         String?
   via             String?
   fromAccount     String?
   toAccount       String?
   category        String?
   subCategory     String?
-  siteExpense     Boolean  @default(false)
+  ratePartyName   String?
+  paymentReceiptUploads Json?
+  bankAccountUploads Json?
   voucherUploads  Json?
   availableBalance Float?
   closingBalance  Float?

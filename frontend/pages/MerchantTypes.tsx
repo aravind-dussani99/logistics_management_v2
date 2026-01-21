@@ -9,7 +9,7 @@ const ITEMS_PER_PAGE = 10;
 
 const MerchantTypesPage: React.FC = () => {
   const { merchantTypes, addMerchantType, updateMerchantType, deleteMerchantType, loadMerchantTypes, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -47,7 +47,8 @@ const MerchantTypesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this merchant type?')) return;
+    const shouldDelete = await confirm('Delete Merchant Type', 'Delete this merchant type?');
+    if (!shouldDelete) return;
     await deleteMerchantType(id);
   };
 

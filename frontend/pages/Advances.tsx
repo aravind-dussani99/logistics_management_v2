@@ -14,7 +14,7 @@ const ITEMS_PER_PAGE = 10;
 
 const AdvancesPage: React.FC = () => {
     const { advances, deleteAdvance, loadAdvances, loadAccounts, loadMineQuarries, loadVendorCustomers, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
-    const { openModal, closeModal } = useUI();
+    const { openModal, closeModal, confirm } = useUI();
     const [currentPage, setCurrentPage] = useState(1);
     const [filters, setFilters] = useState<Filters>({});
 
@@ -36,9 +36,9 @@ const AdvancesPage: React.FC = () => {
     }
 
     const handleDelete = async (id: string) => {
-        if(window.confirm('Are you sure you want to delete this advance record?')) {
-            await deleteAdvance(id);
-        }
+        const shouldDelete = await confirm('Delete Advance', 'Are you sure you want to delete this advance record?');
+        if (!shouldDelete) return;
+        await deleteAdvance(id);
     }
     
     const filteredAdvances = useMemo(() => {

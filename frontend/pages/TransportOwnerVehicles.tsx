@@ -9,7 +9,7 @@ const ITEMS_PER_PAGE = 10;
 
 const TransportOwnerVehiclesPage: React.FC = () => {
   const { transportOwnerVehicles, transportOwnerProfiles, vehicleMasters, addTransportOwnerVehicle, updateTransportOwnerVehicle, deleteTransportOwnerVehicle, loadTransportOwnerVehicles, loadTransportOwnerProfiles, loadVehicleMasters, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -49,7 +49,8 @@ const TransportOwnerVehiclesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this assignment?')) return;
+    const shouldDelete = await confirm('Delete Assignment', 'Delete this assignment?');
+    if (!shouldDelete) return;
     await deleteTransportOwnerVehicle(id);
   };
 

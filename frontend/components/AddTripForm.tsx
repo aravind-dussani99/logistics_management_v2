@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/mockApi';
 import { findBestFuzzyMatch, normalizeMatchValue } from '../utils';
 import { useData } from '../contexts/DataContext';
+import { useUI } from '../contexts/UIContext';
 import { Trip, TripRateOverride, Role } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -101,6 +102,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         royaltyOwnerProfiles,
         transportOwnerProfiles,
     } = useData();
+    const { confirm } = useUI();
 
     const [formData, setFormData] = useState(initialFormData);
     const [files, setFiles] = useState<{ [key: string]: string }>({});
@@ -233,34 +235,38 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
         setIsSubmitting(true);
         const normalizeSiteName = (value?: string) => (value || '').trim();
 
-        const suggestName = (label: string, value: string, candidates: string[]) => {
+        const suggestName = async (label: string, value: string, candidates: string[]) => {
             const trimmed = normalizeMatchValue(value);
             if (!trimmed) return trimmed;
             const exact = candidates.find(item => item.trim().toLowerCase() === trimmed.toLowerCase());
             if (exact) return exact;
             const suggestion = findBestFuzzyMatch(trimmed, candidates);
-            if (suggestion && window.confirm(`"${trimmed}" looks similar to "${suggestion.name}" for ${label}.\nUse "${suggestion.name}" instead?`)) {
-                return suggestion.name;
+            if (suggestion) {
+                const shouldUse = await confirm(
+                    'Use Suggested Value?',
+                    `"${trimmed}" looks similar to "${suggestion.name}" for ${label}. Use "${suggestion.name}" instead?`
+                );
+                if (shouldUse) return suggestion.name;
             }
             return trimmed;
         };
 
-        const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
-        const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
-        const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
+        const pickupName = await suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
+        const dropOffName = await suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
+        const materialName = await suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
         const netWeight = parseFloat(formData.netWeight) || 0;
         
         const resolvedCustomerName = oneOffSelection.customer
-            ? suggestName('Vendor & Customer', oneOffValues.customer, vendorCustomers.map(item => item.name))
+            ? await suggestName('Vendor & Customer', oneOffValues.customer, vendorCustomers.map(item => item.name))
             : normalizeMatchValue(formData.customer);
         const resolvedQuarryName = oneOffSelection.quarryName
-            ? suggestName('Mine & Quarry', oneOffValues.quarryName, mineQuarries.map(item => item.name))
+            ? await suggestName('Mine & Quarry', oneOffValues.quarryName, mineQuarries.map(item => item.name))
             : normalizeMatchValue(formData.quarryName);
         const resolvedRoyaltyName = oneOffSelection.royaltyOwnerName
-            ? suggestName('Royalty Owner', oneOffValues.royaltyOwnerName, royaltyOwnerProfiles.map(item => item.name))
+            ? await suggestName('Royalty Owner', oneOffValues.royaltyOwnerName, royaltyOwnerProfiles.map(item => item.name))
             : normalizeMatchValue(formData.royaltyOwnerName);
         const resolvedTransportName = oneOffSelection.transporterName
-            ? suggestName('Transport Owner', oneOffValues.transporterName, transportOwnerProfiles.map(item => item.name))
+            ? await suggestName('Transport Owner', oneOffValues.transporterName, transportOwnerProfiles.map(item => item.name))
             : normalizeMatchValue(formData.transporterName);
         const resolvedVehicleNumber = oneOffSelection.vehicleNumber
             ? normalizeMatchValue(oneOffValues.vehicleNumber).toUpperCase().replace(/[^A-Z0-9]/g, '')

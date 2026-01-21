@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const MineQuarryDataPage: React.FC = () => {
   const { mineQuarries, merchantTypes, siteLocations, addMineQuarry, updateMineQuarry, deleteMineQuarry, mergeMineQuarry, loadMineQuarries, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -67,8 +67,13 @@ const MineQuarryDataPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this record?')) return;
-    await deleteMineQuarry(id);
+    const shouldDelete = await confirm('Delete Mine/Quarry', 'Delete this record?');
+    if (!shouldDelete) return;
+    try {
+      await deleteMineQuarry(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this mine/quarry. It may be referenced by trips or rates.');
+    }
   };
 
   const handleMerge = (row: MineQuarryData) => {

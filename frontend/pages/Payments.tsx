@@ -5,17 +5,10 @@ import PaymentForm from '../components/PaymentForm';
 import ConfirmDeleteDialog from '../components/ConfirmDeleteDialog';
 import { useData } from '../contexts/DataContext';
 import { useUI } from '../contexts/UIContext';
-import { Payment, PaymentType, RatePartyType } from '../types';
+import { Payment, PaymentType } from '../types';
 import { formatCurrency, formatDateDisplay } from '../utils';
 
 const ITEMS_PER_PAGE = 12;
-
-const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
-  'vendor-customer': 'Vendor & Customer',
-  'mine-quarry': 'Mine & Quarry',
-  'royalty-owner': 'Royalty Owner',
-  'transport-owner': 'Transport & Owner',
-};
 
 const getMtdRange = () => {
   const today = new Date();
@@ -75,10 +68,11 @@ const Payments: React.FC = () => {
         if (filters.type !== 'all' && payment.type !== filters.type) return false;
         if (filters.query) {
           const query = filters.query.toLowerCase();
-          const ratePartyName = payment.ratePartyId && payment.ratePartyType
-            ? (ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || '')
-            : '';
-          const counterparty = payment.counterpartyName || '';
+          const ratePartyName = payment.ratePartyName
+            || (payment.ratePartyId && payment.ratePartyType
+              ? (ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || '')
+              : '');
+          const counterparty = payment.ratePartyName || '';
           const headAccount = payment.headAccount || '';
           const fromAccount = payment.fromAccount || '';
           const toAccount = payment.toAccount || '';
@@ -112,7 +106,7 @@ const Payments: React.FC = () => {
   };
 
   const handleView = (payment: Payment) => {
-    openModal('View Payment', <PaymentForm initialData={payment} onSave={() => {}} onClose={closeModal} isViewMode />);
+    openModal('View Payment', <PaymentForm initialData={payment} onSave={() => { }} onClose={closeModal} isViewMode />);
   };
 
   const handleDelete = (payment: Payment) => {
@@ -140,15 +134,47 @@ const Payments: React.FC = () => {
   };
 
   const getRatePartyName = (payment: Payment) => {
+    if (payment.ratePartyName) return payment.ratePartyName;
     if (!payment.ratePartyType || !payment.ratePartyId) return '-';
     return ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || '-';
+  };
+
+  const parseUploadValue = (value?: unknown) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(String(value));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const renderUploadLinks = (value?: unknown) => {
+    const items = parseUploadValue(value);
+    if (!items.length) return '-';
+    return (
+      <div className="space-y-1">
+        {items.map((file: { name?: string; url?: string }, idx: number) => (
+          <a
+            key={`${file.name || 'file'}-${idx}`}
+            href={file.url || '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="block text-xs text-primary hover:underline"
+          >
+            {file.name || 'Attachment'}
+          </a>
+        ))}
+      </div>
+    );
   };
 
   return (
     <div className="relative">
       <PageHeader
         title="Payments"
-        subtitle="Track payment and receipt entries by head account and rate party."
+        subtitle="Track payment and receipt entries by head account and counterparty."
         filters={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
         onFilterChange={(next) => setFilters(prev => ({ ...prev, ...next }))}
         filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
@@ -170,7 +196,7 @@ const Payments: React.FC = () => {
             </select>
           </div>
           <div className="min-w-[260px] flex-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Head Account / Rate Party</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Head Account / Counterparty</label>
             <input
               type="text"
               value={filters.query}
@@ -189,7 +215,24 @@ const Payments: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {['S. No.', 'Date', 'Type', 'Head Account', 'From/To', 'Rate Party Type', 'Rate Party', 'Amount', 'Remarks', 'Actions'].map(header => (
+                  {[
+                    'S. No.',
+                    'Date',
+                    'Transaction Type',
+                    'From Account',
+                    'To Account',
+                    'Counterparty Name',
+                    'Amount',
+                    'Remarks',
+                    'Head Account',
+                    'Via',
+                    'Trip ID',
+                    'Category',
+                    'Sub-Category',
+                    'Payment Receipt',
+                    'Bank Details',
+                    'Actions',
+                  ].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
                     </th>
@@ -206,18 +249,20 @@ const Payments: React.FC = () => {
                         {payment.type === PaymentType.PAYMENT ? 'Payment' : 'Receipt'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.headAccount || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {payment.type === PaymentType.PAYMENT
-                        ? `To: ${payment.toAccount || '-'}` 
-                        : `From: ${payment.fromAccount || '-'}`}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.ratePartyType ? RATE_PARTY_LABELS[payment.ratePartyType as RatePartyType] : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.fromAccount || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.toAccount || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{getRatePartyName(payment)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${payment.type === PaymentType.PAYMENT ? 'text-red-500' : 'text-green-500'}`}>
                       {payment.type === PaymentType.PAYMENT ? '-' : '+'} {formatCurrency(payment.amount)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm max-w-xs truncate">{payment.remarks || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.headAccount || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.via || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.tripId ? `#${payment.tripId}` : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.category || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{payment.subCategory || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{renderUploadLinks(payment.paymentReceiptUploads)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{renderUploadLinks(payment.bankAccountUploads)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button onClick={() => handleView(payment)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
                       <button onClick={() => handleEdit(payment)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
@@ -227,7 +272,7 @@ const Payments: React.FC = () => {
                 ))}
                 {paginatedPayments.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={12} className="px-6 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                       No payments found for the selected filters.
                     </td>
                   </tr>

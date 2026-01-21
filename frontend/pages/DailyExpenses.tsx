@@ -130,7 +130,7 @@ const DailyExpenses: React.FC = () => {
             headAccount: '',
             category: '',
             subCategory: '',
-            counterpartyName: '',
+            ratePartyName: '',
             siteExpense: false,
         };
         

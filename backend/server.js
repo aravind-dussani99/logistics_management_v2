@@ -36,6 +36,32 @@ const UPLOAD_FIELD_LABELS = {
   endWaymentSlipUpload: 'end_wayment_slip',
 };
 
+const isPrismaKnownError = (error) => Boolean(error && typeof error === 'object' && 'code' in error);
+
+const withPrismaRetry = async (fn) => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P1017') {
+      try {
+        await prisma.$disconnect();
+      } catch (disconnectError) {
+        console.warn('Failed to disconnect prisma after P1017', disconnectError);
+      }
+      await prisma.$connect();
+      return await fn();
+    }
+    throw error;
+  }
+};
+
+const respondDeleteConflict = (res, label) => {
+  res.status(409).json({
+    error: `Cannot delete ${label} because it is in use.`,
+    hint: `Merge ${label} into another record or update related trips before deleting.`,
+  });
+};
+
 const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login', '/api/auth/reset-admin-password']);
 
 const signToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
@@ -325,6 +351,63 @@ const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) 
     },
   });
   return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
+const storePaymentAttachment = async ({ buffer, mime, payment, req, sequence, fieldKey }) => {
+  const dateFolder = formatDateFolder(payment.date);
+  const ratePartyType = slugify(payment.ratePartyType || 'party');
+  const ratePartyName = slugify(payment.ratePartyName || 'unknown');
+  const tripId = payment.tripId || 'no-trip';
+  const ext = extensionFromMime(mime) || '.bin';
+  const suffix = sequence ? `_${sequence}` : '';
+  const label = slugify(fieldKey || 'attachment');
+  const fileName = `${dateFolder}_${ratePartyType}_${ratePartyName}_${tripId}_${label}${suffix}${ext}`;
+  const objectPath = path.posix.join('payments', dateFolder, fileName);
+
+  if (!ATTACHMENTS_BUCKET) {
+    const targetPath = path.join(UPLOADS_ROOT, objectPath);
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, buffer);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return `${baseUrl}/uploads/${objectPath}`;
+  }
+
+  const file = storage.bucket(ATTACHMENTS_BUCKET).file(objectPath);
+  await file.save(buffer, {
+    contentType: mime || undefined,
+    resumable: false,
+    metadata: {
+      cacheControl: 'public, max-age=31536000',
+    },
+  });
+  return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
+const normalizePaymentUploadField = async ({ fieldValue, payment, req, fieldKey }) => {
+  const list = parseUploadList(fieldValue);
+  if (list.length === 0) return null;
+
+  const updated = [];
+  let sequence = 0;
+  for (const item of list) {
+    const parsed = parseDataUrl(item.url);
+    if (!parsed) {
+      updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
+      continue;
+    }
+    sequence += 1;
+    const storedUrl = await storePaymentAttachment({
+      buffer: parsed.buffer,
+      mime: parsed.mime,
+      payment,
+      req,
+      sequence,
+      fieldKey,
+    });
+    updated.push({ name: item.name, url: storedUrl });
+  }
+
+  return updated;
 };
 
 const toPublicUrl = (value) => {
@@ -667,8 +750,8 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyType TEXT NOT NULL DEFAULT 'vendor-customer'`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyId TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyType TEXT NOT NULL DEFAULT 'vendor-customer'`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE MerchantBankAccount ADD COLUMN ratePartyId TEXT NOT NULL DEFAULT ''`).catch(() => { });
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS MineQuarry (
       id TEXT PRIMARY KEY,
@@ -775,6 +858,7 @@ const ensureMerchantTables = async () => {
       ratePartyId TEXT NOT NULL,
       pickupLocationId TEXT NOT NULL,
       dropOffLocationId TEXT NOT NULL,
+      tripId INTEGER,
       totalKm REAL NOT NULL,
       ratePerKm REAL NOT NULL,
       ratePerTon REAL NOT NULL,
@@ -790,7 +874,8 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN status TEXT NOT NULL DEFAULT 'Active'`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN status TEXT NOT NULL DEFAULT 'Active'`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE MaterialRate ADD COLUMN tripId INTEGER`).catch(() => { });
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS VehicleMaster (
       id TEXT PRIMARY KEY,
@@ -827,10 +912,10 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyId TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN remarks TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN ratePartyId TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE AdvanceRecord ADD COLUMN remarks TEXT NOT NULL DEFAULT ''`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS DailyExpenseRecord (
@@ -853,12 +938,12 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyId TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN via TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN category TEXT NOT NULL DEFAULT ''`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN subCategory TEXT NOT NULL DEFAULT ''`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN ratePartyId TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN counterpartyName TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN via TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN category TEXT NOT NULL DEFAULT ''`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE DailyExpenseRecord ADD COLUMN subCategory TEXT NOT NULL DEFAULT ''`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS DailyExpenseOpeningBalance (
@@ -924,11 +1009,11 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestMessage TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestBy TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestRole TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestAt TIMESTAMP`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestMessage TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestBy TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestRole TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestAt TIMESTAMP`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS NotificationRecord (
@@ -949,13 +1034,13 @@ const ensureMerchantTables = async () => {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN targetUser TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN tripId INTEGER`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestType TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => {});
-  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => {});
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN targetUser TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN tripId INTEGER`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestType TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterName TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterRole TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requestMessage TEXT`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE NotificationRecord ADD COLUMN requesterContact TEXT`).catch(() => { });
 };
 
 const ensureSeedData = async () => {
@@ -1076,6 +1161,9 @@ app.delete('/api/site-locations/:id', async (req, res) => {
     await prisma.siteLocation.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'site location');
+    }
     console.error('Failed to delete site location', error);
     res.status(500).json({ error: 'Failed to delete site location' });
   }
@@ -1425,166 +1513,9 @@ app.delete('/api/account-types/:id', async (req, res) => {
   }
 });
 
-app.get('/api/advances', async (req, res) => {
-  try {
-    const advances = await prisma.advanceRecord.findMany({
-      orderBy: { date: 'desc' },
-    });
-    res.json(advances);
-  } catch (error) {
-    console.error('Failed to list advances', error);
-    res.status(500).json({ error: 'Failed to list advances' });
-  }
-});
-
-app.post('/api/advances', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const {
-    date,
-    tripId = null,
-    ratePartyType = null,
-    ratePartyId = null,
-    counterpartyName = '',
-    fromAccount,
-    toAccount,
-    place = '',
-    invoiceDCNumber = '',
-    ownerAndTransporterName = '',
-    vehicleNumber = '',
-    purpose,
-    amount = 0,
-    voucherSlipUpload = '',
-    remarks = '',
-  } = req.body || {};
-
-  if (!date || !fromAccount || !toAccount || !purpose) {
-    return res.status(400).json({ error: 'Date, from account, to account, and purpose are required.' });
-  }
-  try {
-    const advance = await prisma.advanceRecord.create({
-      data: {
-        date: new Date(date),
-        tripId: tripId ? Number(tripId) : null,
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
-        fromAccount,
-        toAccount,
-        place,
-        invoiceDCNumber,
-        ownerAndTransporterName,
-        vehicleNumber,
-        purpose,
-        amount: Number(amount) || 0,
-        voucherSlipUpload,
-        remarks,
-      },
-    });
-    res.status(201).json(advance);
-  } catch (error) {
-    console.error('Failed to create advance', error);
-    res.status(500).json({ error: 'Failed to create advance' });
-  }
-});
-
-app.put('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER', 'PICKUP_SUPERVISOR', 'DROPOFF_SUPERVISOR'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const { id } = req.params;
-  const {
-    date,
-    tripId = null,
-    ratePartyType = null,
-    ratePartyId = null,
-    counterpartyName = '',
-    fromAccount,
-    toAccount,
-    place = '',
-    invoiceDCNumber = '',
-    ownerAndTransporterName = '',
-    vehicleNumber = '',
-    purpose,
-    amount = 0,
-    voucherSlipUpload = '',
-    remarks = '',
-  } = req.body || {};
-
-  if (!date || !fromAccount || !toAccount || !purpose) {
-    return res.status(400).json({ error: 'Date, from account, to account, and purpose are required.' });
-  }
-  try {
-    const advance = await prisma.advanceRecord.update({
-      where: { id },
-      data: {
-        date: new Date(date),
-        tripId: tripId ? Number(tripId) : null,
-        ratePartyType,
-        ratePartyId,
-        counterpartyName,
-        fromAccount,
-        toAccount,
-        place,
-        invoiceDCNumber,
-        ownerAndTransporterName,
-        vehicleNumber,
-        purpose,
-        amount: Number(amount) || 0,
-        voucherSlipUpload,
-        remarks,
-      },
-    });
-    res.json(advance);
-  } catch (error) {
-    console.error('Failed to update advance', error);
-    res.status(500).json({ error: 'Failed to update advance' });
-  }
-});
-
-app.delete('/api/advances/:id', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const { id } = req.params;
-  try {
-    await prisma.advanceRecord.delete({ where: { id } });
-    res.status(204).end();
-  } catch (error) {
-    console.error('Failed to delete advance', error);
-    res.status(500).json({ error: 'Failed to delete advance' });
-  }
-});
-
-app.get('/api/advances/export', async (req, res) => {
-  if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  try {
-    const advances = await prisma.advanceRecord.findMany({ orderBy: { date: 'desc' } });
-    const header = ['Date', 'From', 'To', 'Purpose', 'Amount', 'Trip Id', 'Rate Party Type', 'Rate Party Id', 'Counterparty', 'Remarks'];
-    const rows = advances.map(item => ([
-      item.date.toISOString().split('T')[0],
-      item.fromAccount,
-      item.toAccount,
-      item.purpose,
-      item.amount,
-      item.tripId || '',
-      item.ratePartyType || '',
-      item.ratePartyId || '',
-      item.counterpartyName || '',
-      item.remarks || '',
-    ]));
-    const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="advances.csv"');
-    res.send(csv);
-  } catch (error) {
-    console.error('Failed to export advances', error);
-    res.status(500).json({ error: 'Failed to export advances' });
-  }
-});
+// Advances API endpoints have been deprecated.
+// Advances are now tracked within the PaymentRecord table (remarks field) or as standard payments.
+// Users should use the Payments interface.
 
 app.get('/api/payments', async (req, res) => {
   if (!hasRole(req.user, ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SITE_MANAGER'])) {
@@ -1618,43 +1549,85 @@ app.post('/api/payments', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
-    counterpartyName = '',
+    ratePartyName,
     amount = 0,
     type = 'PAYMENT',
-    method = '',
     remarks = '',
     via = '',
     fromAccount = '',
     toAccount = '',
     category = '',
     subCategory = '',
-    siteExpense = false,
     voucherUploads = null,
+    paymentReceiptUpload = null,
+    paymentReceiptUploads = null,
+    bankAccountUploads = null,
     tripId = null,
   } = req.body || {};
-  if (!date || !headAccount || !toAccount) {
-    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  if (!date) {
+    return res.status(400).json({ error: 'Date is required.' });
+  }
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!fromAccount) {
+    return res.status(400).json({ error: 'From account is required.' });
+  }
+  const resolvedRatePartyName = ratePartyName || '';
+  if (!resolvedRatePartyName) {
+    return res.status(400).json({ error: 'Rate party name is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
   }
   try {
+    const receiptPayload = paymentReceiptUploads ?? paymentReceiptUpload;
+    const processedReceiptUploads = receiptPayload
+      ? await normalizePaymentUploadField({
+        fieldValue: receiptPayload,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: resolvedRatePartyName,
+          tripId,
+        },
+        req,
+        fieldKey: 'payment_receipt',
+      })
+      : null;
+    const processedBankUploads = bankAccountUploads
+      ? await normalizePaymentUploadField({
+        fieldValue: bankAccountUploads,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: resolvedRatePartyName,
+          tripId,
+        },
+        req,
+        fieldKey: 'bank_account',
+      })
+      : null;
+
     const payment = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
         entryType: 'PAYMENT',
-        headAccount,
+        headAccount: headAccount || null,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName: counterpartyName || null,
+        ratePartyName: resolvedRatePartyName || null,
         amount: Number(amount) || 0,
         type,
-        method,
-        remarks,
-        via,
-        fromAccount,
-        toAccount,
-        category,
-        subCategory,
-        siteExpense: Boolean(siteExpense),
+        remarks: remarks || null,
+        via: via || null,
+        fromAccount: fromAccount || null,
+        toAccount: toAccount || null,
+        category: category || null,
+        subCategory: subCategory || null,
         voucherUploads,
+        paymentReceiptUploads: processedReceiptUploads,
+        bankAccountUploads: processedBankUploads,
         createdBy: getUserDisplayName(req.user),
         tripId: tripId ? Number(tripId) : null,
       },
@@ -1676,44 +1649,92 @@ app.put('/api/payments/:id', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
-    counterpartyName = '',
+    ratePartyName,
     amount = 0,
     type = 'PAYMENT',
-    method = '',
     remarks = '',
     via = '',
     fromAccount = '',
     toAccount = '',
     category = '',
     subCategory = '',
-    siteExpense = false,
     voucherUploads = null,
+    paymentReceiptUpload,
+    paymentReceiptUploads,
+    bankAccountUploads,
     tripId = null,
   } = req.body || {};
-  if (!date || !headAccount || !toAccount) {
-    return res.status(400).json({ error: 'Date, head account, and destination are required.' });
+  if (!date) {
+    return res.status(400).json({ error: 'Date is required.' });
+  }
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!fromAccount) {
+    return res.status(400).json({ error: 'From account is required.' });
+  }
+  const resolvedRatePartyName = ratePartyName || '';
+  if (!resolvedRatePartyName) {
+    return res.status(400).json({ error: 'Rate party name is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
   }
   try {
+    let processedReceiptUploads;
+    const receiptPayload = paymentReceiptUploads ?? paymentReceiptUpload;
+    if (receiptPayload !== undefined) {
+      processedReceiptUploads = receiptPayload
+        ? await normalizePaymentUploadField({
+          fieldValue: receiptPayload,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: resolvedRatePartyName,
+            tripId,
+          },
+          req,
+          fieldKey: 'payment_receipt',
+        })
+        : null;
+    }
+    let processedBankUploads;
+    if (bankAccountUploads !== undefined) {
+      processedBankUploads = bankAccountUploads
+        ? await normalizePaymentUploadField({
+          fieldValue: bankAccountUploads,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: resolvedRatePartyName,
+            tripId,
+          },
+          req,
+          fieldKey: 'bank_account',
+        })
+        : null;
+    }
+
     const payment = await prisma.paymentRecord.update({
       where: { id },
       data: {
         date: new Date(date),
         entryType: 'PAYMENT',
-        headAccount,
+        headAccount: headAccount || null,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName: counterpartyName || null,
+        ratePartyName: resolvedRatePartyName || null,
         amount: Number(amount) || 0,
         type,
-        method,
-        remarks,
-        via,
-        fromAccount,
-        toAccount,
-        category,
-        subCategory,
-        siteExpense: Boolean(siteExpense),
+        remarks: remarks || null,
+        via: via || null,
+        fromAccount: fromAccount || null,
+        toAccount: toAccount || null,
+        category: category || null,
+        subCategory: subCategory || null,
         voucherUploads,
+        ...(processedReceiptUploads !== undefined ? { paymentReceiptUploads: processedReceiptUploads } : {}),
+        ...(processedBankUploads !== undefined ? { bankAccountUploads: processedBankUploads } : {}),
         tripId: tripId ? Number(tripId) : null,
       },
     });
@@ -1763,7 +1784,7 @@ app.get('/api/daily-expenses', async (req, res) => {
         headAccount: expense.headAccount || '',
         ratePartyType: expense.ratePartyType || undefined,
         ratePartyId: expense.ratePartyId || undefined,
-        counterpartyName: expense.counterpartyName || '',
+        ratePartyName: expense.ratePartyName || '',
         amount: expense.amount,
         category: expense.category || '',
         subCategory: expense.subCategory || '',
@@ -1771,7 +1792,6 @@ app.get('/api/daily-expenses', async (req, res) => {
         availableBalance: expense.availableBalance ?? 0,
         closingBalance: expense.closingBalance ?? 0,
         type: expense.type,
-        siteExpense: Boolean(expense.siteExpense),
         voucherUploads: expense.voucherUploads,
       })),
     });
@@ -1799,7 +1819,7 @@ app.get('/api/daily-expenses/all', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1807,7 +1827,6 @@ app.get('/api/daily-expenses/all', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     })));
   } catch (error) {
@@ -1827,14 +1846,13 @@ app.post('/api/daily-expenses', async (req, res) => {
     via = '',
     ratePartyType = null,
     ratePartyId = null,
-    counterpartyName = '',
+    ratePartyName = '',
     amount = 0,
     category = '',
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
     headAccount = '',
-    siteExpense = false,
     voucherUploads = null,
   } = req.body || {};
 
@@ -1863,7 +1881,7 @@ app.post('/api/daily-expenses', async (req, res) => {
         via,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName,
+        ratePartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
@@ -1871,7 +1889,6 @@ app.post('/api/daily-expenses', async (req, res) => {
         availableBalance,
         closingBalance,
         type,
-        siteExpense: Boolean(siteExpense),
         voucherUploads,
         createdBy: getUserDisplayName(req.user),
       },
@@ -1886,7 +1903,7 @@ app.post('/api/daily-expenses', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1894,7 +1911,6 @@ app.post('/api/daily-expenses', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     });
   } catch (error) {
@@ -1915,14 +1931,13 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     via = '',
     ratePartyType = null,
     ratePartyId = null,
-    counterpartyName = '',
+    ratePartyName = '',
     amount = 0,
     category = '',
     subCategory = '',
     remarks = '',
     type = 'DEBIT',
     headAccount = '',
-    siteExpense = false,
     voucherUploads = null,
   } = req.body || {};
 
@@ -1942,13 +1957,12 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
         via,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName,
+        ratePartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
         remarks,
         type,
-        siteExpense: Boolean(siteExpense),
         voucherUploads,
       },
     });
@@ -1962,7 +1976,7 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1970,7 +1984,6 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
       availableBalance: expense.availableBalance ?? 0,
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
-      siteExpense: Boolean(expense.siteExpense),
       voucherUploads: expense.voucherUploads,
     });
   } catch (error) {
@@ -2009,7 +2022,7 @@ app.get('/api/daily-expenses/export', async (req, res) => {
       where,
       orderBy: { date: 'desc' },
     });
-    const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Counterparty'];
+    const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Rate Party Name'];
     const rows = expenses.map(item => ([
       item.date.toISOString().split('T')[0],
       item.fromAccount || '',
@@ -2023,7 +2036,7 @@ app.get('/api/daily-expenses/export', async (req, res) => {
       item.closingBalance ?? '',
       item.ratePartyType || '',
       item.ratePartyId || '',
-      item.counterpartyName || '',
+      item.ratePartyName || '',
     ]));
     const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv');
@@ -2039,11 +2052,13 @@ app.get('/api/trips', async (req, res) => {
   try {
     const where = {};
     // No pickup/dropoff restriction for supervisors at this stage.
-    const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
-    const activityCounts = await prisma.tripActivityRecord.groupBy({
-      by: ['tripId'],
-      _count: { _all: true },
-    });
+    const [trips, activityCounts] = await withPrismaRetry(async () => Promise.all([
+      prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } }),
+      prisma.tripActivityRecord.groupBy({
+        by: ['tripId'],
+        _count: { _all: true },
+      }),
+    ]));
     const activityMap = new Map(activityCounts.map(entry => [entry.tripId, entry._count._all]));
     const hydrated = await Promise.all(trips.map(async (trip) => {
       const updated = { ...trip, activityCount: activityMap.get(trip.id) || 0 };
@@ -2132,7 +2147,7 @@ app.post('/api/trips/:id/activity', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
   const { role, user } = req.query;
   try {
-  const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER']);
+    const isAdmin = hasRole(req.user, ['ADMIN', 'MANAGER', 'SITE_MANAGER']);
     const effectiveRole = isAdmin ? role : (req.user?.role || role);
     const effectiveUser = isAdmin ? user : (getUserDisplayName(req.user) || user);
     const where = {
@@ -2262,6 +2277,10 @@ app.post('/api/trips', async (req, res) => {
         materialCost: Number(data.materialCost || 0),
         transportCost: Number(data.transportCost || 0),
         royaltyCost: Number(data.royaltyCost || 0),
+        rateMode: data.rateMode || 'activity',
+        allInCostPerTon: Number(data.allInCostPerTon || 0),
+        allInCost: Number(data.allInCost || 0),
+        customerRatePerTon: Number(data.customerRatePerTon || 0),
         profit: Number(data.profit || 0),
         paymentStatus: data.paymentStatus || 'unpaid',
         agent: data.agent || '',
@@ -2315,8 +2334,7 @@ app.post('/api/trips/atomic', async (req, res) => {
     return created.id;
   };
 
-  try {
-    const createdTrip = await prisma.$transaction(async (tx) => {
+  const runTripTransaction = async () => prisma.$transaction(async (tx) => {
       const merchantTypeId = await findMerchantType(tx);
       const pickupName = (data.pickupPlace || '').trim();
       const dropOffName = (data.dropOffPlace || '').trim();
@@ -2335,16 +2353,16 @@ app.post('/api/trips/atomic', async (req, res) => {
         ? pickupLocation
         : shouldCreatePickup
           ? await tx.siteLocation.create({
-              data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
-            })
+            data: { name: pickupName, type: 'pickup', address: '', pointOfContact: '', remarks: '' },
+          })
           : null;
 
       const ensuredDropOff = !dropOffName || dropOffLocation
         ? dropOffLocation
         : shouldCreateDropOff
           ? await tx.siteLocation.create({
-              data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
-            })
+            data: { name: dropOffName, type: 'drop-off', address: '', pointOfContact: '', remarks: '' },
+          })
           : null;
 
       const lookupByName = async (model, name, allowCreate, defaults = {}) => {
@@ -2419,15 +2437,15 @@ app.post('/api/trips/atomic', async (req, res) => {
         ? existingVehicle
         : Boolean(createMasters.vehicleMaster ?? true)
           ? await tx.vehicleMaster.create({
-              data: {
-                vehicleNumber: normalizedVehicle,
-                vehicleType: '',
-                capacity: 0,
-                ownerName: '',
-                contactNumber: '',
-                remarks: '',
-              },
-            })
+            data: {
+              vehicleNumber: normalizedVehicle,
+              vehicleType: '',
+              capacity: 0,
+              ownerName: '',
+              contactNumber: '',
+              remarks: '',
+            },
+          })
           : null;
 
       const trip = await tx.tripRecord.create({
@@ -2463,6 +2481,10 @@ app.post('/api/trips/atomic', async (req, res) => {
           materialCost: Number(data.materialCost || 0),
           transportCost: Number(data.transportCost || 0),
           royaltyCost: Number(data.royaltyCost || 0),
+          rateMode: data.rateMode || 'activity',
+          allInCostPerTon: Number(data.allInCostPerTon || 0),
+          allInCost: Number(data.allInCost || 0),
+          customerRatePerTon: Number(data.customerRatePerTon || 0),
           profit: Number(data.profit || 0),
           paymentStatus: data.paymentStatus || 'unpaid',
           agent: data.agent || '',
@@ -2478,7 +2500,19 @@ app.post('/api/trips/atomic', async (req, res) => {
         },
       });
       return trip;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
+
+  try {
+    let createdTrip;
+    try {
+      createdTrip = await runTripTransaction();
+    } catch (error) {
+      if (error?.code === 'P2028' || String(error?.message || '').includes('Transaction not found')) {
+        createdTrip = await runTripTransaction();
+      } else {
+        throw error;
+      }
+    }
     res.status(201).json(createdTrip);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create trip with masters';
@@ -2931,6 +2965,9 @@ app.delete('/api/vehicle-masters/:id', async (req, res) => {
     await prisma.vehicleMaster.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'vehicle');
+    }
     console.error('Failed to delete vehicle', error);
     res.status(500).json({ error: 'Failed to delete vehicle' });
   }
@@ -3005,11 +3042,103 @@ const getBankAccountRatePartyName = async (ratePartyType, ratePartyId) => {
   return getRatePartyName(ratePartyType, ratePartyId);
 };
 
+const ensureMerchantType = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.merchantType.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.merchantType.create({
+    data: { name: trimmed, remarks: 'Auto-created from trip rates.' },
+  });
+};
+
+const ensureSiteLocation = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.siteLocation.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.siteLocation.create({
+    data: {
+      name: trimmed,
+      type: 'GENERIC',
+      address: '',
+      pointOfContact: '',
+      remarks: 'Auto-created from trip rates.',
+    },
+  });
+};
+
+const ensureMaterialType = async (tx, name) => {
+  const trimmed = (name || '').trim() || 'Unknown';
+  const existing = await tx.materialTypeDefinition.findFirst({ where: { name: trimmed } });
+  if (existing) return existing;
+  return tx.materialTypeDefinition.create({
+    data: { name: trimmed, remarks: 'Auto-created from trip rates.' },
+  });
+};
+
+const ensureRateParty = async (tx, ratePartyType, name) => {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return null;
+  const merchantTypeNameMap = {
+    'vendor-customer': 'Vendor & Customer',
+    'mine-quarry': 'Mine & Quarry',
+    'royalty-owner': 'Royalty Owner',
+    'transport-owner': 'Transport & Owner',
+  };
+  const merchantType = await ensureMerchantType(tx, merchantTypeNameMap[ratePartyType] || 'Unknown');
+  switch (ratePartyType) {
+    case 'mine-quarry': {
+      const existing = await tx.mineQuarry.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.mineQuarry.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'vendor-customer': {
+      const existing = await tx.vendorCustomer.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.vendorCustomer.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'royalty-owner': {
+      const existing = await tx.royaltyOwnerProfile.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.royaltyOwnerProfile.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    case 'transport-owner': {
+      const existing = await tx.transportOwnerProfile.findFirst({ where: { name: trimmed } });
+      if (existing) return existing;
+      return tx.transportOwnerProfile.create({
+        data: { name: trimmed, merchantTypeId: merchantType.id, remarks: 'Auto-created from trip rates.' },
+      });
+    }
+    default:
+      return null;
+  }
+};
+
 const getOrCreateOpeningBalance = async (supervisorName) => {
-  const existing = await prisma.dailyExpenseOpeningBalance.findUnique({ where: { supervisorName } });
+  const existing = await prisma.paymentRecord.findFirst({
+    where: {
+      entryType: 'OPENING_BALANCE',
+      fromAccount: supervisorName
+    }
+  });
+
   if (existing) return existing.amount;
-  await prisma.dailyExpenseOpeningBalance.create({
-    data: { supervisorName, amount: 0 },
+
+  await prisma.paymentRecord.create({
+    data: {
+      date: new Date(),
+      entryType: 'OPENING_BALANCE',
+      fromAccount: supervisorName,
+      amount: 0,
+      type: 'CREDIT', // Opening balance credit
+      remarks: 'Initial Opening Balance',
+      createdBy: 'SYSTEM'
+    },
   });
   return 0;
 };
@@ -3179,6 +3308,9 @@ app.delete('/api/mine-quarries/:id', async (req, res) => {
     await prisma.mineQuarry.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'mine & quarry');
+    }
     console.error('Failed to delete mine & quarry record', error);
     res.status(500).json({ error: 'Failed to delete mine & quarry record' });
   }
@@ -3213,10 +3345,10 @@ app.post('/api/merge/mine-quarries', async (req, res) => {
 
 app.get('/api/vendor-customers', async (req, res) => {
   try {
-    const items = await prisma.vendorCustomer.findMany({
+    const items = await withPrismaRetry(() => prisma.vendorCustomer.findMany({
       include: { merchantType: true, siteLocation: true },
       orderBy: { name: 'asc' },
-    });
+    }));
     res.json(items.map(shapeMerchantProfile));
   } catch (error) {
     console.error('Failed to list vendor & customer data', error);
@@ -3286,6 +3418,9 @@ app.delete('/api/vendor-customers/:id', async (req, res) => {
     await prisma.vendorCustomer.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'vendor & customer');
+    }
     console.error('Failed to delete vendor & customer record', error);
     res.status(500).json({ error: 'Failed to delete vendor & customer record' });
   }
@@ -3392,6 +3527,9 @@ app.delete('/api/royalty-owners/:id', async (req, res) => {
     await prisma.royaltyOwnerProfile.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'royalty owner');
+    }
     console.error('Failed to delete royalty owner record', error);
     res.status(500).json({ error: 'Failed to delete royalty owner record' });
   }
@@ -3498,6 +3636,9 @@ app.delete('/api/transport-owners/:id', async (req, res) => {
     await prisma.transportOwnerProfile.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'transport owner');
+    }
     console.error('Failed to delete transport owner record', error);
     res.status(500).json({ error: 'Failed to delete transport owner record' });
   }
@@ -3659,6 +3800,9 @@ app.delete('/api/material-types/:id', async (req, res) => {
     await prisma.materialTypeDefinition.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'material type');
+    }
     console.error('Failed to delete material type', error);
     res.status(500).json({ error: 'Failed to delete material type' });
   }
@@ -3690,12 +3834,170 @@ app.post('/api/merge/material-types', async (req, res) => {
   }
 });
 
+app.post('/api/trip-rates/apply', async (req, res) => {
+  const {
+    tripId,
+    ratePartyType,
+    ratePerTon,
+    applyScope = 'trip',
+    effectiveFrom,
+    effectiveTo,
+  } = req.body || {};
+  if (!tripId || !ratePartyType || ratePerTon === undefined) {
+    return res.status(400).json({ error: 'Trip, rate party, and rate per ton are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    const ratePartyNameByType = {
+      'vendor-customer': trip.customer,
+      'transport-owner': trip.transporterName,
+      'mine-quarry': trip.quarryName,
+      'royalty-owner': trip.royaltyOwnerName,
+    };
+    const partyName = ratePartyNameByType[ratePartyType];
+    if (!partyName) {
+      return res.status(400).json({ error: 'Trip does not include the selected rate party name.' });
+    }
+
+    const tripDate = new Date(trip.date);
+    const resolvedEffectiveFrom = effectiveFrom ? new Date(effectiveFrom) : tripDate;
+    let resolvedEffectiveTo = effectiveTo ? new Date(effectiveTo) : null;
+    if (applyScope === 'trip') {
+      resolvedEffectiveTo = resolvedEffectiveFrom;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const materialType = await ensureMaterialType(tx, trip.material);
+      const pickupLocation = await ensureSiteLocation(tx, trip.pickupPlace);
+      const dropOffLocation = await ensureSiteLocation(tx, trip.dropOffPlace);
+      const partyRecord = await ensureRateParty(tx, ratePartyType, partyName);
+      if (!partyRecord) {
+        throw new Error('RATE_PARTY_NOT_FOUND');
+      }
+
+      if (applyScope !== 'trip') {
+        const existingRates = await tx.materialRate.findMany({
+          where: {
+            ratePartyType,
+            ratePartyId: partyRecord.id,
+            materialTypeId: materialType.id,
+            pickupLocationId: pickupLocation.id,
+            dropOffLocationId: dropOffLocation.id,
+            tripId: null,
+          },
+        });
+        const overlapExists = existingRates.some(rate =>
+          hasMaterialRateOverlap(resolvedEffectiveFrom, resolvedEffectiveTo, rate.effectiveFrom, rate.effectiveTo)
+        );
+        if (overlapExists) {
+          throw new Error('RATE_OVERLAP');
+        }
+      }
+
+      const createdRate = await tx.materialRate.create({
+        data: {
+          materialTypeId: materialType.id,
+          ratePartyType,
+          ratePartyId: partyRecord.id,
+          pickupLocationId: pickupLocation.id,
+          dropOffLocationId: dropOffLocation.id,
+          tripId: applyScope === 'trip' ? trip.id : null,
+          totalKm: 0,
+          ratePerKm: 0,
+          ratePerTon: Number(ratePerTon || 0),
+          gstChargeable: false,
+          gstPercentage: 0,
+          gstAmount: 0,
+          totalRatePerTon: Number(ratePerTon || 0),
+          effectiveFrom: resolvedEffectiveFrom,
+          effectiveTo: resolvedEffectiveTo,
+          status: getMaterialRateStatus(resolvedEffectiveFrom, resolvedEffectiveTo),
+          remarks: applyScope === 'trip' ? `Trip rate for #${trip.id}` : 'Range rate from trip rates.',
+        },
+      });
+
+      const netWeight = Number(trip.netWeight || 0);
+      const rateAmount = netWeight * Number(ratePerTon || 0);
+      const tripUpdate = {};
+      if (ratePartyType === 'vendor-customer') tripUpdate.revenue = rateAmount;
+      if (ratePartyType === 'mine-quarry') tripUpdate.materialCost = rateAmount;
+      if (ratePartyType === 'transport-owner') tripUpdate.transportCost = rateAmount;
+      if (ratePartyType === 'royalty-owner') tripUpdate.royaltyCost = rateAmount;
+      const updatedTrip = await tx.tripRecord.update({
+        where: { id: trip.id },
+        data: tripUpdate,
+      });
+      const profit = Number(updatedTrip.revenue || 0) - Number(updatedTrip.materialCost || 0) - Number(updatedTrip.transportCost || 0) - Number(updatedTrip.royaltyCost || 0);
+      await tx.tripRecord.update({
+        where: { id: trip.id },
+        data: { profit },
+      });
+
+      return createdRate;
+    });
+
+    res.json({
+      ...result,
+      ratePartyName: await getRatePartyName(result.ratePartyType, result.ratePartyId),
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'RATE_OVERLAP') {
+        return res.status(409).json({ error: 'Overlapping rate exists for this party, material, and locations.' });
+      }
+      if (error.message === 'RATE_PARTY_NOT_FOUND') {
+        return res.status(400).json({ error: 'Unable to resolve rate party details.' });
+      }
+    }
+    console.error('Failed to apply trip rate', error);
+    res.status(500).json({ error: 'Failed to apply trip rate' });
+  }
+});
+
+app.post('/api/trip-rates/all-in', async (req, res) => {
+  const { tripId, allInCostPerTon, customerRatePerTon } = req.body || {};
+  if (!tripId) {
+    return res.status(400).json({ error: 'Trip is required.' });
+  }
+  if (allInCostPerTon === undefined || customerRatePerTon === undefined) {
+    return res.status(400).json({ error: 'All-in cost per ton and customer rate per ton are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const netWeight = Number(trip.netWeight || 0);
+    const allInCost = netWeight * Number(allInCostPerTon || 0);
+    const revenue = netWeight * Number(customerRatePerTon || 0);
+    const profit = revenue - allInCost;
+    const updatedTrip = await prisma.tripRecord.update({
+      where: { id: trip.id },
+      data: {
+        rateMode: 'all_in',
+        allInCostPerTon: Number(allInCostPerTon || 0),
+        allInCost,
+        customerRatePerTon: Number(customerRatePerTon || 0),
+        revenue,
+        materialCost: 0,
+        transportCost: 0,
+        royaltyCost: 0,
+        profit,
+      },
+    });
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error('Failed to apply all-in rate', error);
+    res.status(500).json({ error: 'Failed to apply all-in rate' });
+  }
+});
+
 app.get('/api/material-rates', async (req, res) => {
   try {
-    const items = await prisma.materialRate.findMany({
+    const items = await withPrismaRetry(() => prisma.materialRate.findMany({
       include: { materialType: true, pickupLocation: true, dropOffLocation: true },
       orderBy: { effectiveFrom: 'desc' },
-    });
+    }));
     const response = await Promise.all(items.map(async (item) => {
       const status = getMaterialRateStatus(item.effectiveFrom, item.effectiveTo);
       if (status !== item.status) {

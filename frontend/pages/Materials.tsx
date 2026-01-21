@@ -10,7 +10,7 @@ const ITEMS_PER_PAGE = 10;
 
 const MaterialsPage: React.FC = () => {
   const { materials, addMaterial, updateMaterial, deleteMaterial, loadMaterials, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -42,7 +42,8 @@ const MaterialsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this material? This cannot be undone.')) return;
+    const shouldDelete = await confirm('Delete Material', 'Delete this material? This cannot be undone.');
+    if (!shouldDelete) return;
     await deleteMaterial(id);
   };
 

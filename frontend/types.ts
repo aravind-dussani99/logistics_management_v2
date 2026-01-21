@@ -4,117 +4,121 @@ import React from 'react';
 // This ensures that our custom 'ion-icon' type is merged with React's
 // built-in IntrinsicElements without causing module resolution issues.
 declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'ion-icon': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        name: string;
-      };
+    namespace JSX {
+        interface IntrinsicElements {
+            'ion-icon': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+                name: string;
+            };
+        }
     }
-  }
 }
 
 export interface Trip {
-  id: number;
-  date: string;
-  place: string;
-  pickupPlace?: string;
-  dropOffPlace?: string;
-  vendorName: string;
-  vendorCustomerIsOneOff?: boolean;
-  customer: string;
-  invoiceDCNumber: string;
-  quarryName: string;
-  mineQuarryIsOneOff?: boolean;
-  royaltyOwnerName: string;
-  royaltyOwnerIsOneOff?: boolean;
-  material: string;
-  vehicleNumber: string;
-  vehicleIsOneOff?: boolean;
-  transporterName:string;
-  transportOwnerIsOneOff?: boolean;
-  transportOwnerMobileNumber?: string;
-  emptyWeight: number;
-  grossWeight: number;
-  netWeight: number;
-  royaltyNumber: string;
-  royaltyTons: number;
-  royaltyM3: number;
-  deductionPercentage: number;
-  sizeChangePercentage: number;
-  tonnage: number;
-  revenue: number;
-  materialCost: number;
-  transportCost: number;
-  royaltyCost: number;
-  profit: number;
-  paymentStatus: 'paid' | 'unpaid' | 'partial';
-  agent?: string;
+    id: number;
+    date: string;
+    place: string;
+    pickupPlace?: string;
+    dropOffPlace?: string;
+    vendorName: string;
+    vendorCustomerIsOneOff?: boolean;
+    customer: string;
+    invoiceDCNumber: string;
+    quarryName: string;
+    mineQuarryIsOneOff?: boolean;
+    royaltyOwnerName: string;
+    royaltyOwnerIsOneOff?: boolean;
+    material: string;
+    vehicleNumber: string;
+    vehicleIsOneOff?: boolean;
+    transporterName: string;
+    transportOwnerIsOneOff?: boolean;
+    transportOwnerMobileNumber?: string;
+    emptyWeight: number;
+    grossWeight: number;
+    netWeight: number;
+    royaltyNumber: string;
+    royaltyTons: number;
+    royaltyM3: number;
+    deductionPercentage: number;
+    sizeChangePercentage: number;
+    tonnage: number;
+    revenue: number;
+    materialCost: number;
+    transportCost: number;
+    royaltyCost: number;
+    rateMode?: 'activity' | 'all_in';
+    allInCostPerTon?: number;
+    allInCost?: number;
+    customerRatePerTon?: number;
+    profit: number;
+    paymentStatus: 'paid' | 'unpaid' | 'partial';
+    agent?: string;
 
-  // New fields for supervisor workflow
-  status: 'pending upload' | 'in transit' | 'pending validation' | 'completed';
-  createdBy: string;
-  ewayBillUpload?: TripUploadPayload;
-  invoiceDCUpload?: TripUploadPayload;
-  waymentSlipUpload?: TripUploadPayload;
-  royaltyUpload?: TripUploadPayload;
-  taxInvoiceUpload?: TripUploadPayload;
+    // New fields for supervisor workflow
+    status: 'pending upload' | 'in transit' | 'pending validation' | 'completed';
+    createdBy: string;
+    ewayBillUpload?: TripUploadPayload;
+    invoiceDCUpload?: TripUploadPayload;
+    waymentSlipUpload?: TripUploadPayload;
+    royaltyUpload?: TripUploadPayload;
+    taxInvoiceUpload?: TripUploadPayload;
 
-  // New fields for received trips
-  receivedDate?: string;
-  receivedBy?: string;
-  receivedByRole?: string;
-  endEmptyWeight?: number;
-  endGrossWeight?: number;
-  endNetWeight?: number;
-  endWaymentSlipUpload?: TripUploadPayload;
-  weightDifferenceReason?: string;
-  validatedBy?: string;
-  validatedAt?: string;
-  validationComments?: string;
-  pendingRequestType?: 'delete' | 'update' | 'sent-back' | string;
-  pendingRequestMessage?: string;
-  pendingRequestBy?: string;
-  pendingRequestRole?: string;
-  pendingRequestAt?: string;
-  rateOverrideEnabled?: boolean;
-  rateOverride?: TripRateOverride | null;
-  activityCount?: number;
+    // New fields for received trips
+    receivedDate?: string;
+    receivedBy?: string;
+    receivedByRole?: string;
+    endEmptyWeight?: number;
+    endGrossWeight?: number;
+    endNetWeight?: number;
+    endWaymentSlipUpload?: TripUploadPayload;
+    weightDifferenceReason?: string;
+    validatedBy?: string;
+    validatedAt?: string;
+    validationComments?: string;
+    pendingRequestType?: 'delete' | 'update' | 'sent-back' | string;
+    pendingRequestMessage?: string;
+    pendingRequestBy?: string;
+    pendingRequestRole?: string;
+    pendingRequestAt?: string;
+    rateOverrideEnabled?: boolean;
+    rateOverride?: TripRateOverride | null;
+    activityCount?: number;
 }
 
 export interface TripRateOverride {
-  materialTypeId: string;
-  ratePartyType: RatePartyType;
-  ratePartyId: string;
-  pickupLocationId: string;
-  dropOffLocationId: string;
-  totalKm: number;
-  ratePerKm: number;
-  ratePerTon: number;
-  gstChargeable: boolean;
-  gstPercentage: number;
-  gstAmount: number;
-  totalRatePerTon: number;
-  effectiveFrom: string;
-  effectiveTo?: string;
-  remarks: string;
+    materialTypeId: string;
+    ratePartyType: RatePartyType;
+    ratePartyId: string;
+    pickupLocationId: string;
+    dropOffLocationId: string;
+    totalKm: number;
+    ratePerKm: number;
+    ratePerTon: number;
+    gstChargeable: boolean;
+    gstPercentage: number;
+    gstAmount: number;
+    totalRatePerTon: number;
+    effectiveFrom: string;
+    effectiveTo?: string;
+    remarks: string;
 }
 
 export interface TripUploadFile {
-  name: string;
-  url: string;
+    name: string;
+    url: string;
 }
 
 export type TripUploadPayload = string | TripUploadFile[];
 
 export interface TripActivity {
-  id: string;
-  tripId: number;
-  action: string;
-  message: string;
-  attachments?: TripUploadFile[] | null;
-  actorName: string;
-  actorRole: string;
-  createdAt: string;
+    id: string;
+    tripId: number;
+    action: string;
+    message: string;
+    attachments?: TripUploadFile[] | null;
+    actorName: string;
+    actorRole: string;
+    createdAt: string;
 }
 
 export interface DailyExpense {
@@ -127,7 +131,7 @@ export interface DailyExpense {
     siteExpense?: boolean;
     ratePartyType?: RatePartyType;
     ratePartyId?: string;
-    counterpartyName?: string;
+    ratePartyName?: string;
     amount: number;
     category?: string;
     subCategory?: string;
@@ -139,22 +143,22 @@ export interface DailyExpense {
 }
 
 export interface Advance {
-  id: string;
-  date: string;
-  tripId?: number;
-  ratePartyType?: RatePartyType;
-  ratePartyId?: string;
-  counterpartyName?: string;
-  fromAccount: string;
-  toAccount: string;
-  place?: string;
-  invoiceDCNumber?: string;
-  ownerAndTransporterName?: string;
-  vehicleNumber?: string;
-  purpose: string;
-  amount: number;
-  voucherSlipUpload?: string;
-  remarks?: string;
+    id: string;
+    date: string;
+    tripId?: number;
+    ratePartyType?: RatePartyType;
+    ratePartyId?: string;
+    counterpartyName?: string;
+    fromAccount: string;
+    toAccount: string;
+    place?: string;
+    invoiceDCNumber?: string;
+    ownerAndTransporterName?: string;
+    vehicleNumber?: string;
+    purpose: string;
+    amount: number;
+    voucherSlipUpload?: string;
+    remarks?: string;
 }
 
 export interface Payment {
@@ -167,16 +171,16 @@ export interface Payment {
     headAccount?: string;
     ratePartyType?: string;
     ratePartyId?: string;
-    counterpartyName?: string;
-    method?: string;
+    ratePartyName?: string;
     remarks?: string;
     via?: string;
     fromAccount?: string;
     toAccount?: string;
     category?: string;
     subCategory?: string;
-    siteExpense?: boolean;
-    voucherUploads?: unknown;
+    paymentReceiptUploads?: TripUploadPayload | null;
+    bankAccountUploads?: TripUploadPayload | null;
+    voucherUploads?: TripUploadPayload | null;
     createdBy?: string;
 }
 
@@ -307,17 +311,17 @@ export interface Customer extends BaseOwner {
 }
 
 export interface CustomerRate {
-  id: number | string;
-  customer: string;
-  material: string;
-  rate: string;
-  from: string;
-  to: string;
-  active: boolean;
-  rejectionPercent: string;
-  rejectionRemarks: string;
-  locationFrom: string;
-  locationTo: string;
+    id: number | string;
+    customer: string;
+    material: string;
+    rate: string;
+    from: string;
+    to: string;
+    active: boolean;
+    rejectionPercent: string;
+    rejectionRemarks: string;
+    locationFrom: string;
+    locationTo: string;
 }
 
 export interface SiteLocation {
@@ -464,6 +468,7 @@ export interface MaterialRate {
     pickupLocationName?: string;
     dropOffLocationId: string;
     dropOffLocationName?: string;
+    tripId?: number;
     totalKm: number;
     ratePerKm: number;
     ratePerTon: number;

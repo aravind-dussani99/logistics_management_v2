@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useUI } from '../contexts/UIContext';
 import { Trip, Trip as TripType, TripUploadFile, TripActivity, Role, TripRateOverride } from '../types';
 import { findBestFuzzyMatch, normalizeMatchValue, safeToFixed } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -78,6 +79,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
         royaltyOwnerProfiles,
         transportOwnerProfiles,
     } = useData();
+    const { confirm } = useUI();
     const { currentUser } = useAuth();
     const [formData, setFormData] = useState<Partial<TripType>>({
         date: new Date().toISOString().split('T')[0],
@@ -326,25 +328,29 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
             if (mode === 'enter') {
                 const normalizeSiteName = (value?: string) => (value || '').trim();
 
-                const suggestName = (label: string, value: string, candidates: string[]) => {
+                const suggestName = async (label: string, value: string, candidates: string[]) => {
                     const trimmed = normalizeMatchValue(value);
                     if (!trimmed) return trimmed;
                     const exact = candidates.find(item => item.trim().toLowerCase() === trimmed.toLowerCase());
                     if (exact) return exact;
                     const suggestion = findBestFuzzyMatch(trimmed, candidates);
-                    if (suggestion && window.confirm(`"${trimmed}" looks similar to "${suggestion.name}" for ${label}.\nUse "${suggestion.name}" instead?`)) {
-                        return suggestion.name;
+                    if (suggestion) {
+                        const shouldUse = await confirm(
+                            'Use Suggested Value?',
+                            `"${trimmed}" looks similar to "${suggestion.name}" for ${label}. Use "${suggestion.name}" instead?`
+                        );
+                        if (shouldUse) return suggestion.name;
                     }
                     return trimmed;
                 };
 
-                const pickupName = suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
-                const dropOffName = suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
-                const materialName = suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
-                const customerName = suggestName('Vendor & Customer', (formData.customer || '').trim(), vendorCustomers.map(item => item.name));
-                const quarryName = suggestName('Mine & Quarry', (formData.quarryName || '').trim(), mineQuarries.map(item => item.name));
-                const royaltyOwnerName = suggestName('Royalty Owner', (formData.royaltyOwnerName || '').trim(), royaltyOwnerProfiles.map(item => item.name));
-                const transportOwnerName = suggestName('Transport Owner', (formData.transporterName || '').trim(), transportOwnerProfiles.map(item => item.name));
+                const pickupName = await suggestName('Pickup Place', normalizeSiteName(formData.pickupPlace), siteLocations.map(site => site.name));
+                const dropOffName = await suggestName('Drop-off Place', normalizeSiteName(formData.dropOffPlace), siteLocations.map(site => site.name));
+                const materialName = await suggestName('Material Type', normalizeMatchValue(formData.material), materialTypeDefinitions.map(item => item.name));
+                const customerName = await suggestName('Vendor & Customer', (formData.customer || '').trim(), vendorCustomers.map(item => item.name));
+                const quarryName = await suggestName('Mine & Quarry', (formData.quarryName || '').trim(), mineQuarries.map(item => item.name));
+                const royaltyOwnerName = await suggestName('Royalty Owner', (formData.royaltyOwnerName || '').trim(), royaltyOwnerProfiles.map(item => item.name));
+                const transportOwnerName = await suggestName('Transport Owner', (formData.transporterName || '').trim(), transportOwnerProfiles.map(item => item.name));
                 const vehicleNumber = (formData.vehicleNumber || '').trim();
 
                 const matchByName = (name: string, list: { name: string }[]) =>
@@ -408,8 +414,16 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                     let finalMaterial = existingMaterial?.name || materialName;
                     if (materialName && !existingMaterial) {
                         const suggestion = findBestFuzzyMatch(materialName, materialTypeDefinitions.map(item => item.name));
-                        if (suggestion && window.confirm(`"${materialName}" looks similar to "${suggestion.name}" for Material Type.\nUse "${suggestion.name}" instead?`)) {
-                            finalMaterial = suggestion.name;
+                        if (suggestion) {
+                            const shouldUse = await confirm(
+                                'Use Suggested Value?',
+                                `"${materialName}" looks similar to "${suggestion.name}" for Material Type. Use "${suggestion.name}" instead?`
+                            );
+                            if (shouldUse) {
+                                finalMaterial = suggestion.name;
+                            } else {
+                                await addMaterialTypeDefinition({ name: materialName, remarks: '' });
+                            }
                         } else {
                             await addMaterialTypeDefinition({ name: materialName, remarks: '' });
                         }
@@ -462,8 +476,9 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const isViewMode = mode === 'view';
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
+    const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
     const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
-    const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor);
+    const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor || isSiteManager);
     const canEditReceivedFields = !isViewMode && (isAdminLike || isDropoffSupervisor);
     const canEditValidationFields = !isViewMode && isAdminLike;
     const entryReadOnly = isViewMode || !canEditEntryFields;

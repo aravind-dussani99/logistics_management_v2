@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const SiteLocationsPage: React.FC = () => {
   const { siteLocations, addSiteLocation, updateSiteLocation, deleteSiteLocation, mergeSiteLocation, loadSiteLocations, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -50,8 +50,13 @@ const SiteLocationsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this site location?')) return;
-    await deleteSiteLocation(id);
+    const shouldDelete = await confirm('Delete Site Location', 'Delete this site location?');
+    if (!shouldDelete) return;
+    try {
+      await deleteSiteLocation(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this site location. It may be referenced by trips or master data.');
+    }
   };
 
   const handleMerge = (site: SiteLocation) => {

@@ -13,7 +13,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const isSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR || currentUser?.role === Role.DROPOFF_SUPERVISOR;
   const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  
+
   const sections = [
     {
       title: 'Core Operations',
@@ -24,7 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR] },
         { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        ],
+      ],
     },
     {
       title: 'Financial Operations',
@@ -32,10 +32,11 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/accounting', icon: 'calculator-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/advances', icon: 'document-attach-outline', name: 'Advances', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        // Advances deprecated
         { to: '/report', icon: 'document-text-outline', name: 'Report', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/capital', icon: 'wallet-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
@@ -79,63 +80,64 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
   const isDropOffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
   const siteManagerItems = [
-    { to: '/site-manager/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
+    { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
-    { to: '/site-manager/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
-    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
-    { to: '/site-manager/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+    { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation' },
+    { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+    { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
+    { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview' },
+    { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
   ];
 
   const supervisorItems = isDropOffSupervisor
     ? [
-        { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
-        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
-        { to: '/site-expenses', icon: 'wallet-outline', name: 'Site Expenses' },
-        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
-      ]
+      { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
+      { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+      { to: '/site-expenses', icon: 'wallet-outline', name: 'Site Expenses' },
+      // { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+    ]
     : [
-        { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
-        { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
-        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
-        { to: '/site-expenses', icon: 'wallet-outline', name: 'Site Expenses' },
-        { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
-      ];
+      { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
+      { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
+      { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+      { to: '/site-expenses', icon: 'wallet-outline', name: 'Site Expenses' },
+      // { to: '/advances', icon: 'document-attach-outline', name: 'Advances' },
+    ];
 
   const NavItem: React.FC<{ to: string; icon: string; name: string; }> = ({ to, icon, name }) => {
     return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `flex items-center px-4 py-2 mt-5 rounded-lg transition-colors duration-200 ${
-          isActive
+      <NavLink
+        to={to}
+        className={({ isActive }) =>
+          `flex items-center px-4 py-2 mt-5 rounded-lg transition-colors duration-200 ${isActive
             ? 'bg-primary text-white'
             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-        }`
-      }
-      onClick={() => setSidebarOpen(false)}
-    >
-      <ion-icon name={icon} className="text-2xl"></ion-icon>
-      <span className="mx-4 font-medium">{name}</span>
-    </NavLink>
-  );
-    }
+          }`
+        }
+        onClick={() => setSidebarOpen(false)}
+      >
+        <ion-icon name={icon} className="text-2xl"></ion-icon>
+        <span className="mx-4 font-medium">{name}</span>
+      </NavLink>
+    );
+  }
 
   return (
     <>
       {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden ${
-          sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
+        className={`fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity lg:hidden ${sidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
         onClick={() => setSidebarOpen(false)}
       ></div>
-      
+
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 transform lg:translate-x-0 lg:static lg:inset-0 flex flex-col ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } transition-transform duration-300 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 transform lg:translate-x-0 lg:static lg:inset-0 flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          } transition-transform duration-300 ease-in-out`}
       >
         <div className="flex items-center justify-center mt-8">
           <div className="flex items-center">
@@ -144,11 +146,11 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           </div>
         </div>
         <nav className="flex-grow mt-10 px-2 space-y-4 overflow-y-auto pr-2">
-        {isSiteManager
-          ? siteManagerItems.map(item => <NavItem key={item.name} {...item} />)
-          : isSupervisor
-            ? supervisorItems.map(item => <NavItem key={item.name} {...item} />)
-            : sections.map(section => {
+          {isSiteManager
+            ? siteManagerItems.map(item => <NavItem key={item.name} {...item} />)
+            : isSupervisor
+              ? supervisorItems.map(item => <NavItem key={item.name} {...item} />)
+              : sections.map(section => {
                 const visibleItems = section.items.filter(item => currentUser && item.roles.includes(currentUser.role));
                 if (visibleItems.length === 0) return null;
                 const isOpen = openSections[section.title] ?? false;
@@ -168,13 +170,13 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
               })}
         </nav>
         <div className="px-4 pb-4">
-           <button
-              onClick={logout}
-              className="w-full flex items-center px-4 py-2 mt-5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-700 dark:hover:text-red-300 transition-colors duration-200"
-            >
-              <ion-icon name="log-out-outline" className="text-2xl"></ion-icon>
-              <span className="mx-4 font-medium">Logout</span>
-            </button>
+          <button
+            onClick={logout}
+            className="w-full flex items-center px-4 py-2 mt-5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-700 dark:hover:text-red-300 transition-colors duration-200"
+          >
+            <ion-icon name="log-out-outline" className="text-2xl"></ion-icon>
+            <span className="mx-4 font-medium">Logout</span>
+          </button>
         </div>
       </aside>
     </>

@@ -55,11 +55,16 @@ const Capital: React.FC = () => {
         });
 
         payments.forEach(payment => {
-            if (!payment.method) return;
-            const account = accounts.find(a => a.name === payment.method);
-            if (!account || !summaryMap.has(account.id)) return;
-            const summary = summaryMap.get(account.id)!;
-            summary.balance += payment.type === 'RECEIPT' ? payment.amount : -payment.amount;
+            const fromAccount = payment.fromAccount ? accounts.find(a => a.name === payment.fromAccount) : null;
+            const toAccount = payment.toAccount ? accounts.find(a => a.name === payment.toAccount) : null;
+            if (fromAccount && summaryMap.has(fromAccount.id)) {
+                const summary = summaryMap.get(fromAccount.id)!;
+                summary.balance -= payment.amount;
+            }
+            if (toAccount && summaryMap.has(toAccount.id)) {
+                const summary = summaryMap.get(toAccount.id)!;
+                summary.balance += payment.amount;
+            }
         });
 
         return Array.from(summaryMap.values());

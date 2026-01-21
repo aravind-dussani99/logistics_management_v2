@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const VehiclesPage: React.FC = () => {
   const { vehicleMasters, addVehicleMaster, updateVehicleMaster, deleteVehicleMaster, mergeVehicleMaster, loadVehicleMasters, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -50,8 +50,13 @@ const VehiclesPage: React.FC = () => {
   };
 
   const handleDeleteVehicle = async (id: string) => {
-    if (!window.confirm('Delete this vehicle?')) return;
-    await deleteVehicleMaster(id);
+    const shouldDelete = await confirm('Delete Vehicle', 'Delete this vehicle?');
+    if (!shouldDelete) return;
+    try {
+      await deleteVehicleMaster(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this vehicle. It may be referenced by trips or transport owners.');
+    }
   };
 
   const handleMergeVehicle = (vehicle: VehicleMaster) => {

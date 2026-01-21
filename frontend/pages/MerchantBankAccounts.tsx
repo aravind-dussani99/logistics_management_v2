@@ -34,7 +34,7 @@ const MerchantBankAccountsPage: React.FC = () => {
     loadTransportOwnerProfiles,
     refreshKey,
   } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -110,7 +110,8 @@ const MerchantBankAccountsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this bank account?')) return;
+    const shouldDelete = await confirm('Delete Bank Account', 'Delete this bank account?');
+    if (!shouldDelete) return;
     await deleteMerchantBankAccount(id);
   };
 
