@@ -2246,6 +2246,10 @@ app.post('/api/trips', async (req, res) => {
         materialCost: Number(data.materialCost || 0),
         transportCost: Number(data.transportCost || 0),
         royaltyCost: Number(data.royaltyCost || 0),
+        rateMode: data.rateMode || 'activity',
+        allInCostPerTon: Number(data.allInCostPerTon || 0),
+        allInCost: Number(data.allInCost || 0),
+        customerRatePerTon: Number(data.customerRatePerTon || 0),
         profit: Number(data.profit || 0),
         paymentStatus: data.paymentStatus || 'unpaid',
         agent: data.agent || '',
@@ -2446,6 +2450,10 @@ app.post('/api/trips/atomic', async (req, res) => {
           materialCost: Number(data.materialCost || 0),
           transportCost: Number(data.transportCost || 0),
           royaltyCost: Number(data.royaltyCost || 0),
+          rateMode: data.rateMode || 'activity',
+          allInCostPerTon: Number(data.allInCostPerTon || 0),
+          allInCost: Number(data.allInCost || 0),
+          customerRatePerTon: Number(data.customerRatePerTon || 0),
           profit: Number(data.profit || 0),
           paymentStatus: data.paymentStatus || 'unpaid',
           agent: data.agent || '',
@@ -3896,6 +3904,42 @@ app.post('/api/trip-rates/apply', async (req, res) => {
     }
     console.error('Failed to apply trip rate', error);
     res.status(500).json({ error: 'Failed to apply trip rate' });
+  }
+});
+
+app.post('/api/trip-rates/all-in', async (req, res) => {
+  const { tripId, allInCostPerTon, customerRatePerTon } = req.body || {};
+  if (!tripId) {
+    return res.status(400).json({ error: 'Trip is required.' });
+  }
+  if (allInCostPerTon === undefined || customerRatePerTon === undefined) {
+    return res.status(400).json({ error: 'All-in cost per ton and customer rate per ton are required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const netWeight = Number(trip.netWeight || 0);
+    const allInCost = netWeight * Number(allInCostPerTon || 0);
+    const revenue = netWeight * Number(customerRatePerTon || 0);
+    const profit = revenue - allInCost;
+    const updatedTrip = await prisma.tripRecord.update({
+      where: { id: trip.id },
+      data: {
+        rateMode: 'all_in',
+        allInCostPerTon: Number(allInCostPerTon || 0),
+        allInCost,
+        customerRatePerTon: Number(customerRatePerTon || 0),
+        revenue,
+        materialCost: 0,
+        transportCost: 0,
+        royaltyCost: 0,
+        profit,
+      },
+    });
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error('Failed to apply all-in rate', error);
+    res.status(500).json({ error: 'Failed to apply all-in rate' });
   }
 });
 

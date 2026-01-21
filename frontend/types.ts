@@ -46,6 +46,10 @@ export interface Trip {
     materialCost: number;
     transportCost: number;
     royaltyCost: number;
+    rateMode?: 'activity' | 'all_in';
+    allInCostPerTon?: number;
+    allInCost?: number;
+    customerRatePerTon?: number;
     profit: number;
     paymentStatus: 'paid' | 'unpaid' | 'partial';
     agent?: string;

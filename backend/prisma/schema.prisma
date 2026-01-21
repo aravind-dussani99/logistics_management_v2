@@ -325,6 +325,10 @@ model TripRecord {
   materialCost          Float
   transportCost         Float
   royaltyCost           Float
+  rateMode              String   @default("activity")
+  allInCostPerTon        Float   @default(0)
+  allInCost             Float   @default(0)
+  customerRatePerTon    Float   @default(0)
   profit                Float
   paymentStatus         String
   agent                 String

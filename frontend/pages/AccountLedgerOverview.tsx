@@ -23,7 +23,7 @@ const RATE_PARTY_LABELS: Record<RatePartyType, string> = {
 };
 
 const AccountLedgerOverview: React.FC = () => {
-  const { trips, advances, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadTrips, loadAdvances, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
+  const { trips, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [selectedType, setSelectedType] = useState<RatePartyType | 'all'>('all');
   const [selectedParty, setSelectedParty] = useState<string>('all');
@@ -31,7 +31,6 @@ const AccountLedgerOverview: React.FC = () => {
 
   useEffect(() => {
     loadTrips();
-    loadAdvances();
     loadPayments();
     loadVendorCustomers();
     loadMineQuarries();
@@ -43,7 +42,7 @@ const AccountLedgerOverview: React.FC = () => {
         console.warn('Failed to load daily expenses for ledger', error);
         setExpenses([]);
       });
-  }, [loadTrips, loadAdvances, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
+  }, [loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
 
   const partyIdLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -51,6 +50,15 @@ const AccountLedgerOverview: React.FC = () => {
     mineQuarries.forEach(item => map.set(`mine-quarry:${item.name}`, item.id));
     royaltyOwnerProfiles.forEach(item => map.set(`royalty-owner:${item.name}`, item.id));
     transportOwnerProfiles.forEach(item => map.set(`transport-owner:${item.name}`, item.id));
+    return map;
+  }, [vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles]);
+
+  const partyNameLookup = useMemo(() => {
+    const map = new Map<string, { type: RatePartyType; id: string; name: string }>();
+    vendorCustomers.forEach(item => map.set(item.name.toLowerCase(), { type: 'vendor-customer', id: item.id, name: item.name }));
+    mineQuarries.forEach(item => map.set(item.name.toLowerCase(), { type: 'mine-quarry', id: item.id, name: item.name }));
+    royaltyOwnerProfiles.forEach(item => map.set(item.name.toLowerCase(), { type: 'royalty-owner', id: item.id, name: item.name }));
+    transportOwnerProfiles.forEach(item => map.set(item.name.toLowerCase(), { type: 'transport-owner', id: item.id, name: item.name }));
     return map;
   }, [vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles]);
 
@@ -104,23 +112,30 @@ const AccountLedgerOverview: React.FC = () => {
     bucket.get(key)!.paidAmount += Number(amount || 0);
     };
 
-    const addPaymentRecord = (payment: Payment, partyName: string) => {
-      if (!payment.ratePartyType) return;
-      const isCustomer = payment.ratePartyType === 'vendor-customer';
+    const resolvePaymentParty = (payment: Payment) => {
+      if (payment.ratePartyType && payment.ratePartyId) {
+        const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${payment.ratePartyType}:`) && id === payment.ratePartyId);
+        if (match) {
+          const name = match[0].split(':').slice(1).join(':');
+          return { type: payment.ratePartyType as RatePartyType, name };
+        }
+      }
+      if (payment.ratePartyName) {
+        const lookup = partyNameLookup.get(payment.ratePartyName.trim().toLowerCase());
+        if (lookup) return { type: lookup.type, name: lookup.name };
+      }
+      return null;
+    };
+
+    const addPaymentRecord = (payment: Payment) => {
+      const resolved = resolvePaymentParty(payment);
+      if (!resolved) return;
+      const isCustomer = resolved.type === 'vendor-customer';
       const signedAmount = payment.type === PaymentType.RECEIPT
         ? (isCustomer ? payment.amount : -payment.amount)
         : (isCustomer ? -payment.amount : payment.amount);
-      addPayment(payment.ratePartyType as RatePartyType, partyName, signedAmount);
+      addPayment(resolved.type, resolved.name, signedAmount);
     };
-
-    advances.forEach(advance => {
-      if (!advance.ratePartyType || !advance.ratePartyId) return;
-      const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${advance.ratePartyType}:`) && id === advance.ratePartyId);
-      if (match) {
-        const name = match[0].split(':').slice(1).join(':');
-        addPayment(advance.ratePartyType, name, advance.amount);
-      }
-    });
 
     expenses.forEach(expense => {
       if (!expense.ratePartyType || !expense.ratePartyId) return;
@@ -132,12 +147,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     payments.forEach(payment => {
-      if (!payment.ratePartyType || !payment.ratePartyId) return;
-      const match = Array.from(partyIdLookup.entries()).find(([key, id]) => key.startsWith(`${payment.ratePartyType}:`) && id === payment.ratePartyId);
-      if (match) {
-        const name = match[0].split(':').slice(1).join(':');
-        addPaymentRecord(payment, name);
-      }
+      addPaymentRecord(payment);
     });
 
     bucket.forEach(summary => {
@@ -145,7 +155,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     return Array.from(bucket.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [trips, advances, expenses, payments, partyIdLookup]);
+  }, [trips, expenses, payments, partyIdLookup, partyNameLookup]);
 
   const filteredSummaries = useMemo(() => {
     return summaries.filter(summary => {
@@ -164,18 +174,6 @@ const AccountLedgerOverview: React.FC = () => {
   const paymentRows = useMemo(() => {
     if (!selectedSummary || !selectedPartyId) return [];
     const rows: Array<{ id: string; date: string; source: string; direction: string; amount: number; remarks?: string }> = [];
-    advances
-      .filter(advance => advance.ratePartyType === selectedSummary.type && advance.ratePartyId === selectedPartyId)
-      .forEach(advance => {
-        rows.push({
-          id: `advance-${advance.id}`,
-          date: advance.date,
-          source: 'Advance',
-          direction: 'Paid',
-          amount: -Number(advance.amount || 0),
-          remarks: advance.remarks,
-        });
-      });
     expenses
       .filter(expense => expense.ratePartyType === selectedSummary.type && expense.ratePartyId === selectedPartyId)
       .forEach(expense => {
@@ -190,9 +188,17 @@ const AccountLedgerOverview: React.FC = () => {
         });
       });
     payments
-      .filter(payment => payment.ratePartyType === selectedSummary.type && payment.ratePartyId === selectedPartyId)
+      .filter(payment => {
+        if (payment.ratePartyType && payment.ratePartyId) {
+          return payment.ratePartyType === selectedSummary.type && payment.ratePartyId === selectedPartyId;
+        }
+        if (payment.ratePartyName) {
+          return payment.ratePartyName.trim().toLowerCase() === selectedSummary.name.trim().toLowerCase();
+        }
+        return false;
+      })
       .forEach(payment => {
-        const isCustomer = payment.ratePartyType === 'vendor-customer';
+        const isCustomer = selectedSummary.type === 'vendor-customer';
         const signedAmount = payment.type === PaymentType.RECEIPT
           ? (isCustomer ? Number(payment.amount || 0) : -Number(payment.amount || 0))
           : (isCustomer ? -Number(payment.amount || 0) : Number(payment.amount || 0));
@@ -206,7 +212,7 @@ const AccountLedgerOverview: React.FC = () => {
         });
       });
     return rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [advances, expenses, payments, selectedPartyId, selectedSummary]);
+  }, [expenses, payments, selectedPartyId, selectedSummary]);
 
   const exportCsv = () => {
     const header = ['Rate Party Type', 'Rate Party', 'Trips', 'Net Tons', 'Total', 'Paid', 'Balance'];

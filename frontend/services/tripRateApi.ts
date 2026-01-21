@@ -1,4 +1,4 @@
-import { MaterialRate, RatePartyType } from '../types';
+import { MaterialRate, RatePartyType, Trip } from '../types';
 import { authFetch } from './apiBase';
 
 const handleResponse = async (response: Response) => {
@@ -29,5 +29,12 @@ export const tripRateApi = {
       body: JSON.stringify(payload),
     });
     return handleResponse(response) as Promise<MaterialRate>;
+  },
+  applyAllIn: async (payload: { tripId: number; allInCostPerTon: number; customerRatePerTon: number }): Promise<Trip> => {
+    const response = await authFetch('/api/trip-rates/all-in', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(response) as Promise<Trip>;
   },
 };

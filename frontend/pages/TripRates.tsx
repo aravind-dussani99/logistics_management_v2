@@ -12,9 +12,9 @@ import SupervisorTripForm from '../components/SupervisorTripForm';
 const PAGE_SIZE = 10;
 
 type PartyTab = {
-  key: 'vendorCustomer' | 'transportOwner' | 'mineQuarry' | 'royaltyOwner';
+  key: 'vendorCustomer' | 'transportOwner' | 'mineQuarry' | 'royaltyOwner' | 'allIn';
   label: string;
-  field: keyof Trip;
+  field?: keyof Trip;
 };
 
 const partyTabs: PartyTab[] = [
@@ -22,6 +22,7 @@ const partyTabs: PartyTab[] = [
   { key: 'royaltyOwner', label: 'Royalty Owner', field: 'royaltyOwnerName' },
   { key: 'transportOwner', label: 'Transport & Owner', field: 'transporterName' },
   { key: 'vendorCustomer', label: 'Vendor & Customer', field: 'customer' },
+  { key: 'allIn', label: 'All-in Rate' },
 ];
 
 const getMtdRange = () => {
@@ -67,6 +68,8 @@ const TripRateLedger: React.FC = () => {
   const [bulkRateInputs, setBulkRateInputs] = useState<Record<string, string>>({});
   const [bulkModeActive, setBulkModeActive] = useState<Record<string, boolean>>({});
   const [optimisticRates, setOptimisticRates] = useState<MaterialRate[]>([]);
+  const [optimisticTripUpdates, setOptimisticTripUpdates] = useState<Record<number, Partial<Trip>>>({});
+  const [allInInputs, setAllInInputs] = useState<Record<number, { cost: string; customer: string }>>({});
   const { openModal, closeModal } = useUI();
 
   useEffect(() => {
@@ -150,8 +153,13 @@ const TripRateLedger: React.FC = () => {
     materialTypeDefinitions,
   ]);
 
+  const displayTrips = useMemo(() => {
+    if (Object.keys(optimisticTripUpdates).length === 0) return trips;
+    return trips.map(trip => ({ ...trip, ...optimisticTripUpdates[trip.id] }));
+  }, [trips, optimisticTripUpdates]);
+
   const filteredTrips = useMemo(() => {
-    return trips.filter(trip => {
+    return displayTrips.filter(trip => {
       const tripDate = (trip.date || '').split('T')[0];
       if (filters.dateFrom && tripDate < filters.dateFrom) return false;
       if (filters.dateTo && tripDate > filters.dateTo) return false;
@@ -163,9 +171,9 @@ const TripRateLedger: React.FC = () => {
       if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
       return true;
     });
-  }, [trips, filters]);
+  }, [displayTrips, filters]);
 
-  const partyTypeByTab: Record<PartyTab['key'], RatePartyType> = {
+  const partyTypeByTab: Record<string, RatePartyType> = {
     vendorCustomer: 'vendor-customer',
     transportOwner: 'transport-owner',
     mineQuarry: 'mine-quarry',
@@ -263,11 +271,243 @@ const TripRateLedger: React.FC = () => {
           })}
         </div>
         {partyTabs.filter(tab => tab.key === activeTab).map(tab => {
+          if (tab.key === 'allIn') {
+            const awaitingKey = `${tab.key}-awaiting`;
+            const appliedKey = `${tab.key}-applied`;
+            const awaitingTrips = filteredTrips.filter(trip => {
+              const mode = trip.rateMode || 'activity';
+              const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
+              return mode !== 'all_in' || !hasRates;
+            });
+            const appliedTrips = filteredTrips.filter(trip => {
+              const mode = trip.rateMode || 'activity';
+              const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
+              return mode === 'all_in' && hasRates;
+            });
+            const awaitingPage = pageIndex[awaitingKey] || 1;
+            const appliedPage = pageIndex[appliedKey] || 1;
+            const awaitingSlice = awaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
+            const appliedSlice = appliedTrips.slice((appliedPage - 1) * PAGE_SIZE, appliedPage * PAGE_SIZE);
+            const awaitingTotal = awaitingTrips.length;
+            const appliedTotal = appliedTrips.length;
+            const awaitingStart = awaitingTotal === 0 ? 0 : (awaitingPage - 1) * PAGE_SIZE + 1;
+            const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
+            const appliedStart = appliedTotal === 0 ? 0 : (appliedPage - 1) * PAGE_SIZE + 1;
+            const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
+
+            const handleAllInInput = (tripId: number, field: 'cost' | 'customer', value: string) => {
+              setAllInInputs(prev => ({
+                ...prev,
+                [tripId]: {
+                  cost: prev[tripId]?.cost || '',
+                  customer: prev[tripId]?.customer || '',
+                  [field]: value,
+                },
+              }));
+            };
+
+            const handleAllInApply = async (trip: Trip) => {
+              const values = allInInputs[trip.id] || { cost: '', customer: '' };
+              const costValue = Number(values.cost || 0);
+              const customerValue = Number(values.customer || 0);
+              if (!costValue || !customerValue) return;
+              const updatedTrip = await tripRateApi.applyAllIn({
+                tripId: trip.id,
+                allInCostPerTon: costValue,
+                customerRatePerTon: customerValue,
+              });
+              setOptimisticTripUpdates(prev => ({ ...prev, [trip.id]: updatedTrip }));
+            };
+
+            return (
+              <div key={tab.key} className="space-y-6">
+                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                  <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      Trips Awaiting All-in Rates
+                      <span className={`ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${awaitingTotal > 0 ? 'bg-primary text-white animate-pulse' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}>
+                        {awaitingTotal}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Showing {awaitingStart}–{awaitingEnd} of {awaitingTotal}
+                      </div>
+                      <Pagination currentPage={awaitingPage} totalPages={Math.max(1, Math.ceil(awaitingTotal / PAGE_SIZE))} onPageChange={page => handlePageChange(awaitingKey, page)} />
+                    </div>
+                  </div>
+                  <div className="px-6 py-4">
+                    {awaitingSlice.length === 0 ? (
+                      <div className="px-4 py-12 text-center text-sm text-gray-500">No trips pending all-in rates.</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full table-auto border-collapse text-sm">
+                          <thead>
+                            <tr className="text-left text-gray-500">
+                              <th className="w-12 px-3 py-2">S.No.</th>
+                              <th className="px-3 py-2">Trip #</th>
+                              <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Invoice/DC</th>
+                              <th className="px-3 py-2">Customer</th>
+                              <th className="px-3 py-2">Net Qty</th>
+                              <th className="px-3 py-2 w-36">All-in Cost/Ton</th>
+                              <th className="px-3 py-2 w-36">Customer Rate/Ton</th>
+                              <th className="px-3 py-2">Total Cost</th>
+                              <th className="px-3 py-2">Revenue</th>
+                              <th className="px-3 py-2">Profit</th>
+                              <th className="px-3 py-2">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {awaitingSlice.map((trip, idx) => {
+                              const inputs = allInInputs[trip.id] || { cost: '', customer: '' };
+                              const netQty = Number(trip.netWeight || 0);
+                              const costPerTon = Number(inputs.cost || 0);
+                              const customerPerTon = Number(inputs.customer || 0);
+                              const totalCost = netQty * costPerTon;
+                              const revenue = netQty * customerPerTon;
+                              const profit = revenue - totalCost;
+                              return (
+                                <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
+                                  <td className="px-3 py-2">{(awaitingPage - 1) * PAGE_SIZE + idx + 1}</td>
+                                  <td className="px-3 py-2">#{trip.id}</td>
+                                  <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
+                                  <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
+                                  <td className="px-3 py-2">{trip.customer || '-'}</td>
+                                  <td className="px-3 py-2">{netQty.toFixed(2)}</td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={inputs.cost}
+                                      placeholder="Cost"
+                                      onChange={event => handleAllInInput(trip.id, 'cost', event.target.value)}
+                                      className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={inputs.customer}
+                                      placeholder="Rate"
+                                      onChange={event => handleAllInInput(trip.id, 'customer', event.target.value)}
+                                      className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">{totalCost.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{revenue.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{profit.toFixed(2)}</td>
+                                  <td className="px-3 py-2">
+                                    <button
+                                      onClick={() => handleAllInApply(trip)}
+                                      disabled={!costPerTon || !customerPerTon}
+                                      className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+                                    >
+                                      Apply Rate
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                  <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">All-in Rates Applied</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Showing {appliedStart}–{appliedEnd} of {appliedTotal}
+                      </div>
+                      <Pagination currentPage={appliedPage} totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))} onPageChange={page => handlePageChange(appliedKey, page)} />
+                    </div>
+                  </div>
+                  <div className="px-6 py-4">
+                    {appliedSlice.length === 0 ? (
+                      <div className="px-4 py-12 text-center text-sm text-gray-500">No all-in rates recorded yet.</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full table-auto border-collapse text-sm">
+                          <thead>
+                            <tr className="text-left text-gray-500">
+                              <th className="w-12 px-3 py-2">S.No.</th>
+                              <th className="px-3 py-2">Trip #</th>
+                              <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Invoice/DC</th>
+                              <th className="px-3 py-2">Customer</th>
+                              <th className="px-3 py-2">Net Qty</th>
+                              <th className="px-3 py-2">All-in Cost/Ton</th>
+                              <th className="px-3 py-2">Customer Rate/Ton</th>
+                              <th className="px-3 py-2">Total Cost</th>
+                              <th className="px-3 py-2">Revenue</th>
+                              <th className="px-3 py-2">Profit</th>
+                              <th className="px-3 py-2">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {appliedSlice.map((trip, idx) => {
+                              const netQty = Number(trip.netWeight || 0);
+                              const costPerTon = Number(trip.allInCostPerTon || 0);
+                              const customerPerTon = Number(trip.customerRatePerTon || 0);
+                              const totalCost = Number(trip.allInCost || 0) || netQty * costPerTon;
+                              const revenue = Number(trip.revenue || 0) || netQty * customerPerTon;
+                              const profit = revenue - totalCost;
+                              return (
+                                <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
+                                  <td className="px-3 py-2">{(appliedPage - 1) * PAGE_SIZE + idx + 1}</td>
+                                  <td className="px-3 py-2">#{trip.id}</td>
+                                  <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
+                                  <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
+                                  <td className="px-3 py-2">{trip.customer || '-'}</td>
+                                  <td className="px-3 py-2">{netQty.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{costPerTon.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{customerPerTon.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{totalCost.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{revenue.toFixed(2)}</td>
+                                  <td className="px-3 py-2">{profit.toFixed(2)}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)}
+                                        className="rounded-md bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)}
+                                        className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
           const awaitingKey = `${tab.key}-awaiting`;
           const appliedKey = `${tab.key}-applied`;
+          const activityTrips = filteredTrips.filter(trip => (trip.rateMode || 'activity') !== 'all_in');
           const isApplied = (trip: Trip) => Boolean(getApplicableRate(trip, tab.key));
-          const awaitingTrips = filteredTrips.filter(trip => !isApplied(trip));
-          const appliedTrips = filteredTrips.filter(trip => isApplied(trip));
+          const awaitingTrips = activityTrips.filter(trip => !isApplied(trip));
+          const appliedTrips = activityTrips.filter(trip => isApplied(trip));
           const awaitingPage = pageIndex[awaitingKey] || 1;
           const appliedPage = pageIndex[appliedKey] || 1;
           const awaitingSlice = awaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
