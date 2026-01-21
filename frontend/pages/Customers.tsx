@@ -11,7 +11,7 @@ const getActiveRate = (rates: RateEntry[]): RateEntry | undefined => rates.find(
 
 const CustomersPage: React.FC = () => {
     const { customers, addCustomerRate, updateCustomerRate, deleteCustomerRate, materials, siteLocations, loadLegacyMasters, loadMaterials, loadSiteLocations, refreshKey } = useData();
-    const { openModal, closeModal } = useUI();
+    const { openModal, closeModal, confirm } = useUI();
     const [filters, setFilters] = useState<Filters>({});
     const [activePopover, setActivePopover] = useState<string | null>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
@@ -59,9 +59,9 @@ const CustomersPage: React.FC = () => {
     }
 
     const handleDelete = async (customerId: string, rateId: string) => {
-        if (window.confirm('Are you sure you want to delete this rate?')) {
-            await deleteCustomerRate(customerId, rateId);
-        }
+        const shouldDelete = await confirm('Delete Rate', 'Are you sure you want to delete this rate?');
+        if (!shouldDelete) return;
+        await deleteCustomerRate(customerId, rateId);
     };
     
     const popoverData = useMemo(() => {

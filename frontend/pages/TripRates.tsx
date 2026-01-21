@@ -101,6 +101,7 @@ const TripRateLedger: React.FC = () => {
   };
 
   const applyRateForTrip = async (tabKey: PartyTab['key'], trip: Trip, rateValue: string) => {
+    if (tabKey === 'allIn') return undefined;
     const mapKey = `${tabKey}-${trip.id}`;
     const rateNumber = Number(rateValue) || 0;
     const scope = rateScopes[mapKey] || 'trip';
@@ -108,7 +109,7 @@ const TripRateLedger: React.FC = () => {
     const dates = rateDates[mapKey] || { from: tripDate, to: tripDate };
     const effectiveFrom = dates.from || tripDate;
     const effectiveTo = scope === 'trip' ? (dates.from || tripDate) : (dates.to || undefined);
-    const partyTypeMap: Record<PartyTab['key'], RatePartyType> = {
+    const partyTypeMap: Record<Exclude<PartyTab['key'], 'allIn'>, RatePartyType> = {
       vendorCustomer: 'vendor-customer',
       transportOwner: 'transport-owner',
       mineQuarry: 'mine-quarry',
@@ -206,6 +207,7 @@ const TripRateLedger: React.FC = () => {
 
   const getApplicableRate = (trip: Trip, tabKey: PartyTab['key']) => {
     const partyType = partyTypeByTab[tabKey];
+    if (!partyType) return undefined;
     const partyName = tabKey === 'vendorCustomer'
       ? trip.customer
       : tabKey === 'transportOwner'
@@ -213,7 +215,7 @@ const TripRateLedger: React.FC = () => {
         : tabKey === 'mineQuarry'
           ? trip.quarryName
           : trip.royaltyOwnerName;
-    const partyId = partyIdByType[partyType].get(partyName || '') || '';
+    const partyId = partyIdByType[partyType]?.get(partyName || '') || '';
     const materialTypeId = materialTypeByName.get(trip.material || '') || '';
     const pickupLocationId = siteLocationByName.get(trip.pickupPlace || '') || '';
     const dropOffLocationId = siteLocationByName.get(trip.dropOffPlace || '') || '';
@@ -250,7 +252,13 @@ const TripRateLedger: React.FC = () => {
       <div className="space-y-6">
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow-md px-4 py-3 flex flex-wrap gap-2">
           {partyTabs.map(tab => {
-            const awaitingCount = filteredTrips.filter(trip => !getApplicableRate(trip, tab.key)).length;
+            const awaitingCount = tab.key === 'allIn'
+              ? filteredTrips.filter(trip => {
+                  const mode = trip.rateMode || 'activity';
+                  const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
+                  return mode !== 'all_in' || !hasRates;
+                }).length
+              : filteredTrips.filter(trip => !getApplicableRate(trip, tab.key)).length;
             return (
               <button
                 key={tab.key}

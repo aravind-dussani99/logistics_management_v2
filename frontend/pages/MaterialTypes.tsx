@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const MaterialTypesPage: React.FC = () => {
   const { materialTypeDefinitions, addMaterialTypeDefinition, updateMaterialTypeDefinition, deleteMaterialTypeDefinition, mergeMaterialTypeDefinition, loadMaterialTypeDefinitions, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -49,7 +49,8 @@ const MaterialTypesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this material type?')) return;
+    const shouldDelete = await confirm('Delete Material Type', 'Delete this material type?');
+    if (!shouldDelete) return;
     await deleteMaterialTypeDefinition(id);
   };
 

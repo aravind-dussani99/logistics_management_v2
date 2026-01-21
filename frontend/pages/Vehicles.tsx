@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const VehiclesPage: React.FC = () => {
   const { vehicleMasters, addVehicleMaster, updateVehicleMaster, deleteVehicleMaster, mergeVehicleMaster, loadVehicleMasters, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -50,7 +50,8 @@ const VehiclesPage: React.FC = () => {
   };
 
   const handleDeleteVehicle = async (id: string) => {
-    if (!window.confirm('Delete this vehicle?')) return;
+    const shouldDelete = await confirm('Delete Vehicle', 'Delete this vehicle?');
+    if (!shouldDelete) return;
     await deleteVehicleMaster(id);
   };
 

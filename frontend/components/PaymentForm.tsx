@@ -66,6 +66,17 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     setBankAccountFiles(parseUploadValue(initialData?.bankAccountUploads));
   }, [initialData]);
 
+  const normalizeName = (value: string) => value.trim().toLowerCase();
+
+  const ratePartyTypeByName = useMemo(() => {
+    const map = new Map<string, RatePartyType>();
+    vendorCustomers.forEach(item => map.set(normalizeName(item.name), 'vendor-customer'));
+    mineQuarries.forEach(item => map.set(normalizeName(item.name), 'mine-quarry'));
+    transportOwnerProfiles.forEach(item => map.set(normalizeName(item.name), 'transport-owner'));
+    royaltyOwnerProfiles.forEach(item => map.set(normalizeName(item.name), 'royalty-owner'));
+    return map;
+  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
+
   const ratePartyOptions = useMemo(() => {
     const values = new Set<string>();
     vendorCustomers.forEach(item => values.add(item.name));
@@ -89,8 +100,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
   }, [payments]);
 
   const viaOptions = useMemo(() => ['Cash', 'Cheque', 'NEFT', 'RTGS', 'UPI', 'PhonePe', 'GPay'], []);
-
-  const normalizeName = (value: string) => value.trim().toLowerCase();
 
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
@@ -132,7 +141,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
           : '');
       if (!resolvedName) return;
       const key = normalizeName(resolvedName);
-      paymentTotals.set(key, (paymentTotals.get(key) || 0) + Number(payment.amount || 0));
+      const partyType = payment.ratePartyType || ratePartyTypeByName.get(key);
+      const amountValue = Number(payment.amount || 0);
+      const signedAmount = partyType === 'vendor-customer'
+        ? (payment.type === PaymentType.RECEIPT ? amountValue : -amountValue)
+        : (payment.type === PaymentType.PAYMENT ? amountValue : -amountValue);
+      paymentTotals.set(key, (paymentTotals.get(key) || 0) + signedAmount);
     });
 
     const balances = new Map<string, number>();
@@ -146,9 +160,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
       }
     });
     return balances;
-  }, [trips, payments, ratePartyNameById]);
+  }, [trips, payments, ratePartyNameById, ratePartyTypeByName]);
 
   const resolvedFromBalance = fromAccount ? accountBalances.get(normalizeName(fromAccount)) : undefined;
+  const resolvedToBalance = toAccount ? accountBalances.get(normalizeName(toAccount)) : undefined;
   const resolvedRatePartyBalance = ratePartyName ? ratePartyBalances.get(normalizeName(ratePartyName)) : undefined;
 
   const handleFileChange = async (
@@ -214,8 +229,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     if (isViewMode) return;
     setErrorMessage('');
 
-    if (!date || !type || !fromAccount || !ratePartyName || !amount || !remarks) {
-      setErrorMessage('Date, transaction type, from account, rate party name, amount, and remarks are required.');
+    if (!date || !type || !fromAccount || !toAccount || !ratePartyName || !amount || !remarks) {
+      setErrorMessage('Date, transaction type, from account, to account, counterparty name, amount, and remarks are required.');
       return;
     }
 
@@ -297,7 +312,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
           )}
         </div>
         <div>
-          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Rate Party Name *</label>
+          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty Name *</label>
           <input
             id="rate-party-name"
             type="text"
@@ -365,7 +380,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             />
           </div>
           <div>
-            <label htmlFor="to-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">To Account</label>
+            <label htmlFor="to-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">To Account *</label>
             <input
               id="to-account"
               type="text"
@@ -373,8 +388,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
               onChange={(e) => setToAccount(e.target.value)}
               disabled={isViewMode}
               list="account-list"
+              required
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
             />
+            {resolvedToBalance !== undefined && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Balance: {formatCurrency(resolvedToBalance)}</p>
+            )}
           </div>
           <div>
             <label htmlFor="trip-id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Trip ID</label>

@@ -9,7 +9,7 @@ const ITEMS_PER_PAGE = 10;
 
 const AccountTypesPage: React.FC = () => {
   const { accountTypes, addAccountType, updateAccountType, deleteAccountType, loadAccountTypes, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -47,7 +47,8 @@ const AccountTypesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this account type?')) return;
+    const shouldDelete = await confirm('Delete Account Type', 'Delete this account type?');
+    if (!shouldDelete) return;
     await deleteAccountType(id);
   };
 

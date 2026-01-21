@@ -25,7 +25,7 @@ const Ledger: React.FC = () => {
     const { ledgerEntries, updateLedgerEntry, deleteLedgerEntry, refreshKey, loadLedgerEntries, loadAccounts } = useData();
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [currentPage, setCurrentPage] = useState(1);
-    const { openModal, closeModal } = useUI();
+    const { openModal, closeModal, confirm } = useUI();
 
     useEffect(() => {
         loadLedgerEntries();
@@ -41,9 +41,9 @@ const Ledger: React.FC = () => {
     };
 
     const handleDeleteEntry = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this transaction? This action cannot be undone.')) {
-            await deleteLedgerEntry(id);
-        }
+        const shouldDelete = await confirm('Delete Transaction', 'Are you sure you want to delete this transaction? This action cannot be undone.');
+        if (!shouldDelete) return;
+        await deleteLedgerEntry(id);
     };
     
     const { filteredAndSortedEntries, totalInflow, totalOutflow } = useMemo(() => {

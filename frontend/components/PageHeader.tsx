@@ -63,7 +63,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     secondaryAction,
     showAddAction = true,
 }) => {
-    const { openModal, closeModal } = useUI();
+    const { openModal, closeModal, alert } = useUI();
     const { currentUser } = useAuth();
     const filterPopoverRef = useRef<HTMLDivElement>(null);
     const addMenuRef = useRef<HTMLDivElement>(null);
@@ -115,7 +115,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             case 'addCustomer': openModal('Add New Customer', <AddCustomerForm onClose={closeModal} />); break;
             case 'addRoyalty': openModal('Add New Royalty Owner', <AddRoyaltyForm onClose={closeModal} />); break;
             case 'addLedgerEntry': openModal('Add New Ledger Entry', <AddLedgerEntryForm onClose={closeModal} />); break;
-            default: alert(`${action} form not implemented yet.`);
+            default:
+                alert('Not Implemented', `${action} form not implemented yet.`);
+                break;
         }
     };
     

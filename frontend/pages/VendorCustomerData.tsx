@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const VendorCustomerDataPage: React.FC = () => {
   const { vendorCustomers, merchantTypes, siteLocations, addVendorCustomer, updateVendorCustomer, deleteVendorCustomer, mergeVendorCustomer, loadVendorCustomers, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -67,7 +67,8 @@ const VendorCustomerDataPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this record?')) return;
+    const shouldDelete = await confirm('Delete Vendor/Customer', 'Delete this record?');
+    if (!shouldDelete) return;
     await deleteVendorCustomer(id);
   };
 

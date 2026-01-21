@@ -15,7 +15,7 @@ const MerchantsPage: React.FC = () => {
     loadMerchantTypes();
     loadSiteLocations();
   }, [loadMerchants, loadMerchantTypes, loadSiteLocations, refreshKey]);
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -65,7 +65,8 @@ const MerchantsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this merchant?')) return;
+    const shouldDelete = await confirm('Delete Merchant', 'Delete this merchant?');
+    if (!shouldDelete) return;
     await deleteMerchant(id);
   };
 

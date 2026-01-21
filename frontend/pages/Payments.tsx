@@ -174,7 +174,7 @@ const Payments: React.FC = () => {
     <div className="relative">
       <PageHeader
         title="Payments"
-        subtitle="Track payment and receipt entries by head account and rate party."
+        subtitle="Track payment and receipt entries by head account and counterparty."
         filters={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
         onFilterChange={(next) => setFilters(prev => ({ ...prev, ...next }))}
         filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
@@ -196,7 +196,7 @@ const Payments: React.FC = () => {
             </select>
           </div>
           <div className="min-w-[260px] flex-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Head Account / Rate Party</label>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Head Account / Counterparty</label>
             <input
               type="text"
               value={filters.query}
@@ -221,7 +221,7 @@ const Payments: React.FC = () => {
                     'Transaction Type',
                     'From Account',
                     'To Account',
-                    'Rate Party Name',
+                    'Counterparty Name',
                     'Amount',
                     'Remarks',
                     'Head Account',
