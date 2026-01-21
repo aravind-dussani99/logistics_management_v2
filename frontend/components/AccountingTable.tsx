@@ -98,8 +98,9 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
 
         const entityPayments = payments.filter(payment => {
             if (payment.ratePartyId && payment.ratePartyId === entityId) return true;
-            const accountId = masterData.accounts.find(a => a.name === payment.method)?.id;
-            return accountId === entityId;
+            const fromId = masterData.accounts.find(a => a.name === payment.fromAccount)?.id;
+            const toId = masterData.accounts.find(a => a.name === payment.toAccount)?.id;
+            return fromId === entityId || toId === entityId;
         }).map(payment => {
             const isCustomer = entityType === 'Customer';
             const isReceipt = payment.type === PaymentType.RECEIPT;
@@ -111,7 +112,7 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
                 : (isReceipt ? payment.amount : 0);
             return {
                 date: payment.date,
-                description: `Payment: ${payment.counterpartyName || payment.method || 'Rate Party'} (${payment.type})`,
+                description: `Payment: ${payment.ratePartyName || payment.fromAccount || payment.toAccount || 'Rate Party'} (${payment.type})`,
                 credit,
                 debit,
                 type: 'Payment'

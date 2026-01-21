@@ -20,6 +20,7 @@ import AccountLedgerOverview from './pages/AccountLedgerOverview';
 import { DataProvider } from './contexts/DataContext';
 import { UIProvider } from './contexts/UIContext';
 import Payments from './pages/Payments';
+import PaymentReconciliation from './pages/PaymentReconciliation';
 import RoyaltyStock from './pages/RoyaltyStock';
 import Accounts from './pages/Accounts';
 import Categories from './pages/Categories';
@@ -150,6 +151,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/payments" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Payments />
+        </ProtectedRoute>
+      } />
+      <Route path="/payment-reconciliation" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <PaymentReconciliation />
         </ProtectedRoute>
       } />
       <Route path="/daily-payments" element={

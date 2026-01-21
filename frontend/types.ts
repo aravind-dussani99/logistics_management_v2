@@ -127,7 +127,7 @@ export interface DailyExpense {
     siteExpense?: boolean;
     ratePartyType?: RatePartyType;
     ratePartyId?: string;
-    counterpartyName?: string;
+    ratePartyName?: string;
     amount: number;
     category?: string;
     subCategory?: string;
@@ -167,16 +167,16 @@ export interface Payment {
     headAccount?: string;
     ratePartyType?: string;
     ratePartyId?: string;
-    counterpartyName?: string;
-    method?: string;
+    ratePartyName?: string;
     remarks?: string;
     via?: string;
     fromAccount?: string;
     toAccount?: string;
     category?: string;
     subCategory?: string;
-    paymentReceiptUpload?: TripUploadPayload;
-    voucherUploads?: unknown;
+    paymentReceiptUploads?: TripUploadPayload | null;
+    bankAccountUploads?: TripUploadPayload | null;
+    voucherUploads?: TripUploadPayload | null;
     createdBy?: string;
 }
 

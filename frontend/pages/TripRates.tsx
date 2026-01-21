@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import { Filters } from '../components/FilterPanel';
 import { tripRateApi } from '../services/tripRateApi';
 import { formatDateDisplay } from '../utils';
+import SupervisorTripForm from '../components/SupervisorTripForm';
 
 const PAGE_SIZE = 10;
 
@@ -17,10 +18,10 @@ type PartyTab = {
 };
 
 const partyTabs: PartyTab[] = [
-  { key: 'mineQuarry', label: 'Mine & Quarry Name', field: 'quarryName' },
-  { key: 'royaltyOwner', label: 'Royalty Owner Name', field: 'royaltyOwnerName' },
-  { key: 'transportOwner', label: 'Transport & Owner Name', field: 'transporterName' },
-  { key: 'vendorCustomer', label: 'Vendor & Customer Name', field: 'customer' },
+  { key: 'mineQuarry', label: 'Mine & Quarry', field: 'quarryName' },
+  { key: 'royaltyOwner', label: 'Royalty Owner', field: 'royaltyOwnerName' },
+  { key: 'transportOwner', label: 'Transport & Owner', field: 'transporterName' },
+  { key: 'vendorCustomer', label: 'Vendor & Customer', field: 'customer' },
 ];
 
 const getMtdRange = () => {
@@ -151,8 +152,9 @@ const TripRateLedger: React.FC = () => {
 
   const filteredTrips = useMemo(() => {
     return trips.filter(trip => {
-      if (filters.dateFrom && trip.date < filters.dateFrom) return false;
-      if (filters.dateTo && trip.date > filters.dateTo) return false;
+      const tripDate = (trip.date || '').split('T')[0];
+      if (filters.dateFrom && tripDate < filters.dateFrom) return false;
+      if (filters.dateTo && tripDate > filters.dateTo) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
       if (filters.vendor && trip.customer !== filters.vendor) return false;
       if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
@@ -277,6 +279,8 @@ const TripRateLedger: React.FC = () => {
           const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
           const appliedStart = appliedTotal === 0 ? 0 : (appliedPage - 1) * PAGE_SIZE + 1;
           const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
+          const showMaterialColumn = tab.key === 'mineQuarry';
+          const showLocationColumns = tab.key === 'transportOwner';
           const showRangeColumns = awaitingTrips.some(trip => (rateScopes[`${tab.key}-${trip.id}`] || 'trip') === 'range');
           const selectedSet = selectedTrips[tab.key] || new Set<number>();
           const bulkRateValue = bulkRateInputs[tab.key] || '';
@@ -472,6 +476,9 @@ const TripRateLedger: React.FC = () => {
                             <th className="px-3 py-2">Date</th>
                             <th className="px-3 py-2">Invoice/DC</th>
                             <th className="px-3 py-2">Rate Party Name</th>
+                            {showMaterialColumn && <th className="px-3 py-2">Material Type</th>}
+                            {showLocationColumns && <th className="px-3 py-2">Pickup Location</th>}
+                            {showLocationColumns && <th className="px-3 py-2">Drop-off Location</th>}
                             <th className="px-3 py-2">Net Quantity</th>
                             <th className="px-3 py-2 w-32">Rate</th>
                             <th className="px-3 py-2 w-28">Applies</th>
@@ -502,6 +509,9 @@ const TripRateLedger: React.FC = () => {
                                 <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
                                 <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
                                 <td className="px-3 py-2">{trip[tab.field as keyof typeof trip] || '-'}</td>
+                                {showMaterialColumn && <td className="px-3 py-2">{trip.material || '-'}</td>}
+                                {showLocationColumns && <td className="px-3 py-2">{trip.pickupPlace || '-'}</td>}
+                                {showLocationColumns && <td className="px-3 py-2">{trip.dropOffPlace || '-'}</td>}
                                 <td className="px-3 py-2">{netQty.toFixed(2)}</td>
                                 <td className="px-3 py-2">
                                   <input
@@ -623,9 +633,13 @@ const TripRateLedger: React.FC = () => {
                             <th className="px-3 py-2">Date</th>
                             <th className="px-3 py-2">Invoice/DC</th>
                             <th className="px-3 py-2">Rate Party Name</th>
+                            {showMaterialColumn && <th className="px-3 py-2">Material Type</th>}
+                            {showLocationColumns && <th className="px-3 py-2">Pickup Location</th>}
+                            {showLocationColumns && <th className="px-3 py-2">Drop-off Location</th>}
                             <th className="px-3 py-2">Net Quantity</th>
                             <th className="px-3 py-2">Rate</th>
                             <th className="px-3 py-2">Trip Amount</th>
+                            <th className="px-3 py-2">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -641,9 +655,30 @@ const TripRateLedger: React.FC = () => {
                                 <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
                                 <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
                                 <td className="px-3 py-2">{trip[tab.field as keyof typeof trip] || '-'}</td>
+                                {showMaterialColumn && <td className="px-3 py-2">{trip.material || '-'}</td>}
+                                {showLocationColumns && <td className="px-3 py-2">{trip.pickupPlace || '-'}</td>}
+                                {showLocationColumns && <td className="px-3 py-2">{trip.dropOffPlace || '-'}</td>}
                                 <td className="px-3 py-2">{netQty.toFixed(2)}</td>
                                 <td className="px-3 py-2">{rateValue.toFixed(2)}</td>
                                 <td className="px-3 py-2">{amount.toFixed(2)}</td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)}
+                                      className="rounded-md bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                                    >
+                                      View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)}
+                                      className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             );
                           })}

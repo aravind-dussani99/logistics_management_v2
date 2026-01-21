@@ -381,17 +381,17 @@ model PaymentRecord {
   headAccount     String?
   ratePartyType   String?
   ratePartyId     String?
-  counterpartyName String?
   amount          Float
   type            String
-  method          String?
   remarks         String?
   via             String?
   fromAccount     String?
   toAccount       String?
   category        String?
   subCategory     String?
-  paymentReceiptUpload String?
+  ratePartyName   String?
+  paymentReceiptUploads Json?
+  bankAccountUploads Json?
   voucherUploads  Json?
   availableBalance Float?
   closingBalance  Float?

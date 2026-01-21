@@ -327,15 +327,16 @@ const storeAttachment = async ({ buffer, mime, trip, req, sequence, fieldKey }) 
   return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
 };
 
-const storePaymentReceipt = async ({ buffer, mime, payment, req, sequence }) => {
+const storePaymentAttachment = async ({ buffer, mime, payment, req, sequence, fieldKey }) => {
   const dateFolder = formatDateFolder(payment.date);
-  const ratePartyType = slugify(payment.ratePartyType || 'unknown');
+  const ratePartyType = slugify(payment.ratePartyType || 'party');
   const ratePartyName = slugify(payment.ratePartyName || 'unknown');
   const tripId = payment.tripId || 'no-trip';
   const ext = extensionFromMime(mime) || '.bin';
   const suffix = sequence ? `_${sequence}` : '';
-  const fileName = `${dateFolder}_${ratePartyType}_${ratePartyName}_${tripId}${suffix}${ext}`;
-  const objectPath = path.posix.join(dateFolder, 'payments', fileName);
+  const label = slugify(fieldKey || 'attachment');
+  const fileName = `${dateFolder}_${ratePartyType}_${ratePartyName}_${tripId}_${label}${suffix}${ext}`;
+  const objectPath = path.posix.join('payments', dateFolder, fileName);
 
   if (!ATTACHMENTS_BUCKET) {
     const targetPath = path.join(UPLOADS_ROOT, objectPath);
@@ -354,6 +355,33 @@ const storePaymentReceipt = async ({ buffer, mime, payment, req, sequence }) => 
     },
   });
   return `https://storage.googleapis.com/${ATTACHMENTS_BUCKET}/${objectPath}`;
+};
+
+const normalizePaymentUploadField = async ({ fieldValue, payment, req, fieldKey }) => {
+  const list = parseUploadList(fieldValue);
+  if (list.length === 0) return null;
+
+  const updated = [];
+  let sequence = 0;
+  for (const item of list) {
+    const parsed = parseDataUrl(item.url);
+    if (!parsed) {
+      updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
+      continue;
+    }
+    sequence += 1;
+    const storedUrl = await storePaymentAttachment({
+      buffer: parsed.buffer,
+      mime: parsed.mime,
+      payment,
+      req,
+      sequence,
+      fieldKey,
+    });
+    updated.push({ name: item.name, url: storedUrl });
+  }
+
+  return updated;
 };
 
 const toPublicUrl = (value) => {
@@ -1492,6 +1520,7 @@ app.post('/api/payments', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
+    ratePartyName,
     amount = 0,
     type = 'PAYMENT',
     remarks = '',
@@ -1502,46 +1531,63 @@ app.post('/api/payments', async (req, res) => {
     subCategory = '',
     voucherUploads = null,
     paymentReceiptUpload = null,
+    paymentReceiptUploads = null,
+    bankAccountUploads = null,
     tripId = null,
   } = req.body || {};
   if (!date) {
     return res.status(400).json({ error: 'Date is required.' });
   }
-  if (!ratePartyType || !ratePartyId) {
-    return res.status(400).json({ error: 'Rate party type and rate party are required.' });
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!fromAccount) {
+    return res.status(400).json({ error: 'From account is required.' });
+  }
+  const resolvedRatePartyName = ratePartyName || '';
+  if (!resolvedRatePartyName) {
+    return res.status(400).json({ error: 'Rate party name is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
   }
   try {
-    let processedReceiptUpload = paymentReceiptUpload;
-    if (paymentReceiptUpload) {
-      const list = parseUploadList(paymentReceiptUpload);
-      const updated = [];
-      let sequence = 0;
-      for (const item of list) {
-        const parsed = parseDataUrl(item.url);
-        if (!parsed) {
-          updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
-          continue;
-        }
-        sequence += 1;
-        const storedUrl = await storePaymentReceipt({
-          buffer: parsed.buffer,
-          mime: parsed.mime,
-          payment: { date, ratePartyType, ratePartyName: ratePartyId, tripId },
-          req,
-          sequence,
-        });
-        updated.push({ name: item.name, url: storedUrl });
-      }
-      processedReceiptUpload = updated.length > 0 ? JSON.stringify(updated) : null;
-    }
+    const receiptPayload = paymentReceiptUploads ?? paymentReceiptUpload;
+    const processedReceiptUploads = receiptPayload
+      ? await normalizePaymentUploadField({
+        fieldValue: receiptPayload,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: resolvedRatePartyName,
+          tripId,
+        },
+        req,
+        fieldKey: 'payment_receipt',
+      })
+      : null;
+    const processedBankUploads = bankAccountUploads
+      ? await normalizePaymentUploadField({
+        fieldValue: bankAccountUploads,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: resolvedRatePartyName,
+          tripId,
+        },
+        req,
+        fieldKey: 'bank_account',
+      })
+      : null;
 
     const payment = await prisma.paymentRecord.create({
       data: {
         date: new Date(date),
         entryType: 'PAYMENT',
         headAccount: headAccount || null,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        ratePartyName: resolvedRatePartyName || null,
         amount: Number(amount) || 0,
         type,
         remarks: remarks || null,
@@ -1551,7 +1597,8 @@ app.post('/api/payments', async (req, res) => {
         category: category || null,
         subCategory: subCategory || null,
         voucherUploads,
-        paymentReceiptUpload: processedReceiptUpload,
+        paymentReceiptUploads: processedReceiptUploads,
+        bankAccountUploads: processedBankUploads,
         createdBy: getUserDisplayName(req.user),
         tripId: tripId ? Number(tripId) : null,
       },
@@ -1573,6 +1620,7 @@ app.put('/api/payments/:id', async (req, res) => {
     headAccount = '',
     ratePartyType,
     ratePartyId,
+    ratePartyName,
     amount = 0,
     type = 'PAYMENT',
     remarks = '',
@@ -1582,38 +1630,60 @@ app.put('/api/payments/:id', async (req, res) => {
     category = '',
     subCategory = '',
     voucherUploads = null,
-    paymentReceiptUpload = null,
+    paymentReceiptUpload,
+    paymentReceiptUploads,
+    bankAccountUploads,
     tripId = null,
   } = req.body || {};
   if (!date) {
     return res.status(400).json({ error: 'Date is required.' });
   }
-  if (!ratePartyType || !ratePartyId) {
-    return res.status(400).json({ error: 'Rate party type and rate party are required.' });
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!fromAccount) {
+    return res.status(400).json({ error: 'From account is required.' });
+  }
+  const resolvedRatePartyName = ratePartyName || '';
+  if (!resolvedRatePartyName) {
+    return res.status(400).json({ error: 'Rate party name is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
   }
   try {
-    let processedReceiptUpload = paymentReceiptUpload;
-    if (paymentReceiptUpload) {
-      const list = parseUploadList(paymentReceiptUpload);
-      const updated = [];
-      let sequence = 0;
-      for (const item of list) {
-        const parsed = parseDataUrl(item.url);
-        if (!parsed) {
-          updated.push({ name: item.name, url: toPublicUrl(item.url || '') });
-          continue;
-        }
-        sequence += 1;
-        const storedUrl = await storePaymentReceipt({
-          buffer: parsed.buffer,
-          mime: parsed.mime,
-          payment: { date, ratePartyType, ratePartyName: ratePartyId, tripId },
+    let processedReceiptUploads;
+    const receiptPayload = paymentReceiptUploads ?? paymentReceiptUpload;
+    if (receiptPayload !== undefined) {
+      processedReceiptUploads = receiptPayload
+        ? await normalizePaymentUploadField({
+          fieldValue: receiptPayload,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: resolvedRatePartyName,
+            tripId,
+          },
           req,
-          sequence,
-        });
-        updated.push({ name: item.name, url: storedUrl });
-      }
-      processedReceiptUpload = updated.length > 0 ? JSON.stringify(updated) : null;
+          fieldKey: 'payment_receipt',
+        })
+        : null;
+    }
+    let processedBankUploads;
+    if (bankAccountUploads !== undefined) {
+      processedBankUploads = bankAccountUploads
+        ? await normalizePaymentUploadField({
+          fieldValue: bankAccountUploads,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: resolvedRatePartyName,
+            tripId,
+          },
+          req,
+          fieldKey: 'bank_account',
+        })
+        : null;
     }
 
     const payment = await prisma.paymentRecord.update({
@@ -1622,8 +1692,9 @@ app.put('/api/payments/:id', async (req, res) => {
         date: new Date(date),
         entryType: 'PAYMENT',
         headAccount: headAccount || null,
-        ratePartyType,
-        ratePartyId,
+        ratePartyType: ratePartyType || null,
+        ratePartyId: ratePartyId || null,
+        ratePartyName: resolvedRatePartyName || null,
         amount: Number(amount) || 0,
         type,
         remarks: remarks || null,
@@ -1633,7 +1704,8 @@ app.put('/api/payments/:id', async (req, res) => {
         category: category || null,
         subCategory: subCategory || null,
         voucherUploads,
-        paymentReceiptUpload: processedReceiptUpload,
+        ...(processedReceiptUploads !== undefined ? { paymentReceiptUploads: processedReceiptUploads } : {}),
+        ...(processedBankUploads !== undefined ? { bankAccountUploads: processedBankUploads } : {}),
         tripId: tripId ? Number(tripId) : null,
       },
     });
@@ -1683,7 +1755,7 @@ app.get('/api/daily-expenses', async (req, res) => {
         headAccount: expense.headAccount || '',
         ratePartyType: expense.ratePartyType || undefined,
         ratePartyId: expense.ratePartyId || undefined,
-        counterpartyName: expense.counterpartyName || '',
+        ratePartyName: expense.ratePartyName || '',
         amount: expense.amount,
         category: expense.category || '',
         subCategory: expense.subCategory || '',
@@ -1718,7 +1790,7 @@ app.get('/api/daily-expenses/all', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1745,7 +1817,7 @@ app.post('/api/daily-expenses', async (req, res) => {
     via = '',
     ratePartyType = null,
     ratePartyId = null,
-    counterpartyName = '',
+    ratePartyName = '',
     amount = 0,
     category = '',
     subCategory = '',
@@ -1780,7 +1852,7 @@ app.post('/api/daily-expenses', async (req, res) => {
         via,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName,
+        ratePartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
@@ -1802,7 +1874,7 @@ app.post('/api/daily-expenses', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1830,7 +1902,7 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     via = '',
     ratePartyType = null,
     ratePartyId = null,
-    counterpartyName = '',
+    ratePartyName = '',
     amount = 0,
     category = '',
     subCategory = '',
@@ -1856,7 +1928,7 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
         via,
         ratePartyType: ratePartyType || null,
         ratePartyId: ratePartyId || null,
-        counterpartyName,
+        ratePartyName,
         amount: Number(amount) || 0,
         category,
         subCategory,
@@ -1875,7 +1947,7 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
       headAccount: expense.headAccount || '',
       ratePartyType: expense.ratePartyType || undefined,
       ratePartyId: expense.ratePartyId || undefined,
-      counterpartyName: expense.counterpartyName || '',
+      ratePartyName: expense.ratePartyName || '',
       amount: expense.amount,
       category: expense.category || '',
       subCategory: expense.subCategory || '',
@@ -1921,7 +1993,7 @@ app.get('/api/daily-expenses/export', async (req, res) => {
       where,
       orderBy: { date: 'desc' },
     });
-    const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Counterparty'];
+    const header = ['Date', 'From', 'To', 'Via', 'Amount', 'Type', 'Category', 'Sub-Category', 'Remarks', 'Closing Balance', 'Rate Party Type', 'Rate Party Id', 'Rate Party Name'];
     const rows = expenses.map(item => ([
       item.date.toISOString().split('T')[0],
       item.fromAccount || '',
@@ -1935,7 +2007,7 @@ app.get('/api/daily-expenses/export', async (req, res) => {
       item.closingBalance ?? '',
       item.ratePartyType || '',
       item.ratePartyId || '',
-      item.counterpartyName || '',
+      item.ratePartyName || '',
     ]));
     const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv');
@@ -2227,8 +2299,7 @@ app.post('/api/trips/atomic', async (req, res) => {
     return created.id;
   };
 
-  try {
-    const createdTrip = await prisma.$transaction(async (tx) => {
+  const runTripTransaction = async () => prisma.$transaction(async (tx) => {
       const merchantTypeId = await findMerchantType(tx);
       const pickupName = (data.pickupPlace || '').trim();
       const dropOffName = (data.dropOffPlace || '').trim();
@@ -2390,7 +2461,19 @@ app.post('/api/trips/atomic', async (req, res) => {
         },
       });
       return trip;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
+
+  try {
+    let createdTrip;
+    try {
+      createdTrip = await runTripTransaction();
+    } catch (error) {
+      if (error?.code === 'P2028' || String(error?.message || '').includes('Transaction not found')) {
+        createdTrip = await runTripTransaction();
+      } else {
+        throw error;
+      }
+    }
     res.status(201).json(createdTrip);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create trip with masters';

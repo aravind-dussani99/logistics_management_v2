@@ -192,7 +192,7 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSave({ ...formData, siteExpense: isBusinessExpense, counterpartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
+    await onSave({ ...formData, siteExpense: isBusinessExpense, ratePartyName: '' } as Omit<DailyExpense, 'id' | 'availableBalance' | 'closingBalance'>, initialData?.id);
     onSubmitSuccess?.();
   };
 

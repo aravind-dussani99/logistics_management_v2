@@ -351,7 +351,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loadPayments = useCallback(async () => {
     if (!currentUser || hasLoadedPayments) return;
-    const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role);
+    const canReadPayments = [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER].includes(currentUser.role);
     if (!canReadPayments) {
       setPayments([]);
       setHasLoadedPayments(true);
