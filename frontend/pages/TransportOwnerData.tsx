@@ -17,7 +17,7 @@ const TransportOwnerDataPage: React.FC = () => {
     loadMerchantTypes();
     loadSiteLocations();
   }, [loadTransportOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey]);
-  const { openModal, closeModal, confirm } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -69,7 +69,11 @@ const TransportOwnerDataPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     const shouldDelete = await confirm('Delete Transport Owner', 'Delete this record?');
     if (!shouldDelete) return;
-    await deleteTransportOwnerProfile(id);
+    try {
+      await deleteTransportOwnerProfile(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this transport owner. It may be referenced by trips or vehicles.');
+    }
   };
 
   const handleMerge = (row: TransportOwnerData) => {

@@ -36,6 +36,32 @@ const UPLOAD_FIELD_LABELS = {
   endWaymentSlipUpload: 'end_wayment_slip',
 };
 
+const isPrismaKnownError = (error) => Boolean(error && typeof error === 'object' && 'code' in error);
+
+const withPrismaRetry = async (fn) => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P1017') {
+      try {
+        await prisma.$disconnect();
+      } catch (disconnectError) {
+        console.warn('Failed to disconnect prisma after P1017', disconnectError);
+      }
+      await prisma.$connect();
+      return await fn();
+    }
+    throw error;
+  }
+};
+
+const respondDeleteConflict = (res, label) => {
+  res.status(409).json({
+    error: `Cannot delete ${label} because it is in use.`,
+    hint: `Merge ${label} into another record or update related trips before deleting.`,
+  });
+};
+
 const PUBLIC_PATHS = new Set(['/health', '/', '/api/auth/login', '/api/auth/reset-admin-password']);
 
 const signToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
@@ -1135,6 +1161,9 @@ app.delete('/api/site-locations/:id', async (req, res) => {
     await prisma.siteLocation.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'site location');
+    }
     console.error('Failed to delete site location', error);
     res.status(500).json({ error: 'Failed to delete site location' });
   }
@@ -2023,11 +2052,13 @@ app.get('/api/trips', async (req, res) => {
   try {
     const where = {};
     // No pickup/dropoff restriction for supervisors at this stage.
-    const trips = await prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } });
-    const activityCounts = await prisma.tripActivityRecord.groupBy({
-      by: ['tripId'],
-      _count: { _all: true },
-    });
+    const [trips, activityCounts] = await withPrismaRetry(async () => Promise.all([
+      prisma.tripRecord.findMany({ where, orderBy: { date: 'desc' } }),
+      prisma.tripActivityRecord.groupBy({
+        by: ['tripId'],
+        _count: { _all: true },
+      }),
+    ]));
     const activityMap = new Map(activityCounts.map(entry => [entry.tripId, entry._count._all]));
     const hydrated = await Promise.all(trips.map(async (trip) => {
       const updated = { ...trip, activityCount: activityMap.get(trip.id) || 0 };
@@ -2934,6 +2965,9 @@ app.delete('/api/vehicle-masters/:id', async (req, res) => {
     await prisma.vehicleMaster.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'vehicle');
+    }
     console.error('Failed to delete vehicle', error);
     res.status(500).json({ error: 'Failed to delete vehicle' });
   }
@@ -3274,6 +3308,9 @@ app.delete('/api/mine-quarries/:id', async (req, res) => {
     await prisma.mineQuarry.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'mine & quarry');
+    }
     console.error('Failed to delete mine & quarry record', error);
     res.status(500).json({ error: 'Failed to delete mine & quarry record' });
   }
@@ -3308,10 +3345,10 @@ app.post('/api/merge/mine-quarries', async (req, res) => {
 
 app.get('/api/vendor-customers', async (req, res) => {
   try {
-    const items = await prisma.vendorCustomer.findMany({
+    const items = await withPrismaRetry(() => prisma.vendorCustomer.findMany({
       include: { merchantType: true, siteLocation: true },
       orderBy: { name: 'asc' },
-    });
+    }));
     res.json(items.map(shapeMerchantProfile));
   } catch (error) {
     console.error('Failed to list vendor & customer data', error);
@@ -3381,6 +3418,9 @@ app.delete('/api/vendor-customers/:id', async (req, res) => {
     await prisma.vendorCustomer.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'vendor & customer');
+    }
     console.error('Failed to delete vendor & customer record', error);
     res.status(500).json({ error: 'Failed to delete vendor & customer record' });
   }
@@ -3487,6 +3527,9 @@ app.delete('/api/royalty-owners/:id', async (req, res) => {
     await prisma.royaltyOwnerProfile.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'royalty owner');
+    }
     console.error('Failed to delete royalty owner record', error);
     res.status(500).json({ error: 'Failed to delete royalty owner record' });
   }
@@ -3593,6 +3636,9 @@ app.delete('/api/transport-owners/:id', async (req, res) => {
     await prisma.transportOwnerProfile.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'transport owner');
+    }
     console.error('Failed to delete transport owner record', error);
     res.status(500).json({ error: 'Failed to delete transport owner record' });
   }
@@ -3754,6 +3800,9 @@ app.delete('/api/material-types/:id', async (req, res) => {
     await prisma.materialTypeDefinition.delete({ where: { id } });
     res.status(204).end();
   } catch (error) {
+    if (isPrismaKnownError(error) && error.code === 'P2003') {
+      return respondDeleteConflict(res, 'material type');
+    }
     console.error('Failed to delete material type', error);
     res.status(500).json({ error: 'Failed to delete material type' });
   }
@@ -3945,10 +3994,10 @@ app.post('/api/trip-rates/all-in', async (req, res) => {
 
 app.get('/api/material-rates', async (req, res) => {
   try {
-    const items = await prisma.materialRate.findMany({
+    const items = await withPrismaRetry(() => prisma.materialRate.findMany({
       include: { materialType: true, pickupLocation: true, dropOffLocation: true },
       orderBy: { effectiveFrom: 'desc' },
-    });
+    }));
     const response = await Promise.all(items.map(async (item) => {
       const status = getMaterialRateStatus(item.effectiveFrom, item.effectiveTo);
       if (status !== item.status) {

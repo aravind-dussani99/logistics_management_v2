@@ -11,7 +11,7 @@ const ITEMS_PER_PAGE = 10;
 
 const RoyaltyOwnerDataPage: React.FC = () => {
   const { royaltyOwnerProfiles, merchantTypes, siteLocations, addRoyaltyOwnerProfile, updateRoyaltyOwnerProfile, deleteRoyaltyOwnerProfile, mergeRoyaltyOwnerProfile, loadRoyaltyOwnerProfiles, loadMerchantTypes, loadSiteLocations, refreshKey } = useData();
-  const { openModal, closeModal, confirm } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -69,7 +69,11 @@ const RoyaltyOwnerDataPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     const shouldDelete = await confirm('Delete Royalty Owner', 'Delete this record?');
     if (!shouldDelete) return;
-    await deleteRoyaltyOwnerProfile(id);
+    try {
+      await deleteRoyaltyOwnerProfile(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this royalty owner. It may be referenced by trips or rates.');
+    }
   };
 
   const handleMerge = (row: RoyaltyOwnerData) => {
