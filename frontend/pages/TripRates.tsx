@@ -70,7 +70,7 @@ const TripRateLedger: React.FC = () => {
   const [optimisticRates, setOptimisticRates] = useState<MaterialRate[]>([]);
   const [optimisticTripUpdates, setOptimisticTripUpdates] = useState<Record<number, Partial<Trip>>>({});
   const [allInInputs, setAllInInputs] = useState<Record<number, { cost: string; customer: string }>>({});
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, alert } = useUI();
 
   useEffect(() => {
     loadTrips();
@@ -102,6 +102,17 @@ const TripRateLedger: React.FC = () => {
 
   const applyRateForTrip = async (tabKey: PartyTab['key'], trip: Trip, rateValue: string) => {
     if (tabKey === 'allIn') return undefined;
+    const partyName = tabKey === 'vendorCustomer'
+      ? trip.customer
+      : tabKey === 'transportOwner'
+        ? trip.transporterName
+        : tabKey === 'mineQuarry'
+          ? trip.quarryName
+          : trip.royaltyOwnerName;
+    if (!partyName) {
+      await alert('Missing Rate Party', 'This trip does not have a rate party name for this tab. Please update the trip first.');
+      return undefined;
+    }
     const mapKey = `${tabKey}-${trip.id}`;
     const rateNumber = Number(rateValue) || 0;
     const scope = rateScopes[mapKey] || 'trip';

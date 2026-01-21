@@ -229,8 +229,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     if (isViewMode) return;
     setErrorMessage('');
 
-    if (!date || !type || !fromAccount || !toAccount || !ratePartyName || !amount || !remarks) {
-      setErrorMessage('Date, transaction type, from account, to account, counterparty name, amount, and remarks are required.');
+    if (!date || !type || !fromAccount || !ratePartyName || !amount || !remarks) {
+      setErrorMessage('Date, transaction type, from account, counterparty name, amount, and remarks are required.');
       return;
     }
 
@@ -380,7 +380,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             />
           </div>
           <div>
-            <label htmlFor="to-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">To Account *</label>
+            <label htmlFor="to-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">To Account</label>
             <input
               id="to-account"
               type="text"
@@ -388,7 +388,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
               onChange={(e) => setToAccount(e.target.value)}
               disabled={isViewMode}
               list="account-list"
-              required
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
             />
             {resolvedToBalance !== undefined && (
