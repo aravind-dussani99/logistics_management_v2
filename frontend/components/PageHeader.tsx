@@ -2,12 +2,6 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useUI } from '../contexts/UIContext';
 import FilterPanel, { Filters, FilterField, DEFAULT_MORE_FILTERS } from './FilterPanel';
 import { Role } from '../types';
-import AddTripForm from './AddTripForm';
-import AddVehicleForm from './AddVehicleForm';
-import AddQuarryForm from './AddQuarryForm';
-import AddCustomerForm from './AddCustomerForm';
-import AddRoyaltyForm from './AddRoyaltyForm';
-import AddLedgerEntryForm from './AddLedgerEntryForm';
 import { useAuth } from '../contexts/AuthContext';
 import SupervisorTripForm from './SupervisorTripForm';
 
@@ -40,11 +34,6 @@ interface PageHeaderProps {
 
 const adminActions = [
     { name: 'Add Trip', icon: 'bus-outline', action: 'addTrip' },
-    { name: 'Add Transport', icon: 'car-sport-outline', action: 'addVehicle' },
-    { name: 'Add Quarry', icon: 'server-outline', action: 'addQuarry' },
-    { name: 'Add Customer', icon: 'people-circle-outline', action: 'addCustomer' },
-    { name: 'Add Royalty Owner', icon: 'document-text-outline', action: 'addRoyalty' },
-    { name: 'Add Ledger Entry', icon: 'reader-outline', action: 'addLedgerEntry' },
 ];
 
 const supervisorActions = [
@@ -108,13 +97,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 openModal('Enter New Trip', <SupervisorTripForm mode="enter" onClose={closeModal} />);
                 break;
             case 'addTrip':
-                openModal('Add New Trip', <AddTripForm onClose={closeModal} />);
+                openModal('Enter New Trip', <SupervisorTripForm mode="enter" onClose={closeModal} />);
                 break;
-            case 'addVehicle': openModal('Add New Transport', <AddVehicleForm onClose={closeModal} />); break;
-            case 'addQuarry': openModal('Add New Quarry', <AddQuarryForm onClose={closeModal} />); break;
-            case 'addCustomer': openModal('Add New Customer', <AddCustomerForm onClose={closeModal} />); break;
-            case 'addRoyalty': openModal('Add New Royalty Owner', <AddRoyaltyForm onClose={closeModal} />); break;
-            case 'addLedgerEntry': openModal('Add New Ledger Entry', <AddLedgerEntryForm onClose={closeModal} />); break;
             default:
                 alert('Not Implemented', `${action} form not implemented yet.`);
                 break;

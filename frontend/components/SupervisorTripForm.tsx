@@ -479,13 +479,13 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
     const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
     const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
     const canEditEntryFields = !isViewMode && (isAdminLike || isPickupSupervisor || isSiteManager);
-    const canEditReceivedFields = !isViewMode && (isAdminLike || isDropoffSupervisor);
-    const canEditValidationFields = !isViewMode && isAdminLike;
+    const canEditReceivedFields = !isViewMode && (isAdminLike || isDropoffSupervisor || isSiteManager);
+    const canEditValidationFields = !isViewMode && (isAdminLike || isSiteManager);
     const entryReadOnly = isViewMode || !canEditEntryFields;
     const receivedReadOnly = isViewMode || !canEditReceivedFields;
     const validationReadOnly = isViewMode || !canEditValidationFields;
     const showReceivedSection = isViewMode || canEditReceivedFields || isAdminLike;
-    const showValidationSection = isViewMode || canEditValidationFields;
+    const showValidationSection = isViewMode || canEditValidationFields || isSiteManager;
     const isReadOnly = isViewMode;
 
     const renderUploadList = (label: string, list: TripUploadFile[]) => (
@@ -1010,7 +1010,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
 
             <div className="pt-8 flex justify-end space-x-3">
                         <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
-                            {isReadOnly ? 'Close' : 'Re-set'}
+                            {isReadOnly ? 'Close' : mode === 'enter' ? 'Re-set' : 'Cancel'}
                         </button>
                 {!isReadOnly && (mode === 'upload' || canEditEntryFields || canEditReceivedFields || canEditValidationFields) && (
                     <button type="submit" disabled={isSubmitting} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none disabled:opacity-50">

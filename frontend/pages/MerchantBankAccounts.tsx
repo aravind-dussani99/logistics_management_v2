@@ -34,9 +34,10 @@ const MerchantBankAccountsPage: React.FC = () => {
     loadTransportOwnerProfiles,
     refreshKey,
   } = useData();
-  const { openModal, closeModal, confirm } = useUI();
+  const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadMerchantBankAccounts();
@@ -90,6 +91,26 @@ const MerchantBankAccountsPage: React.FC = () => {
     return filteredAccounts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredAccounts, currentPage]);
 
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(paginatedAccounts.map(account => account.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
   const handleAdd = () => {
     openModal('Add Merchant Bank Account', <MerchantBankAccountForm onSave={handleCreate} onClose={closeModal} />);
   };
@@ -112,7 +133,30 @@ const MerchantBankAccountsPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     const shouldDelete = await confirm('Delete Bank Account', 'Delete this bank account?');
     if (!shouldDelete) return;
-    await deleteMerchantBankAccount(id);
+    try {
+      await deleteMerchantBankAccount(id);
+    } catch (error) {
+      await alert('Delete Failed', 'Unable to delete this bank account. It may be referenced by other records.');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const shouldDelete = await confirm('Delete Selected', `Delete ${selectedIds.size} bank account(s)?`);
+    if (!shouldDelete) return;
+    const ids = Array.from(selectedIds);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await deleteMerchantBankAccount(id);
+      } catch (error) {
+        failures.push(id);
+      }
+    }
+    setSelectedIds(new Set());
+    if (failures.length > 0) {
+      await alert('Delete Failed', `${failures.length} record(s) could not be deleted because they are in use.`);
+    }
   };
 
   useEffect(() => {
@@ -146,12 +190,29 @@ const MerchantBankAccountsPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Merchant Bank Accounts</h2>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                Delete Selected
+              </button>
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={paginatedAccounts.length > 0 && paginatedAccounts.every(account => selectedIds.has(account.id))}
+                      onChange={(event) => toggleSelectAll(event.target.checked)}
+                    />
+                  </th>
                   {['S. No.', 'Merchant Name', 'Rate Party Type', 'Rate Party', 'Account Type', 'Account Name', 'Account Number', 'IFSC Code', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
@@ -162,6 +223,13 @@ const MerchantBankAccountsPage: React.FC = () => {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedAccounts.map((account, index) => (
                   <tr key={account.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(account.id)}
+                        onChange={(event) => toggleSelectOne(account.id, event.target.checked)}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{account.merchantName || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -181,7 +249,7 @@ const MerchantBankAccountsPage: React.FC = () => {
                 ))}
                 {paginatedAccounts.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={11} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                       No bank accounts yet. Add an account after creating merchants.
                     </td>
                   </tr>

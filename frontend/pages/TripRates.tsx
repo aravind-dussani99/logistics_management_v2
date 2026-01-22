@@ -60,7 +60,7 @@ const TripRateLedger: React.FC = () => {
   const [filters, setFilters] = useState<Filters>(getMtdRange());
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<PartyTab['key']>('vendorCustomer');
+  const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
   const [rateScopes, setRateScopes] = useState<Record<string, 'trip' | 'range'>>({});
   const [rateDates, setRateDates] = useState<Record<string, { from: string; to: string }>>({});
   const [selectedTrips, setSelectedTrips] = useState<Record<string, Set<number>>>({});

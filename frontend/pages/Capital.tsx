@@ -6,81 +6,58 @@ import { AccountSummary } from './Accounting';
 import StatCard from '../components/StatCard';
 import { formatCurrency } from '../utils';
 
-const CAPITAL_CATEGORIES = ['Bank Account', 'Capital & Loans', 'Investment', 'Personal Funds'];
-
 const Capital: React.FC = () => {
-    const { trips, ledgerEntries, accounts, customers, quarries, vehicles, royaltyOwners, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
+    const { payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
 
     useEffect(() => {
-        loadTrips();
-        loadLegacyMasters();
-        loadLedgerEntries();
-        loadAccounts();
         loadPayments();
         loadVendorCustomers();
         loadMineQuarries();
         loadTransportOwnerProfiles();
         loadRoyaltyOwnerProfiles();
-    }, [loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
+    }, [loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
 
     const accountSummaries = useMemo(() => {
         const summaryMap: Map<string, AccountSummary> = new Map();
-
-        // Initialize with all relevant accounts
-        accounts.filter(acc => CAPITAL_CATEGORIES.includes(acc.categoryName)).forEach(acc => {
-             summaryMap.set(acc.id, { 
-                id: acc.id, 
-                name: acc.name, 
-                type: acc.categoryName, 
-                totalTrips: 0, 
-                totalTonnage: 0, 
-                totalAmount: 0, 
-                balance: 0, 
-                lastActivityDate: '' 
-            });
-        });
-
-        // Process ledger entries to calculate balances
-        ledgerEntries.forEach(entry => {
-            const toAccount = accounts.find(a => a.name === entry.to);
-            if(toAccount && summaryMap.has(toAccount.id)) {
-                const summary = summaryMap.get(toAccount.id)!;
-                summary.balance += (entry.type === 'DEBIT' ? -entry.amount : entry.amount);
+        const getOrCreate = (name: string) => {
+            const key = name.trim().toLowerCase();
+            if (!summaryMap.has(key)) {
+                summaryMap.set(key, {
+                    id: key,
+                    name,
+                    type: 'Account',
+                    totalTrips: 0,
+                    totalTonnage: 0,
+                    totalAmount: 0,
+                    balance: 0,
+                    lastActivityDate: '',
+                });
             }
-            const fromAccount = accounts.find(a => a.name === entry.from);
-            if(fromAccount && summaryMap.has(fromAccount.id)) {
-                const summary = summaryMap.get(fromAccount.id)!;
-                summary.balance += (entry.type === 'DEBIT' ? entry.amount : -entry.amount);
-            }
-        });
+            return summaryMap.get(key)!;
+        };
 
         payments.forEach(payment => {
-            const fromAccount = payment.fromAccount ? accounts.find(a => a.name === payment.fromAccount) : null;
-            const toAccount = payment.toAccount ? accounts.find(a => a.name === payment.toAccount) : null;
-            if (fromAccount && summaryMap.has(fromAccount.id)) {
-                const summary = summaryMap.get(fromAccount.id)!;
-                summary.balance -= payment.amount;
+            if (payment.fromAccount) {
+                const summary = getOrCreate(payment.fromAccount);
+                summary.balance -= Number(payment.amount || 0);
+                if (payment.date) summary.lastActivityDate = payment.date;
             }
-            if (toAccount && summaryMap.has(toAccount.id)) {
-                const summary = summaryMap.get(toAccount.id)!;
-                summary.balance += payment.amount;
+            if (payment.toAccount) {
+                const summary = getOrCreate(payment.toAccount);
+                summary.balance += Number(payment.amount || 0);
+                if (payment.date) summary.lastActivityDate = payment.date;
             }
         });
 
         return Array.from(summaryMap.values());
 
-    }, [ledgerEntries, payments, accounts]);
+    }, [payments]);
 
-    const { totalBankBalance, totalLoansPayable, totalInvestments } = useMemo(() => {
-        let bank = 0;
-        let loans = 0;
-        let investments = 0;
-        accountSummaries.forEach(acc => {
-            if (acc.type === 'Bank Account') bank += acc.balance;
-            if (acc.type === 'Capital & Loans') loans += acc.balance;
-            if (acc.type === 'Investment') investments += acc.balance;
-        });
-        return { totalBankBalance: bank, totalLoansPayable: loans, totalInvestments: investments };
+    const { totalBalance, totalInflow, totalOutflow } = useMemo(() => {
+        const inflow = payments.reduce((sum, payment) => sum + (payment.toAccount ? Number(payment.amount || 0) : 0), 0);
+        const outflow = payments.reduce((sum, payment) => sum + (payment.fromAccount ? Number(payment.amount || 0) : 0), 0);
+        const balance = accountSummaries.reduce((sum, acc) => sum + acc.balance, 0);
+        return { totalBalance: balance, totalInflow: inflow, totalOutflow: outflow };
     }, [accountSummaries]);
 
 
@@ -96,20 +73,19 @@ const Capital: React.FC = () => {
 
             <main className="pt-6 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard title="Total Bank Balance" value={formatCurrency(totalBankBalance)} icon="business-outline" color="bg-green-500" />
-                    <StatCard title="Total Loans Payable" value={formatCurrency(totalLoansPayable)} icon="cash-outline" color="bg-red-500" />
-                    <StatCard title="Total Investments" value={formatCurrency(totalInvestments)} icon="rocket-outline" color="bg-blue-500" />
+                    <StatCard title="Total Account Balance" value={formatCurrency(totalBalance)} icon="business-outline" color="bg-green-500" />
+                    <StatCard title="Total Inflow" value={formatCurrency(totalInflow)} icon="cash-outline" color="bg-blue-500" />
+                    <StatCard title="Total Outflow" value={formatCurrency(totalOutflow)} icon="rocket-outline" color="bg-red-500" />
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
                     <div className="p-4">
                         <AccountingTable 
                             data={accountSummaries} 
-                            allTrips={trips} 
-                            allLedgerEntries={ledgerEntries} 
                             payments={payments}
                             type="other" 
-                            masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}
+                            allTrips={[]}
+                            masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
                         />
                     </div>
                 </div>

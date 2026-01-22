@@ -31,6 +31,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
+    const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
     const [reportType, setReportType] = useState<ReportType>(isDropoffSupervisor ? 'received' : 'trips');
     const [filters, setFilters] = useState<Filters>({});
     const [currentPage, setCurrentPage] = useState(1);
@@ -375,15 +376,16 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
 
     const renderTable = () => {
         const canManageTrips = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
+        const showActions = mode === 'dashboard' || isSiteManager;
         switch(reportType) {
             case 'trips':
             case 'received': {
-                const headers = mode === 'dashboard' 
+                const headers = showActions
                     ? ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'] 
                     : ['Date', 'Vehicle', 'Customer', 'Material', 'Quarry', 'Net Weight', 'Status'];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip, index: number) => (
                     <tr key={t.id}>
-                        {mode === 'dashboard' ? (
+                        {showActions ? (
                             <>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">{index + 1}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">#{t.id}</td>
@@ -476,6 +478,39 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                                     {isCompleted && (
                                                         <button onClick={() => handleRaiseIssue(t)} className="px-3 py-2 text-sm font-medium text-amber-900 bg-amber-200 rounded-md hover:bg-amber-300">Raise Issue</button>
                                                     )}
+                                                </>
+                                            );
+                                        }
+                                        if (isSiteManager) {
+                                            return (
+                                                <>
+                                                    <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                                    {(t.activityCount ?? 0) > 0 && (
+                                                        <button onClick={() => openModal(`Trip #${t.id} History`, <TripHistoryDialog trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">History</button>
+                                                    )}
+                                                    {(t.status || '').toLowerCase() === 'pending upload' && (
+                                                        <button onClick={() => openModal(`Upload Trip #${t.id}`, <SupervisorTripForm mode="upload" trip={t} onClose={closeModal} onSubmitSuccess={loadTrips} />)} className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">Upload</button>
+                                                    )}
+                                                    <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                                                    <button
+                                                        onClick={() => {
+                                                            openModal('Delete Trip', (
+                                                                <AlertDialog
+                                                                    message="Delete this trip? This action cannot be undone."
+                                                                    confirmLabel="Delete"
+                                                                    cancelLabel="Cancel"
+                                                                    onCancel={closeModal}
+                                                                    onConfirm={async () => {
+                                                                        await deleteTrip(t.id);
+                                                                        closeModal();
+                                                                    }}
+                                                                />
+                                                            ));
+                                                        }}
+                                                        className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                                                    >
+                                                        Delete
+                                                    </button>
                                                 </>
                                             );
                                         }

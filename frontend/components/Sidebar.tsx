@@ -23,7 +23,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR] },
         { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
-        { to: '/royalty-stock', icon: 'layers-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
@@ -31,13 +30,14 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       items: [
         { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/accounting', icon: 'calculator-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/accounting', icon: 'albums-outline', name: 'Total Accounts Overview', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/capital', icon: 'stats-chart-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/royalty-stock', icon: 'cube-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         // Advances deprecated
         { to: '/report', icon: 'document-text-outline', name: 'Report', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
-        { to: '/capital', icon: 'wallet-outline', name: 'Total Accounts Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
       ],
     },
     {
@@ -60,13 +60,13 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     {
       title: 'Legacy Master Data',
       items: [
-        { to: '/customers', icon: 'people-circle-outline', name: 'Customers', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/quarries', icon: 'server-outline', name: 'Quarries', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/transport', icon: 'boat-outline', name: 'Transport', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/royalty', icon: 'document-text-outline', name: 'Royalty', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/materials', icon: 'layers-outline', name: 'Materials', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/accounts', icon: 'card-outline', name: 'Accounts', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/categories', icon: 'copy-outline', name: 'Categories', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
+        { to: '/customers', icon: 'people-circle-outline', name: 'Customers', roles: [] },
+        { to: '/quarries', icon: 'server-outline', name: 'Quarries', roles: [] },
+        { to: '/transport', icon: 'boat-outline', name: 'Transport', roles: [] },
+        { to: '/royalty', icon: 'document-text-outline', name: 'Royalty', roles: [] },
+        { to: '/materials', icon: 'layers-outline', name: 'Materials', roles: [] },
+        { to: '/accounts', icon: 'card-outline', name: 'Accounts', roles: [] },
+        { to: '/categories', icon: 'copy-outline', name: 'Categories', roles: [] },
       ],
     },
     {
@@ -83,6 +83,8 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
     { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
+    { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
+    { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
     { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation' },
     { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },

@@ -1,5 +1,4 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
-import { api } from '../services/mockApi';
 import { usersApi } from '../services/usersApi';
 import { siteLocationApi } from '../services/siteLocationApi';
 import { merchantTypeApi } from '../services/merchantTypeApi';
@@ -289,11 +288,17 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [refreshKey]);
 
   const loadTrips = useCallback(async () => {
-    if (!currentUser || hasLoadedTrips) return;
-    const tripsData = await tripApi.getAll();
-    setTrips(tripsData);
-    setHasLoadedTrips(true);
-  }, [currentUser, hasLoadedTrips]);
+    if (!currentUser) return;
+    try {
+      const tripsData = await tripApi.getAll();
+      setTrips(tripsData);
+    } catch (error) {
+      console.warn('Failed to load trips', error);
+      setTrips([]);
+    } finally {
+      setHasLoadedTrips(true);
+    }
+  }, [currentUser]);
 
   const loadTripMasters = useCallback(async () => {
     if (!currentUser || hasLoadedTripMasters) return;
@@ -332,18 +337,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loadLegacyMasters = useCallback(async () => {
     if (!currentUser || hasLoadedLegacyMasters) return;
-    const [vehiclesData, quarriesData, royaltyData, customersData, customerRatesData] = await Promise.all([
-      api.getVehicleOwners(),
-      api.getQuarryOwners(),
-      api.getRoyaltyOwners(),
-      api.getCustomers(),
-      api.getCustomerRates(),
-    ]);
-    setVehicles(vehiclesData);
-    setQuarries(quarriesData);
-    setRoyaltyOwners(royaltyData);
-    setCustomers(customersData);
-    setCustomerRates(customerRatesData);
+    setVehicles([]);
+    setQuarries([]);
+    setRoyaltyOwners([]);
+    setCustomers([]);
+    setCustomerRates([]);
     setHasLoadedLegacyMasters(true);
   }, [currentUser, hasLoadedLegacyMasters]);
 
@@ -364,36 +362,31 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loadLedgerEntries = useCallback(async () => {
     if (!currentUser || hasLoadedLedgerEntries) return;
-    const ledgerData = await api.getLedgerEntries();
-    setLedgerEntries(ledgerData);
+    setLedgerEntries([]);
     setHasLoadedLedgerEntries(true);
   }, [currentUser, hasLoadedLedgerEntries]);
 
   const loadAccounts = useCallback(async () => {
     if (!currentUser || hasLoadedAccounts) return;
-    const accountsData = await api.getAccounts();
-    setAccounts(accountsData);
+    setAccounts([]);
     setHasLoadedAccounts(true);
   }, [currentUser, hasLoadedAccounts]);
 
   const loadAccountCategories = useCallback(async () => {
     if (!currentUser || hasLoadedAccountCategories) return;
-    const categoriesData = await api.getAccountCategories();
-    setAccountCategories(categoriesData);
+    setAccountCategories([]);
     setHasLoadedAccountCategories(true);
   }, [currentUser, hasLoadedAccountCategories]);
 
   const loadMaterials = useCallback(async () => {
     if (!currentUser || hasLoadedMaterials) return;
-    const materialsData = await api.getMaterials();
-    setMaterials(materialsData);
+    setMaterials([]);
     setHasLoadedMaterials(true);
   }, [currentUser, hasLoadedMaterials]);
 
   const loadRoyaltyStock = useCallback(async () => {
     if (!currentUser || hasLoadedRoyaltyStock) return;
-    const stockData = await api.getRoyaltyStock();
-    setRoyaltyStock(stockData);
+    setRoyaltyStock([]);
     setHasLoadedRoyaltyStock(true);
   }, [currentUser, hasLoadedRoyaltyStock]);
 
@@ -664,29 +657,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     refreshData();
   };
 
-  const addLedgerEntry = async (entry: Omit<LedgerEntry, 'id'>) => {
-    await api.addLedgerEntry(entry);
-    refreshData();
+  const addLedgerEntry = async () => {
+    console.warn('Ledger entries are deprecated and no longer supported.');
   };
 
-  const updateLedgerEntry = async (id: string, entry: Omit<LedgerEntry, 'id'>) => {
-    await api.updateLedgerEntry(id, entry);
-    refreshData();
+  const updateLedgerEntry = async () => {
+    console.warn('Ledger entries are deprecated and no longer supported.');
   };
 
-  const deleteLedgerEntry = async (id: string) => {
-    await api.deleteLedgerEntry(id);
-    refreshData();
+  const deleteLedgerEntry = async () => {
+    console.warn('Ledger entries are deprecated and no longer supported.');
   };
 
-  const addAccount = async (account: Omit<Account, 'id'>) => {
-    await api.addAccount(account);
-    refreshData();
+  const addAccount = async () => {
+    console.warn('Accounts are deprecated and no longer supported.');
   };
 
-  const addAccountCategory = async (category: Omit<AccountCategory, 'id'>) => {
-    await api.addAccountCategory(category);
-    refreshData();
+  const addAccountCategory = async () => {
+    console.warn('Account categories are deprecated and no longer supported.');
   }
 
   const addVehicleMaster = async (vehicle: Omit<VehicleMaster, 'id'>) => {
@@ -725,27 +713,63 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       .map((user) => user.name);
   }, []);
 
-  const addVehicleOwner = async (vehicleOwner: Omit<VehicleOwner, 'id'>) => { await api.addVehicleOwner(vehicleOwner); refreshData(); };
-  const updateVehicleOwner = async (id: string, vehicleOwner: Omit<VehicleOwner, 'id' | 'rates'>) => { await api.updateVehicleOwner(id, vehicleOwner); refreshData(); };
-  const deleteVehicleOwner = async (id: string) => { await api.deleteVehicleOwner(id); refreshData(); };
-  const addTransportRate = async (transportId: string, rate: Omit<RateEntry, 'id'>) => { await api.addTransportRate(transportId, rate); refreshData(); };
-  const updateTransportRate = async (transportId: string, rate: RateEntry) => { await api.updateTransportRate(transportId, rate); refreshData(); };
-  const deleteTransportRate = async (transportId: string, rateId: string) => { await api.deleteTransportRate(transportId, rateId); refreshData(); };
+  const addVehicleOwner = async () => {
+    console.warn('Legacy transport owners are deprecated and no longer supported.');
+  };
+  const updateVehicleOwner = async () => {
+    console.warn('Legacy transport owners are deprecated and no longer supported.');
+  };
+  const deleteVehicleOwner = async () => {
+    console.warn('Legacy transport owners are deprecated and no longer supported.');
+  };
+  const addTransportRate = async () => {
+    console.warn('Legacy transport rates are deprecated and no longer supported.');
+  };
+  const updateTransportRate = async () => {
+    console.warn('Legacy transport rates are deprecated and no longer supported.');
+  };
+  const deleteTransportRate = async () => {
+    console.warn('Legacy transport rates are deprecated and no longer supported.');
+  };
 
-  const addQuarryOwner = async (quarryOwner: Omit<QuarryOwner, 'id'>) => { await api.addQuarryOwner(quarryOwner); refreshData(); };
-  const addQuarryRate = async (quarryId: string, rate: Omit<RateEntry, 'id'>) => { await api.addQuarryRate(quarryId, rate); refreshData(); };
-  const updateQuarryRate = async (quarryId: string, rate: RateEntry) => { await api.updateQuarryRate(quarryId, rate); refreshData(); };
-  const deleteQuarryRate = async (quarryId: string, rateId: string) => { await api.deleteQuarryRate(quarryId, rateId); refreshData(); };
+  const addQuarryOwner = async () => {
+    console.warn('Legacy quarry owners are deprecated and no longer supported.');
+  };
+  const addQuarryRate = async () => {
+    console.warn('Legacy quarry rates are deprecated and no longer supported.');
+  };
+  const updateQuarryRate = async () => {
+    console.warn('Legacy quarry rates are deprecated and no longer supported.');
+  };
+  const deleteQuarryRate = async () => {
+    console.warn('Legacy quarry rates are deprecated and no longer supported.');
+  };
 
-  const addRoyaltyOwner = async (royaltyOwner: Omit<RoyaltyOwner, 'id'>) => { await api.addRoyaltyOwner(royaltyOwner); refreshData(); };
-  const addRoyaltyRate = async (royaltyId: string, rate: Omit<RateEntry, 'id'>) => { await api.addRoyaltyRate(royaltyId, rate); refreshData(); };
-  const updateRoyaltyRate = async (royaltyId: string, rate: RateEntry) => { await api.updateRoyaltyRate(royaltyId, rate); refreshData(); };
-  const deleteRoyaltyRate = async (royaltyId: string, rateId: string) => { await api.deleteRoyaltyRate(royaltyId, rateId); refreshData(); };
+  const addRoyaltyOwner = async () => {
+    console.warn('Legacy royalty owners are deprecated and no longer supported.');
+  };
+  const addRoyaltyRate = async () => {
+    console.warn('Legacy royalty rates are deprecated and no longer supported.');
+  };
+  const updateRoyaltyRate = async () => {
+    console.warn('Legacy royalty rates are deprecated and no longer supported.');
+  };
+  const deleteRoyaltyRate = async () => {
+    console.warn('Legacy royalty rates are deprecated and no longer supported.');
+  };
 
-  const addCustomer = async (customer: Omit<Customer, 'id'>) => { await api.addCustomer(customer); refreshData(); };
-  const addCustomerRate = async (customerId: string, rate: Omit<RateEntry, 'id'>) => { await api.addCustomerRate(customerId, rate); refreshData(); };
-  const updateCustomerRate = async (customerId: string, rate: RateEntry) => { await api.updateCustomerRate(customerId, rate); refreshData(); };
-  const deleteCustomerRate = async (customerId: string, rateId: string) => { await api.deleteCustomerRate(customerId, rateId); refreshData(); };
+  const addCustomer = async () => {
+    console.warn('Legacy customers are deprecated and no longer supported.');
+  };
+  const addCustomerRate = async () => {
+    console.warn('Legacy customer rates are deprecated and no longer supported.');
+  };
+  const updateCustomerRate = async () => {
+    console.warn('Legacy customer rates are deprecated and no longer supported.');
+  };
+  const deleteCustomerRate = async () => {
+    console.warn('Legacy customer rates are deprecated and no longer supported.');
+  };
 
   const addSiteLocation = async (site: Omit<SiteLocation, 'id'>) => {
     const newSite = await siteLocationApi.create(site);
@@ -929,12 +953,20 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setMaterialRates(prev => prev.filter(item => item.id !== id));
   };
 
-  const addMaterial = async (material: Omit<Material, 'id'>) => { await api.addMaterial(material); refreshData(); };
-  const updateMaterial = async (id: number, material: Omit<Material, 'id'>) => { await api.updateMaterial(id, material); refreshData(); };
-  const deleteMaterial = async (id: number) => { await api.deleteMaterial(id); refreshData(); };
+  const addMaterial = async () => {
+    console.warn('Legacy materials are deprecated and no longer supported.');
+  };
+  const updateMaterial = async () => {
+    console.warn('Legacy materials are deprecated and no longer supported.');
+  };
+  const deleteMaterial = async () => {
+    console.warn('Legacy materials are deprecated and no longer supported.');
+  };
 
-  const getRoyaltyStock = async () => api.getRoyaltyStock();
-  const addRoyaltyStock = async (stock: Omit<RoyaltyStock, 'id'>) => { await api.addRoyaltyStock(stock); refreshData(); };
+  const getRoyaltyStock = async () => [];
+  const addRoyaltyStock = async () => {
+    console.warn('Legacy royalty stock is deprecated and no longer supported.');
+  };
 
   const value = {
     loadTrips,
