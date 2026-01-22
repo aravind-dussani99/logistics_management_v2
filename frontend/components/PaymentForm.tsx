@@ -68,6 +68,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 
+
   const ratePartyTypeByName = useMemo(() => {
     const map = new Map<string, RatePartyType>();
     vendorCustomers.forEach(item => map.set(normalizeName(item.name), 'vendor-customer'));
