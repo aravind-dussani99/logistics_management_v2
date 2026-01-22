@@ -116,6 +116,14 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
         const key = normalizeName(payment.toAccount);
         map.set(key, (map.get(key) || 0) + amountValue);
       }
+      if (!payment.toAccount && payment.ratePartyName && payment.type === PaymentType.RECEIPT) {
+        const key = normalizeName(payment.ratePartyName);
+        map.set(key, (map.get(key) || 0) + amountValue);
+      }
+      if (!payment.fromAccount && payment.ratePartyName && payment.type === PaymentType.PAYMENT) {
+        const key = normalizeName(payment.ratePartyName);
+        map.set(key, (map.get(key) || 0) - amountValue);
+      }
     });
     return map;
   }, [payments]);
@@ -123,6 +131,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
   const ratePartyBalances = useMemo(() => {
     const tripTotals = new Map<string, number>();
     const paymentTotals = new Map<string, number>();
+    const counterpartyTotals = new Map<string, number>();
 
     const ensureKey = (name: string) => {
       if (!name) return;
@@ -164,29 +173,48 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
       if (resolvedName) {
         const key = normalizeName(resolvedName);
         const partyType = payment.ratePartyType || ratePartyTypeByName.get(key);
-        const signedAmount = partyType === 'vendor-customer'
-          ? (payment.type === PaymentType.RECEIPT ? amountValue : -amountValue)
-          : (payment.type === PaymentType.PAYMENT ? amountValue : -amountValue);
-        paymentTotals.set(key, (paymentTotals.get(key) || 0) + signedAmount);
+        if (partyType) {
+          const signedAmount = partyType === 'vendor-customer'
+            ? (payment.type === PaymentType.RECEIPT ? amountValue : -amountValue)
+            : (payment.type === PaymentType.PAYMENT ? amountValue : -amountValue);
+          paymentTotals.set(key, (paymentTotals.get(key) || 0) + signedAmount);
+        } else {
+          const delta = payment.type === PaymentType.RECEIPT ? amountValue : -amountValue;
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + delta);
+        }
+        if (payment.type === PaymentType.RECEIPT && payment.fromAccount) {
+          const key = normalizeName(payment.fromAccount);
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + amountValue);
+        }
+        if (payment.type === PaymentType.PAYMENT && payment.toAccount) {
+          const key = normalizeName(payment.toAccount);
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) - amountValue);
+        }
         return;
       }
 
       if (payment.type === PaymentType.RECEIPT && payment.fromAccount) {
         const key = normalizeName(payment.fromAccount);
         paymentTotals.set(key, (paymentTotals.get(key) || 0) - amountValue);
+        counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + amountValue);
       }
       if (payment.type === PaymentType.PAYMENT && payment.toAccount) {
         const key = normalizeName(payment.toAccount);
         paymentTotals.set(key, (paymentTotals.get(key) || 0) + amountValue);
+        counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) - amountValue);
       }
     });
 
     const balances = new Map<string, number>();
-    const allKeys = new Set<string>([...tripTotals.keys(), ...paymentTotals.keys()]);
+    const allKeys = new Set<string>([...tripTotals.keys(), ...paymentTotals.keys(), ...counterpartyTotals.keys()]);
     allKeys.forEach(key => {
       const tripTotal = tripTotals.get(key) || 0;
       const paid = paymentTotals.get(key) || 0;
-      balances.set(key, tripTotal - paid);
+      if (tripTotal !== 0 || ratePartyTypeByName.has(key)) {
+        balances.set(key, tripTotal - paid);
+      } else {
+        balances.set(key, counterpartyTotals.get(key) || 0);
+      }
     });
     return balances;
   }, [trips, payments, ratePartyNameById, ratePartyTypeByName, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);

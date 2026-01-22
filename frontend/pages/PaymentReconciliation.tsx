@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDateDisplay } from '../utils';
@@ -58,6 +58,16 @@ const PaymentReconciliation: React.FC = () => {
     return map;
   }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
 
+  const accountOptions = useMemo(() => {
+    const values = new Set<string>();
+    payments.forEach(item => {
+      if (item.fromAccount) values.add(item.fromAccount);
+      if (item.toAccount) values.add(item.toAccount);
+      if (item.headAccount) values.add(item.headAccount);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [payments]);
+
   const partyOptions = useMemo(() => {
     const values = new Set<string>();
     vendorCustomers.forEach(item => values.add(item.name));
@@ -77,16 +87,6 @@ const PaymentReconciliation: React.FC = () => {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, payments, ratePartyNameById, accountOptions]);
 
-  const accountOptions = useMemo(() => {
-    const values = new Set<string>();
-    payments.forEach(item => {
-      if (item.fromAccount) values.add(item.fromAccount);
-      if (item.toAccount) values.add(item.toAccount);
-      if (item.headAccount) values.add(item.headAccount);
-    });
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [payments]);
-
   const headAccountOptions = useMemo(() => {
     const values = new Set<string>();
     payments.forEach(item => {
@@ -96,8 +96,18 @@ const PaymentReconciliation: React.FC = () => {
   }, [payments]);
 
   const selectedPartyKey = normalizeName(selectedParty);
-  const accountOptionKeys = useMemo(() => new Set(accountOptions.map(option => normalizeName(option))), [accountOptions]);
-  const isAccountSelection = selectedPartyKey ? accountOptionKeys.has(selectedPartyKey) : false;
+  const internalAccountKeys = useMemo(() => {
+    const values = new Set<string>();
+    payments.forEach(payment => {
+      if (payment.toAccount) values.add(normalizeName(payment.toAccount));
+      if (payment.headAccount) values.add(normalizeName(payment.headAccount));
+      if (payment.type === 'RECEIPT' && payment.fromAccount && !payment.toAccount && payment.ratePartyName) {
+        values.add(normalizeName(payment.ratePartyName));
+      }
+    });
+    return values;
+  }, [payments]);
+  const isAccountSelection = selectedPartyKey ? internalAccountKeys.has(selectedPartyKey) : false;
 
   const selectedPartyTypes = useMemo(() => {
     if (!selectedPartyKey) return new Set<RatePartyType>();
@@ -203,6 +213,48 @@ const PaymentReconciliation: React.FC = () => {
     });
   }, [payments, ratePartyNameById, selectedPartyKey]);
 
+  const nonTripTransactionRows = useMemo(() => {
+    if (!selectedPartyKey) return [];
+    return payments.filter(payment => {
+      if (normalizeName(payment.ratePartyName || '') === selectedPartyKey) return true;
+      if (normalizeName(payment.fromAccount || '') === selectedPartyKey) return true;
+      if (normalizeName(payment.toAccount || '') === selectedPartyKey) return true;
+      return false;
+    });
+  }, [payments, selectedPartyKey]);
+
+  const resolveAccountMatch = (payment: (typeof payments)[number], key: string) => {
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    if (fromMatch || toMatch) {
+      return { fromMatch, toMatch, viaCounterparty: false };
+    }
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (counterpartyMatch && !payment.toAccount && payment.type === 'RECEIPT') {
+      return { fromMatch: false, toMatch: true, viaCounterparty: true };
+    }
+    if (counterpartyMatch && !payment.fromAccount && payment.type === 'PAYMENT') {
+      return { fromMatch: true, toMatch: false, viaCounterparty: true };
+    }
+    return null;
+  };
+
+  const getCounterpartyDelta = useCallback((payment: (typeof payments)[number], key: string) => {
+    const amount = Number(payment.amount || 0);
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (payment.type === 'RECEIPT') {
+      if (fromMatch || (counterpartyMatch && !payment.fromAccount)) return amount;
+      return 0;
+    }
+    if (payment.type === 'PAYMENT') {
+      if (counterpartyMatch || toMatch) return -amount;
+      return 0;
+    }
+    return 0;
+  }, [normalizeName]);
+
   const accountStatementRows = useMemo(() => {
     if (!selectedPartyKey || !isAccountSelection) return [];
     return payments.filter(payment => resolveAccountMatch(payment, selectedPartyKey));
@@ -248,18 +300,19 @@ const PaymentReconciliation: React.FC = () => {
       );
     }
     if (!partyHasTrips) {
-      return partyPaymentRows.reduce(
+      return nonTripTransactionRows.reduce(
         (acc, payment) => {
           const amount = Number(payment.amount || 0);
-          if (payment.type === 'RECEIPT') acc.inflow += amount;
-          if (payment.type === 'PAYMENT') acc.outflow += amount;
+          const delta = getCounterpartyDelta(payment, selectedPartyKey);
+          if (delta > 0) acc.inflow += amount;
+          if (delta < 0) acc.outflow += amount;
           return acc;
         },
         { inflow: 0, outflow: 0 }
       );
     }
     return { inflow: 0, outflow: 0 };
-  }, [selectedPartyKey, isAccountSelection, accountStatementRows, partyHasTrips, partyPaymentRows]);
+  }, [selectedPartyKey, isAccountSelection, accountStatementRows, partyHasTrips, nonTripTransactionRows, getCounterpartyDelta]);
 
   const partyPaymentBalance = partyHasTrips
     ? partySummary.balance
@@ -267,26 +320,16 @@ const PaymentReconciliation: React.FC = () => {
 
   const partyTransactionRows = useMemo(() => {
     if (!selectedPartyKey) return [];
-    if (partyHasTrips) return partyPaymentRows;
-    if (isAccountSelection) return accountStatementRows;
-    return partyPaymentRows;
-  }, [selectedPartyKey, partyHasTrips, isAccountSelection, accountStatementRows, partyPaymentRows]);
-
-  const resolveAccountMatch = (payment: (typeof payments)[number], key: string) => {
-    const fromMatch = normalizeName(payment.fromAccount || '') === key;
-    const toMatch = normalizeName(payment.toAccount || '') === key;
-    if (fromMatch || toMatch) {
-      return { fromMatch, toMatch, viaCounterparty: false };
-    }
-    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
-    if (counterpartyMatch && !payment.toAccount && payment.type === 'RECEIPT') {
-      return { fromMatch: false, toMatch: true, viaCounterparty: true };
-    }
-    if (counterpartyMatch && !payment.fromAccount && payment.type === 'PAYMENT') {
-      return { fromMatch: true, toMatch: false, viaCounterparty: true };
-    }
-    return null;
-  };
+    const rows = partyHasTrips
+      ? partyPaymentRows
+      : (isAccountSelection ? accountStatementRows : nonTripTransactionRows);
+    return [...rows].sort((a, b) => {
+      const aTime = new Date(a.date).getTime();
+      const bTime = new Date(b.date).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+      return (a.id || 0) - (b.id || 0);
+    });
+  }, [selectedPartyKey, partyHasTrips, isAccountSelection, accountStatementRows, partyPaymentRows, nonTripTransactionRows]);
 
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
@@ -328,7 +371,6 @@ const PaymentReconciliation: React.FC = () => {
       ...(showTransportColumns ? ['Transport Rate/Ton', 'Transport Amount'] : []),
       ...(showRoyaltyColumns ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
       'Total Value',
-      'Matched Amount',
     ];
     const rows = partyTripRows.map(row => [
       `#${row.id}`,
@@ -342,7 +384,6 @@ const PaymentReconciliation: React.FC = () => {
       ...(showTransportColumns ? [row.transportRate.toFixed(2), row.transportCost.toFixed(2)] : []),
       ...(showRoyaltyColumns ? [row.royaltyRate.toFixed(2), row.royaltyCost.toFixed(2)] : []),
       row.totalValue.toFixed(2),
-      row.amount.toFixed(2),
     ]);
     exportCsv(`reconciliation_trips_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
   };
@@ -474,9 +515,10 @@ const PaymentReconciliation: React.FC = () => {
         </div>
       </div>
 
-      {mode === 'party' && selectedParty && partyHasTrips && (
+      {mode === 'party' && selectedParty && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          {partyHasTrips && (
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
               <span>Trips</span>
               <div className="flex items-center gap-2 text-xs">
@@ -516,7 +558,6 @@ const PaymentReconciliation: React.FC = () => {
                     {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Rate/Ton</th>}
                     {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Amount</th>}
                     <th className="px-4 py-3 text-left">Total Value</th>
-                    <th className="px-4 py-3 text-left">Matched Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -537,8 +578,7 @@ const PaymentReconciliation: React.FC = () => {
                       {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportCost)}</td>}
                       {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyRate)}</td>}
                       {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyCost)}</td>}
-                      <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
-                      <td className="px-4 py-3">{formatCurrency(row.amount)}</td>
+                    <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
                     </tr>
                   ))}
                   {partyTripRows.length === 0 && (
@@ -550,6 +590,7 @@ const PaymentReconciliation: React.FC = () => {
               </table>
             </div>
           </div>
+          )}
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
               <span>{partyHasTrips ? 'Payments' : 'Transactions'}</span>
@@ -579,10 +620,14 @@ const PaymentReconciliation: React.FC = () => {
                     <th className="px-4 py-3 text-left">From</th>
                     <th className="px-4 py-3 text-left">To</th>
                     <th className="px-4 py-3 text-left">Amount</th>
+                    {!partyHasTrips && <th className="px-4 py-3 text-left">Opening Balance</th>}
+                    {!partyHasTrips && <th className="px-4 py-3 text-left">Closing Balance</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {partyTransactionRows.map(payment => {
+                  {(() => {
+                    let runningBalance = 0;
+                    return partyTransactionRows.map(payment => {
                     const match = isAccountSelection ? resolveAccountMatch(payment, selectedPartyKey) : null;
                     const displayFrom = match?.viaCounterparty && match.fromMatch && !payment.fromAccount
                       ? selectedParty
@@ -590,19 +635,35 @@ const PaymentReconciliation: React.FC = () => {
                     const displayTo = match?.viaCounterparty && match.toMatch && !payment.toAccount
                       ? selectedParty
                       : (payment.toAccount || '-');
+                    const amountValue = Number(payment.amount || 0);
+                    let delta = 0;
+                    if (!partyHasTrips) {
+                      if (isAccountSelection) {
+                        if (match?.toMatch) delta += amountValue;
+                        if (match?.fromMatch) delta -= amountValue;
+                      } else {
+                        delta = getCounterpartyDelta(payment, selectedPartyKey);
+                      }
+                    }
+                    const openingBalance = runningBalance;
+                    const closingBalance = openingBalance + delta;
+                    runningBalance = closingBalance;
                     return (
                       <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
                         <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                         <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                         <td className="px-4 py-3">{displayFrom}</td>
                         <td className="px-4 py-3">{displayTo}</td>
-                        <td className="px-4 py-3">{formatCurrency(Number(payment.amount || 0))}</td>
+                        <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
+                        {!partyHasTrips && <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>}
+                        {!partyHasTrips && <td className="px-4 py-3">{formatCurrency(closingBalance)}</td>}
                       </tr>
                     );
-                  })}
+                    });
+                  })()}
                   {partyTransactionRows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">
+                      <td colSpan={partyHasTrips ? 5 : 7} className="px-4 py-6 text-center text-sm text-gray-500">
                         No transactions found for this selection.
                       </td>
                     </tr>
