@@ -4,11 +4,6 @@ import Layout from './components/Layout';
 import ReportDashboard from './pages/Dashboard';
 import DashboardPlaceholder from './pages/DashboardPlaceholder';
 import DailyTrips from './pages/DailyTrips';
-import Accounting from './pages/Accounting';
-import Royalty from './pages/Royalty';
-import Customers from './pages/Customers';
-import Quarries from './pages/Quarries';
-import Transport from './pages/Transport';
 import Login from './pages/Login';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
@@ -21,10 +16,6 @@ import { DataProvider } from './contexts/DataContext';
 import { UIProvider } from './contexts/UIContext';
 import Payments from './pages/Payments';
 import PaymentReconciliation from './pages/PaymentReconciliation';
-import RoyaltyStock from './pages/RoyaltyStock';
-import Accounts from './pages/Accounts';
-import Categories from './pages/Categories';
-import Capital from './pages/Capital';
 import DailyExpenses from './pages/DailyExpenses';
 import ReceivedTrips from './pages/ReceivedTrips';
 import Advances from './pages/Advances';
@@ -32,7 +23,6 @@ import Reports from './pages/Reports';
 import SiteManagerDashboard from './pages/SiteManagerDashboard';
 import TripRates from './pages/TripRates';
 import DailyPayments from './pages/DailyPayments';
-import Materials from './pages/Materials';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
 import MerchantTypes from './pages/MerchantTypes';
@@ -55,6 +45,9 @@ import SupervisorSiteExpenses from './pages/Supervisor/SiteExpenses';
 import SupervisorAdvancesForm from './pages/Supervisor/AdvancesForm';
 import TripImport from './pages/TripImport';
 import TripFeed from './pages/TripFeed';
+import Accounting from './pages/Accounting';
+import Capital from './pages/Capital';
+import RoyaltyStock from './pages/RoyaltyStock';
 
 const ProtectedLayout: React.FC = () => (
   <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER, Role.GUEST]}>
@@ -116,12 +109,12 @@ const AppRoutes: React.FC = () => (
         </ProtectedRoute>
       } />
       <Route path="/trip-import" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <TripImport />
         </ProtectedRoute>
       } />
       <Route path="/trip-feed" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR]}>
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER]}>
           <TripFeed />
         </ProtectedRoute>
       } />
@@ -146,7 +139,6 @@ const AppRoutes: React.FC = () => (
           <Reports />
         </ProtectedRoute>
       } />
-      <Route path="/accounting" element={<Accounting />} />
       <Route path="/ledger" element={<Navigate to="/payments" replace />} />
       <Route path="/payments" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
@@ -156,6 +148,21 @@ const AppRoutes: React.FC = () => (
       <Route path="/payment-reconciliation" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <PaymentReconciliation />
+        </ProtectedRoute>
+      } />
+      <Route path="/accounting" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <Accounting />
+        </ProtectedRoute>
+      } />
+      <Route path="/capital" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <Capital />
+        </ProtectedRoute>
+      } />
+      <Route path="/royalty-stock" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <RoyaltyStock />
         </ProtectedRoute>
       } />
       <Route path="/daily-payments" element={
@@ -169,9 +176,7 @@ const AppRoutes: React.FC = () => (
         </ProtectedRoute>
       } />
       <Route path="/profile" element={<Profile />} />
-      <Route path="/capital" element={<Capital />} />
-      <Route path="/royalty" element={<Royalty />} />
-      <Route path="/royalty-stock" element={<RoyaltyStock />} />
+      <Route path="/royalty" element={<Navigate to="/royalty-owner-data" replace />} />
       <Route path="/daily-expenses" element={
         <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <RoleBasedDailyExpenses />
@@ -182,12 +187,12 @@ const AppRoutes: React.FC = () => (
           <SupervisorSiteExpenses />
         </ProtectedRoute>
       } />
-      <Route path="/customers" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Customers /></ProtectedRoute>} />
-      <Route path="/quarries" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Quarries /></ProtectedRoute>} />
-      <Route path="/transport" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Transport /></ProtectedRoute>} />
-      <Route path="/accounts" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Accounts /></ProtectedRoute>} />
-      <Route path="/categories" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Categories /></ProtectedRoute>} />
-      <Route path="/materials" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Materials /></ProtectedRoute>} />
+      <Route path="/customers" element={<Navigate to="/vendor-customer-data" replace />} />
+      <Route path="/quarries" element={<Navigate to="/mine-quarry-data" replace />} />
+      <Route path="/transport" element={<Navigate to="/transport-owner-data" replace />} />
+      <Route path="/accounts" element={<Navigate to="/merchant-accounts" replace />} />
+      <Route path="/categories" element={<Navigate to="/account-types" replace />} />
+      <Route path="/materials" element={<Navigate to="/material-types" replace />} />
       <Route path="/vehicles" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><Vehicles /></ProtectedRoute>} />
       <Route path="/sites" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><SiteLocations /></ProtectedRoute>} />
       <Route path="/merchant-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><MerchantTypes /></ProtectedRoute>} />

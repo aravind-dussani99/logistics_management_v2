@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useData } from '../contexts/DataContext';
 import { Trip } from '../types';
@@ -79,16 +79,28 @@ const parseCsvText = (text: string) => {
 const parseDate = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  const parts = trimmed.split(/[./-]/).map(part => part.trim());
-  if (parts.length < 3) return '';
-  const [day, month, yearPart] = parts;
-  const yearNum = Number(yearPart.length === 2 ? `20${yearPart}` : yearPart);
-  const monthNum = Number(month);
-  const dayNum = Number(day);
-  if (!yearNum || !monthNum || !dayNum) return '';
-  const isoMonth = String(monthNum).padStart(2, '0');
-  const isoDay = String(dayNum).padStart(2, '0');
-  return `${yearNum}-${isoMonth}-${isoDay}`;
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const isoMonth = String(Number(month)).padStart(2, '0');
+    const isoDay = String(Number(day)).padStart(2, '0');
+    return `${year}-${isoMonth}-${isoDay}`;
+  }
+  const parts = trimmed.split(/[./-]/).map(part => part.trim()).filter(Boolean);
+  if (parts.length >= 3) {
+    const [partA, partB, yearPart] = parts;
+    const yearNum = Number(yearPart.length === 2 ? `20${yearPart}` : yearPart);
+    const monthNum = Number(partB);
+    const dayNum = Number(partA);
+    if (yearNum && monthNum && dayNum) {
+      const isoMonth = String(monthNum).padStart(2, '0');
+      const isoDay = String(dayNum).padStart(2, '0');
+      return `${yearNum}-${isoMonth}-${isoDay}`;
+    }
+  }
+  const fallback = new Date(trimmed);
+  if (Number.isNaN(fallback.getTime())) return '';
+  return fallback.toISOString().split('T')[0];
 };
 
 const TripImport: React.FC = () => {
@@ -100,6 +112,7 @@ const TripImport: React.FC = () => {
   const [failedRows, setFailedRows] = useState<ParsedTrip[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const cancelRef = useRef(false);
   const [excludedRowNumbers, setExcludedRowNumbers] = useState<number[]>([]);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
@@ -251,6 +264,7 @@ const TripImport: React.FC = () => {
       return;
     }
     setIsSubmitting(true);
+    cancelRef.current = false;
     const rowsToImport = readyRows;
     if (rowsToImport.length === 0) {
       setIsSubmitting(false);
@@ -259,8 +273,13 @@ const TripImport: React.FC = () => {
       return;
     }
     let successCount = 0;
-    const failed: ParsedTrip[] = [];
-    for (const trip of rowsToImport) {
+    let failed: ParsedTrip[] = [];
+    for (let index = 0; index < rowsToImport.length; index += 1) {
+      if (cancelRef.current) {
+        failed = rowsToImport.slice(index);
+        break;
+      }
+      const trip = rowsToImport[index];
       try {
         await addTripAtomic(trip.data, {
           vendorCustomer: true,
@@ -275,25 +294,32 @@ const TripImport: React.FC = () => {
         successCount += 1;
       } catch (error) {
         console.error('Failed to import trip row', trip.rowNumber, error);
-        failed.push(trip);
+        failed = rowsToImport.slice(index);
+        break;
       }
     }
     setIsSubmitting(false);
     setFailedRows(failed);
     const duplicateCount = totalDuplicateCount;
     setSubmitMessage([
-      `Imported ${successCount} trips.`,
+      cancelRef.current ? `Import cancelled after ${successCount} trips.` : `Imported ${successCount} trips.`,
       duplicateCount ? `${duplicateCount} duplicates skipped.` : '',
-      failed.length ? `${failed.length} failed.` : '',
+      failed.length ? `${failed.length} remaining rows not imported.` : '',
     ].filter(Boolean).join(' '));
   };
 
   const retryFailed = async () => {
     if (failedRows.length === 0) return;
     setIsSubmitting(true);
+    cancelRef.current = false;
     const failed: ParsedTrip[] = [];
     let successCount = 0;
-    for (const row of failedRows) {
+    for (let index = 0; index < failedRows.length; index += 1) {
+      if (cancelRef.current) {
+        failed.push(...failedRows.slice(index));
+        break;
+      }
+      const row = failedRows[index];
       try {
         await addTripAtomic(row.data, {
           vendorCustomer: true,
@@ -308,12 +334,15 @@ const TripImport: React.FC = () => {
         successCount += 1;
       } catch (error) {
         console.error('Retry failed for row', row.rowNumber, error);
-        failed.push(row);
+        failed.push(...failedRows.slice(index));
+        break;
       }
     }
     setIsSubmitting(false);
     setFailedRows(failed);
-    setSubmitMessage(`Retried ${successCount} rows. ${failed.length} still failing.`);
+    setSubmitMessage(cancelRef.current
+      ? `Import cancelled after retrying ${successCount} rows.`
+      : `Retried ${successCount} rows. ${failed.length} still pending.`);
   };
 
   return (
@@ -394,6 +423,18 @@ const TripImport: React.FC = () => {
           >
             {isSubmitting ? 'Importing...' : 'Import Trips'}
           </button>
+          {isSubmitting && (
+            <button
+              type="button"
+              onClick={() => {
+                cancelRef.current = true;
+                setSubmitMessage('Cancelling import...');
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700"
+            >
+              Cancel Import
+            </button>
+          )}
 
           {failedRows.length > 0 && (
             <div className="flex items-center gap-3">

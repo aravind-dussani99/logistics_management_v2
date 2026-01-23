@@ -66,7 +66,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     setBankAccountFiles(parseUploadValue(initialData?.bankAccountUploads));
   }, [initialData]);
 
-  const normalizeName = (value: string) => value.trim().toLowerCase();
+  const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+
 
   const ratePartyTypeByName = useMemo(() => {
     const map = new Map<string, RatePartyType>();
@@ -85,6 +86,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     royaltyOwnerProfiles.forEach(item => values.add(item.name));
     payments.forEach(item => {
       if (item.ratePartyName) values.add(item.ratePartyName);
+      if (item.fromAccount) values.add(item.fromAccount);
+      if (item.toAccount) values.add(item.toAccount);
     });
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, payments]);
@@ -113,6 +116,14 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
         const key = normalizeName(payment.toAccount);
         map.set(key, (map.get(key) || 0) + amountValue);
       }
+      if (!payment.toAccount && payment.ratePartyName && payment.type === PaymentType.RECEIPT) {
+        const key = normalizeName(payment.ratePartyName);
+        map.set(key, (map.get(key) || 0) + amountValue);
+      }
+      if (!payment.fromAccount && payment.ratePartyName && payment.type === PaymentType.PAYMENT) {
+        const key = normalizeName(payment.ratePartyName);
+        map.set(key, (map.get(key) || 0) - amountValue);
+      }
     });
     return map;
   }, [payments]);
@@ -120,6 +131,24 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
   const ratePartyBalances = useMemo(() => {
     const tripTotals = new Map<string, number>();
     const paymentTotals = new Map<string, number>();
+    const counterpartyTotals = new Map<string, number>();
+
+    const ensureKey = (name: string) => {
+      if (!name) return;
+      const key = normalizeName(name);
+      if (!tripTotals.has(key)) tripTotals.set(key, 0);
+      if (!paymentTotals.has(key)) paymentTotals.set(key, 0);
+    };
+
+    vendorCustomers.forEach(item => ensureKey(item.name));
+    mineQuarries.forEach(item => ensureKey(item.name));
+    transportOwnerProfiles.forEach(item => ensureKey(item.name));
+    royaltyOwnerProfiles.forEach(item => ensureKey(item.name));
+    payments.forEach(item => {
+      if (item.ratePartyName) ensureKey(item.ratePartyName);
+      if (!item.ratePartyName && item.fromAccount) ensureKey(item.fromAccount);
+      if (!item.ratePartyName && item.toAccount) ensureKey(item.toAccount);
+    });
 
     const addTripAmount = (name: string, amountValue: number) => {
       if (!name) return;
@@ -128,6 +157,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     };
 
     trips.forEach(trip => {
+      addTripAmount(trip.vendorName || '', Number(trip.revenue || 0));
       addTripAmount(trip.customer || '', Number(trip.revenue || 0));
       addTripAmount(trip.quarryName || '', Number(trip.materialCost || 0));
       addTripAmount(trip.transporterName || '', Number(trip.transportCost || 0));
@@ -139,48 +169,55 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
         || (payment.ratePartyType && payment.ratePartyId
           ? ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || ''
           : '');
-      if (!resolvedName) return;
-      const key = normalizeName(resolvedName);
-      const partyType = payment.ratePartyType || ratePartyTypeByName.get(key);
       const amountValue = Number(payment.amount || 0);
-      const signedAmount = partyType === 'vendor-customer'
-        ? (payment.type === PaymentType.RECEIPT ? amountValue : -amountValue)
-        : (payment.type === PaymentType.PAYMENT ? amountValue : -amountValue);
-      paymentTotals.set(key, (paymentTotals.get(key) || 0) + signedAmount);
+      if (resolvedName) {
+        const key = normalizeName(resolvedName);
+        const partyType = payment.ratePartyType || ratePartyTypeByName.get(key);
+        if (partyType) {
+          const signedAmount = partyType === 'vendor-customer'
+            ? (payment.type === PaymentType.RECEIPT ? amountValue : -amountValue)
+            : (payment.type === PaymentType.PAYMENT ? amountValue : -amountValue);
+          paymentTotals.set(key, (paymentTotals.get(key) || 0) + signedAmount);
+        } else {
+          const delta = payment.type === PaymentType.RECEIPT ? amountValue : -amountValue;
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + delta);
+        }
+        if (payment.type === PaymentType.RECEIPT && payment.fromAccount) {
+          const key = normalizeName(payment.fromAccount);
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + amountValue);
+        }
+        if (payment.type === PaymentType.PAYMENT && payment.toAccount) {
+          const key = normalizeName(payment.toAccount);
+          counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) - amountValue);
+        }
+        return;
+      }
+
+      if (payment.type === PaymentType.RECEIPT && payment.fromAccount) {
+        const key = normalizeName(payment.fromAccount);
+        paymentTotals.set(key, (paymentTotals.get(key) || 0) - amountValue);
+        counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) + amountValue);
+      }
+      if (payment.type === PaymentType.PAYMENT && payment.toAccount) {
+        const key = normalizeName(payment.toAccount);
+        paymentTotals.set(key, (paymentTotals.get(key) || 0) + amountValue);
+        counterpartyTotals.set(key, (counterpartyTotals.get(key) || 0) - amountValue);
+      }
     });
 
     const balances = new Map<string, number>();
-    tripTotals.forEach((value, key) => {
+    const allKeys = new Set<string>([...tripTotals.keys(), ...paymentTotals.keys(), ...counterpartyTotals.keys()]);
+    allKeys.forEach(key => {
+      const tripTotal = tripTotals.get(key) || 0;
       const paid = paymentTotals.get(key) || 0;
-      balances.set(key, value - paid);
-    });
-    paymentTotals.forEach((value, key) => {
-      if (!balances.has(key)) {
-        balances.set(key, -value);
+      if (tripTotal !== 0 || ratePartyTypeByName.has(key)) {
+        balances.set(key, tripTotal - paid);
+      } else {
+        balances.set(key, counterpartyTotals.get(key) || 0);
       }
     });
     return balances;
-  }, [trips, payments, ratePartyNameById, ratePartyTypeByName]);
-
-  const resolvedFromBalance = fromAccount ? accountBalances.get(normalizeName(fromAccount)) : undefined;
-  const resolvedToBalance = toAccount ? accountBalances.get(normalizeName(toAccount)) : undefined;
-  const resolvedRatePartyBalance = ratePartyName ? ratePartyBalances.get(normalizeName(ratePartyName)) : undefined;
-
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-    setFiles: React.Dispatch<React.SetStateAction<TripUploadFile[]>>
-  ) => {
-    const selected = event.target.files;
-    if (!selected || selected.length === 0) return;
-    const fileList = Array.from(selected);
-    const entries = await Promise.all(fileList.map(file => new Promise<TripUploadFile>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ name: file.name, url: String(reader.result || '') });
-      reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
-      reader.readAsDataURL(file);
-    })));
-    setFiles(entries);
-  };
+  }, [trips, payments, ratePartyNameById, ratePartyTypeByName, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
 
   const resolveRateParty = (name: string) => {
     const normalized = normalizeName(name);
@@ -200,6 +237,49 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     });
     if (matches.length === 1) return matches[0];
     return null;
+  };
+
+  const resolvedFromBalance = fromAccount ? (accountBalances.get(normalizeName(fromAccount)) ?? 0) : undefined;
+  const resolvedToBalance = toAccount ? (accountBalances.get(normalizeName(toAccount)) ?? 0) : undefined;
+  const resolvedRatePartyBalance = ratePartyName ? (ratePartyBalances.get(normalizeName(ratePartyName)) ?? 0) : undefined;
+  const amountValue = Number(amount || 0);
+  const resolvedPartyMeta = ratePartyName ? resolveRateParty(ratePartyName) : null;
+  const projectedFromBalance = resolvedFromBalance !== undefined
+    ? resolvedFromBalance - (Number.isNaN(amountValue) ? 0 : amountValue)
+    : undefined;
+  const projectedRatePartyBalance = resolvedRatePartyBalance !== undefined
+    ? (() => {
+      if (Number.isNaN(amountValue)) return resolvedRatePartyBalance;
+      if (resolvedPartyMeta?.type === 'vendor-customer') {
+        return type === PaymentType.RECEIPT
+          ? resolvedRatePartyBalance - amountValue
+          : resolvedRatePartyBalance + amountValue;
+      }
+      if (resolvedPartyMeta?.type) {
+        return type === PaymentType.PAYMENT
+          ? resolvedRatePartyBalance - amountValue
+          : resolvedRatePartyBalance + amountValue;
+      }
+      return type === PaymentType.PAYMENT
+        ? resolvedRatePartyBalance - amountValue
+        : resolvedRatePartyBalance + amountValue;
+    })()
+    : undefined;
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setFiles: React.Dispatch<React.SetStateAction<TripUploadFile[]>>
+  ) => {
+    const selected = event.target.files;
+    if (!selected || selected.length === 0) return;
+    const fileList = Array.from(selected);
+    const entries = await Promise.all(fileList.map(file => new Promise<TripUploadFile>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, url: String(reader.result || '') });
+      reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`));
+      reader.readAsDataURL(file);
+    })));
+    setFiles(entries);
   };
 
   const renderUploadList = (label: string, list: TripUploadFile[]) => {
@@ -308,7 +388,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
           />
           {resolvedFromBalance !== undefined && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Balance: {formatCurrency(resolvedFromBalance)}</p>
+            <p className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">Balance: {formatCurrency(resolvedFromBalance)}</p>
           )}
         </div>
         <div>
@@ -323,21 +403,39 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
           />
           {resolvedRatePartyBalance !== undefined && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Balance: {formatCurrency(resolvedRatePartyBalance)}</p>
+            <p className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">Balance: {formatCurrency(resolvedRatePartyBalance)}</p>
           )}
         </div>
-        <div>
+        <div className="sm:col-span-2">
           <label htmlFor="amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Amount *</label>
-          <input
-            id="amount"
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-            disabled={isViewMode}
-            placeholder="Enter amount"
-            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-          />
+          <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-start">
+            <input
+              id="amount"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+              disabled={isViewMode}
+              placeholder="Enter amount"
+              className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 sm:max-w-[11rem]"
+            />
+            {(projectedFromBalance !== undefined || projectedRatePartyBalance !== undefined) && (
+              <div className="space-y-3 text-sm font-semibold text-gray-600 dark:text-gray-300 sm:ml-28 sm:-mt-8">
+                {projectedFromBalance !== undefined && (
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">From after:</div>
+                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedFromBalance)}</div>
+                  </div>
+                )}
+                {projectedRatePartyBalance !== undefined && (
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Counterparty after:</div>
+                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="sm:col-span-3">
           <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Remarks *</label>
@@ -391,7 +489,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
             />
             {resolvedToBalance !== undefined && (
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Balance: {formatCurrency(resolvedToBalance)}</p>
+              <p className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">Balance: {formatCurrency(resolvedToBalance)}</p>
             )}
           </div>
           <div>

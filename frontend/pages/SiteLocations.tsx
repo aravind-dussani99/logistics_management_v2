@@ -14,6 +14,7 @@ const SiteLocationsPage: React.FC = () => {
   const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredSites = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -29,6 +30,26 @@ const SiteLocationsPage: React.FC = () => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredSites.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredSites, currentPage]);
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(paginatedSites.map(site => site.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
 
   const handleAddSite = () => {
     openModal('Add Site Location', <SiteLocationForm onSave={handleCreate} onClose={closeModal} />);
@@ -79,6 +100,25 @@ const SiteLocationsPage: React.FC = () => {
     ));
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const shouldDelete = await confirm('Delete Selected', `Delete ${selectedIds.size} site location(s)?`);
+    if (!shouldDelete) return;
+    const ids = Array.from(selectedIds);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await deleteSiteLocation(id);
+      } catch (error) {
+        failures.push(id);
+      }
+    }
+    setSelectedIds(new Set());
+    if (failures.length > 0) {
+      await alert('Delete Failed', `${failures.length} record(s) could not be deleted because they are in use.`);
+    }
+  };
+
   useEffect(() => {
     loadSiteLocations();
   }, [loadSiteLocations, refreshKey]);
@@ -114,12 +154,30 @@ const SiteLocationsPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Site Locations</h2>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Delete Selected
+              </button>
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={paginatedSites.length > 0 && paginatedSites.every(site => selectedIds.has(site.id))}
+                      onChange={(event) => toggleSelectAll(event.target.checked)}
+                      aria-label="Select all"
+                    />
+                  </th>
                   {['Site Name', 'Type', 'Address', 'Point of Contact', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
@@ -130,6 +188,14 @@ const SiteLocationsPage: React.FC = () => {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedSites.map(site => (
                   <tr key={site.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(site.id)}
+                        onChange={(event) => toggleSelectOne(site.id, event.target.checked)}
+                        aria-label={`Select ${site.name}`}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{site.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm capitalize">{site.type.replace('-', ' ')}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{site.address || '-'}</td>
@@ -144,7 +210,7 @@ const SiteLocationsPage: React.FC = () => {
                 ))}
                 {paginatedSites.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                       No site locations yet. Add pickup and drop-off sites to power rate cards and trip entry.
                     </td>
                   </tr>

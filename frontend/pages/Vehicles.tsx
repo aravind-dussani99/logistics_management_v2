@@ -14,6 +14,7 @@ const VehiclesPage: React.FC = () => {
   const { openModal, closeModal, confirm, alert } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredVehicles = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -29,6 +30,26 @@ const VehiclesPage: React.FC = () => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredVehicles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredVehicles, currentPage]);
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(paginatedVehicles.map(vehicle => vehicle.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
 
   const handleAddVehicle = () => {
     openModal('Add Vehicle', <VehicleMasterForm onSave={handleCreate} onClose={closeModal} />);
@@ -81,6 +102,25 @@ const VehiclesPage: React.FC = () => {
     ));
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const shouldDelete = await confirm('Delete Selected', `Delete ${selectedIds.size} vehicle(s)?`);
+    if (!shouldDelete) return;
+    const ids = Array.from(selectedIds);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await deleteVehicleMaster(id);
+      } catch (error) {
+        failures.push(id);
+      }
+    }
+    setSelectedIds(new Set());
+    if (failures.length > 0) {
+      await alert('Delete Failed', `${failures.length} record(s) could not be deleted because they are in use.`);
+    }
+  };
+
   useEffect(() => {
     loadVehicleMasters();
   }, [loadVehicleMasters, refreshKey]);
@@ -116,12 +156,30 @@ const VehiclesPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Vehicle List</h2>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Delete Selected
+              </button>
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={paginatedVehicles.length > 0 && paginatedVehicles.every(vehicle => selectedIds.has(vehicle.id))}
+                      onChange={(event) => toggleSelectAll(event.target.checked)}
+                      aria-label="Select all"
+                    />
+                  </th>
                   {['S. No.', 'Vehicle Number', 'Type', 'Capacity (T)', 'Owner', 'Contact Number', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
@@ -132,6 +190,14 @@ const VehiclesPage: React.FC = () => {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedVehicles.map((vehicle, index) => (
                   <tr key={vehicle.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(vehicle.id)}
+                        onChange={(event) => toggleSelectOne(vehicle.id, event.target.checked)}
+                        aria-label={`Select ${vehicle.vehicleNumber}`}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{vehicle.vehicleNumber}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{vehicle.vehicleType || '-'}</td>
@@ -148,7 +214,7 @@ const VehiclesPage: React.FC = () => {
                 ))}
                 {paginatedVehicles.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                       No vehicles yet. Add a vehicle to start assigning transport owners.
                     </td>
                   </tr>

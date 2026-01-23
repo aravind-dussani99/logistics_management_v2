@@ -36,13 +36,14 @@ const MaterialRatesPage: React.FC = () => {
     loadTransportOwnerProfiles,
     refreshKey,
   } = useData();
-  const { openModal, closeModal } = useUI();
+  const { openModal, closeModal, alert, confirm } = useUI();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [partyTypeFilter, setPartyTypeFilter] = useState<RatePartyType | ''>('');
   const [materialFilter, setMaterialFilter] = useState('');
   const [pickupFilter, setPickupFilter] = useState('');
   const [dropOffFilter, setDropOffFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadMaterialRates();
@@ -139,6 +140,26 @@ const MaterialRatesPage: React.FC = () => {
     return filteredRates.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredRates, currentPage]);
 
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(paginatedRates.map(rate => rate.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelectOne = (id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
   const handleAdd = () => {
     openModal('Add Material Rate', <MaterialRateForm onSave={handleCreate} onClose={closeModal} />);
   };
@@ -192,11 +213,35 @@ const MaterialRatesPage: React.FC = () => {
         cancelLabel="Cancel"
         onCancel={closeModal}
         onConfirm={async () => {
-          await deleteMaterialRate(id);
-          closeModal();
+          try {
+            await deleteMaterialRate(id);
+            closeModal();
+          } catch (error) {
+            closeModal();
+            await alert('Delete Failed', 'Unable to delete this material rate. It may be referenced by trips or master data.');
+          }
         }}
       />
     ));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const shouldDelete = await confirm('Delete Selected', `Delete ${selectedIds.size} material rate(s)?`);
+    if (!shouldDelete) return;
+    const ids = Array.from(selectedIds);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await deleteMaterialRate(id);
+      } catch (error) {
+        failures.push(id);
+      }
+    }
+    setSelectedIds(new Set());
+    if (failures.length > 0) {
+      await alert('Delete Failed', `${failures.length} record(s) could not be deleted because they are in use.`);
+    }
   };
 
   useEffect(() => {
@@ -291,12 +336,29 @@ const MaterialRatesPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Material Rates</h2>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                Delete Selected
+              </button>
+              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={paginatedRates.length > 0 && paginatedRates.every(rate => selectedIds.has(rate.id))}
+                      onChange={(event) => toggleSelectAll(event.target.checked)}
+                    />
+                  </th>
                   {['S. No.', 'Status', 'Material Type', 'Rate Party', 'Pickup', 'Drop-off', 'Total Km', 'Rate/Km', 'Rate/Ton', 'GST', 'GST %', 'GST Amount', 'Total Rate/Ton', 'Effective From', 'Effective To', 'Remarks', 'Actions'].map(header => (
                     <th key={header} className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {header}
@@ -307,6 +369,13 @@ const MaterialRatesPage: React.FC = () => {
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedRates.map((rate, index) => (
                   <tr key={rate.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(rate.id)}
+                        onChange={(event) => toggleSelectOne(rate.id, event.target.checked)}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{getStatus(rate)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{materialTypeDefinitions.find(item => item.id === rate.materialTypeId)?.name || '-'}</td>
@@ -331,7 +400,7 @@ const MaterialRatesPage: React.FC = () => {
                 ))}
                 {paginatedRates.length === 0 && (
                   <tr>
-                    <td colSpan={17} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={18} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                       No material rates match the current filters.
                     </td>
                   </tr>

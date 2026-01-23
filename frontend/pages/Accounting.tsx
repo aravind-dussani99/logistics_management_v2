@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState, useMemo, useEffect } from 'react';
-import { Trip, QuarryOwner, VehicleOwner, Customer, RoyaltyOwner, LedgerEntry, Account, PaymentType } from '../types';
+import { PaymentType } from '../types';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
@@ -30,31 +30,27 @@ export interface AccountSummary {
 }
 
 const Accounting: React.FC = () => {
-    const { trips: allTrips, quarries, vehicles, customers, royaltyOwners, ledgerEntries, accounts, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
+    const { trips: allTrips, payments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey } = useData();
     const [filters, setFilters] = useState<Filters>(getMtdRange());
     const [activeTab, setActiveTab] = useState<'vp' | 'vr' | 'cr' | 'others' | 'aged'>('vp');
 
     useEffect(() => {
         loadTrips();
-        loadLegacyMasters();
-        loadLedgerEntries();
-        loadAccounts();
         loadPayments();
         loadVendorCustomers();
         loadMineQuarries();
         loadTransportOwnerProfiles();
         loadRoyaltyOwnerProfiles();
-    }, [loadTrips, loadLegacyMasters, loadLedgerEntries, loadAccounts, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
+    }, [loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadTransportOwnerProfiles, loadRoyaltyOwnerProfiles, refreshKey]);
 
     const allDataForFilters = useMemo(() => {
         return {
-            vehicles: vehicles.map(item => ({ id: item.id, vehicleNumber: item.vehicleNumber })),
             transportOwners: transportOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
             customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
             quarries: mineQuarries.map(item => ({ id: item.id, name: item.name })),
             royaltyOwners: royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name })),
         };
-    }, [vehicles, transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
+    }, [transportOwnerProfiles, vendorCustomers, mineQuarries, royaltyOwnerProfiles]);
     
     const filteredTrips = useMemo(() => {
         return allTrips.filter(trip => {
@@ -64,14 +60,6 @@ const Accounting: React.FC = () => {
         });
     }, [allTrips, filters]);
 
-    const filteredLedgerEntries = useMemo(() => {
-        return ledgerEntries.filter(entry => {
-            if (filters.dateFrom && entry.date < filters.dateFrom) return false;
-            if (filters.dateTo && entry.date > filters.dateTo) return false;
-            return true;
-        });
-    }, [ledgerEntries, filters]);
-
     const filteredPayments = useMemo(() => {
         return payments.filter(payment => {
             const dateValue = payment.date ? payment.date.split('T')[0] : '';
@@ -80,204 +68,110 @@ const Accounting: React.FC = () => {
             return true;
         });
     }, [payments, filters]);
-    
-    // Create lookup maps for efficient ID retrieval
-    const masterDataMaps = useMemo(() => {
-        const customerNameToId = new Map(customers.map(c => [c.name, c.id]));
-        const vendorCustomerNameToId = new Map(vendorCustomers.map(c => [c.name, c.id]));
-        const mineQuarryNameToId = new Map(mineQuarries.map(q => [q.name, q.id]));
-        const transportOwnerNameToId = new Map(transportOwnerProfiles.map(t => [t.name, t.id]));
-        const royaltyProfileNameToId = new Map(royaltyOwnerProfiles.map(r => [r.name, r.id]));
-        const vehicleNumberToOwnerId = new Map(vehicles.map(v => [v.vehicleNumber, v.id]));
-        const quarryNameToOwnerId = new Map(quarries.map(q => [q.quarryName, q.id]));
-        const royaltyNameToId = new Map(royaltyOwners.map(r => [r.ownerName, r.id]));
-        const accountNameToId = new Map(accounts.map(a => [a.name, a.id]));
-        return { customerNameToId, vendorCustomerNameToId, mineQuarryNameToId, transportOwnerNameToId, royaltyProfileNameToId, vehicleNumberToOwnerId, quarryNameToOwnerId, royaltyNameToId, accountNameToId };
-    }, [customers, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, vehicles, quarries, royaltyOwners, accounts]);
 
     const accountSummaries = useMemo(() => {
         const summaryMap: Map<string, AccountSummary> = new Map();
+        const getOrCreate = (id: string, name: string, type: AccountSummary['type']) => {
+            if (!summaryMap.has(id)) {
+                summaryMap.set(id, {
+                    id,
+                    name,
+                    type,
+                    totalTrips: 0,
+                    totalTonnage: 0,
+                    totalAmount: 0,
+                    balance: 0,
+                    lastActivityDate: '',
+                });
+            }
+            return summaryMap.get(id)!;
+        };
 
-        // Initialize with all accounts and their opening balances
-        accounts.forEach(acc => {
-             summaryMap.set(acc.id, { 
-                id: acc.id, 
-                name: acc.name, 
-                type: acc.categoryName, 
-                totalTrips: 0, 
-                totalTonnage: 0, 
-                totalAmount: 0, 
-                balance: 0, // Opening balance will be added later
-                lastActivityDate: '' 
-            });
-        });
+        vendorCustomers.forEach(item => getOrCreate(item.id, item.name, 'Customer'));
+        mineQuarries.forEach(item => getOrCreate(item.id, item.name, 'Vendor-Quarry'));
+        transportOwnerProfiles.forEach(item => getOrCreate(item.id, item.name, 'Vendor-Transport'));
+        royaltyOwnerProfiles.forEach(item => getOrCreate(item.id, item.name, 'Vendor-Royalty'));
 
-        // Include master rate-party profiles
-        vendorCustomers.forEach(item => {
-            if (!summaryMap.has(item.id)) {
-                summaryMap.set(item.id, {
-                    id: item.id,
-                    name: item.name,
-                    type: 'Customer',
-                    totalTrips: 0,
-                    totalTonnage: 0,
-                    totalAmount: 0,
-                    balance: 0,
-                    lastActivityDate: '',
-                });
-            }
-        });
-        mineQuarries.forEach(item => {
-            if (!summaryMap.has(item.id)) {
-                summaryMap.set(item.id, {
-                    id: item.id,
-                    name: item.name,
-                    type: 'Vendor-Quarry',
-                    totalTrips: 0,
-                    totalTonnage: 0,
-                    totalAmount: 0,
-                    balance: 0,
-                    lastActivityDate: '',
-                });
-            }
-        });
-        transportOwnerProfiles.forEach(item => {
-            if (!summaryMap.has(item.id)) {
-                summaryMap.set(item.id, {
-                    id: item.id,
-                    name: item.name,
-                    type: 'Vendor-Transport',
-                    totalTrips: 0,
-                    totalTonnage: 0,
-                    totalAmount: 0,
-                    balance: 0,
-                    lastActivityDate: '',
-                });
-            }
-        });
-        royaltyOwnerProfiles.forEach(item => {
-            if (!summaryMap.has(item.id)) {
-                summaryMap.set(item.id, {
-                    id: item.id,
-                    name: item.name,
-                    type: 'Vendor-Royalty',
-                    totalTrips: 0,
-                    totalTonnage: 0,
-                    totalAmount: 0,
-                    balance: 0,
-                    lastActivityDate: '',
-                });
-            }
-        });
-        
-        // Add opening balances from master data
-        [...customers, ...quarries, ...vehicles, ...royaltyOwners].forEach(entity => {
-            const summary = summaryMap.get(entity.id);
-            if(summary) summary.balance = entity.openingBalance || 0;
-        });
-
-        // Process filtered trips
         filteredTrips.forEach(trip => {
-        const customerId = masterDataMaps.vendorCustomerNameToId.get(trip.customer) || masterDataMaps.customerNameToId.get(trip.customer);
+            const customerId = vendorCustomers.find(c => c.name === trip.customer)?.id;
             if (customerId) {
-                const summary = summaryMap.get(customerId);
-                if (summary) {
-                    summary.balance += trip.revenue;
-                    summary.totalAmount += trip.revenue;
-                    summary.totalTrips += 1;
-                    summary.totalTonnage += trip.tonnage;
-                }
+                const summary = getOrCreate(customerId, trip.customer, 'Customer');
+                summary.balance += trip.revenue;
+                summary.totalAmount += trip.revenue;
+                summary.totalTrips += 1;
+                summary.totalTonnage += trip.netWeight || trip.tonnage;
+                summary.lastActivityDate = trip.date;
             }
 
-            const quarryOwnerId = masterDataMaps.mineQuarryNameToId.get(trip.quarryName) || masterDataMaps.quarryNameToOwnerId.get(trip.quarryName);
+            const quarryOwnerId = mineQuarries.find(q => q.name === trip.quarryName)?.id;
             if (quarryOwnerId) {
-                const summary = summaryMap.get(quarryOwnerId);
-                if (summary) {
-                    summary.balance -= trip.materialCost;
-                    summary.totalAmount += trip.materialCost;
-                    summary.totalTrips += 1;
-                    summary.totalTonnage += trip.tonnage;
-                }
-            }
-            
-            const transporterId = masterDataMaps.transportOwnerNameToId.get(trip.transporterName) || masterDataMaps.vehicleNumberToOwnerId.get(trip.vehicleNumber);
-            if (transporterId) {
-                const summary = summaryMap.get(transporterId);
-                if (summary) {
-                    summary.balance -= trip.transportCost;
-                    summary.totalAmount += trip.transportCost;
-                    summary.totalTrips += 1;
-                    summary.totalTonnage += trip.tonnage;
-                }
+                const summary = getOrCreate(quarryOwnerId, trip.quarryName, 'Vendor-Quarry');
+                summary.balance -= trip.materialCost;
+                summary.totalAmount += trip.materialCost;
+                summary.totalTrips += 1;
+                summary.totalTonnage += trip.netWeight || trip.tonnage;
+                summary.lastActivityDate = trip.date;
             }
 
-            const royaltyId = masterDataMaps.royaltyProfileNameToId.get(trip.royaltyOwnerName) || masterDataMaps.royaltyNameToId.get(trip.royaltyOwnerName);
+            const transporterId = transportOwnerProfiles.find(t => t.name === trip.transporterName)?.id;
+            if (transporterId) {
+                const summary = getOrCreate(transporterId, trip.transporterName, 'Vendor-Transport');
+                summary.balance -= trip.transportCost;
+                summary.totalAmount += trip.transportCost;
+                summary.totalTrips += 1;
+                summary.totalTonnage += trip.netWeight || trip.tonnage;
+                summary.lastActivityDate = trip.date;
+            }
+
+            const royaltyId = royaltyOwnerProfiles.find(r => r.name === trip.royaltyOwnerName)?.id;
             if (royaltyId) {
-                const summary = summaryMap.get(royaltyId);
-                if(summary){
-                    summary.balance -= trip.royaltyCost;
-                    summary.totalAmount += trip.royaltyCost;
-                    // Royalty tonnage is m3, not included in main tonnage
-                }
+                const summary = getOrCreate(royaltyId, trip.royaltyOwnerName, 'Vendor-Royalty');
+                summary.balance -= trip.royaltyCost;
+                summary.totalAmount += trip.royaltyCost;
+                summary.totalTrips += 1;
+                summary.totalTonnage += trip.netWeight || trip.tonnage;
+                summary.lastActivityDate = trip.date;
             }
         });
 
-        // Process payments for rate parties
         filteredPayments.forEach(payment => {
-            if (!payment.ratePartyType || !payment.ratePartyId) return;
-            const summary = summaryMap.get(payment.ratePartyId);
+            if (!payment.ratePartyType) return;
+            let summary: AccountSummary | undefined;
+            if (payment.ratePartyId) {
+                summary = summaryMap.get(payment.ratePartyId);
+            }
+            if (!summary && payment.ratePartyName) {
+                summary = Array.from(summaryMap.values()).find(item => item.name.toLowerCase() === payment.ratePartyName?.toLowerCase());
+            }
             if (!summary) return;
             const isCustomer = payment.ratePartyType === 'vendor-customer';
             const delta = payment.type === PaymentType.RECEIPT
-                ? (isCustomer ? -payment.amount : payment.amount * -1)
-                : (isCustomer ? payment.amount : payment.amount);
+                ? (isCustomer ? -payment.amount : payment.amount)
+                : (isCustomer ? payment.amount : -payment.amount);
             summary.balance += delta;
+            if (payment.date) summary.lastActivityDate = payment.date;
         });
 
-        // Process filtered ledger entries using account names to find IDs
-        filteredLedgerEntries.forEach(entry => {
-            const toId = masterDataMaps.accountNameToId.get(entry.to);
-            if(toId) {
-                const summary = summaryMap.get(toId);
-                if(summary) {
-                    summary.balance += (entry.type === 'DEBIT' ? -entry.amount : entry.amount);
-                }
-            }
-            const fromId = masterDataMaps.accountNameToId.get(entry.from);
-            if(fromId) {
-                const summary = summaryMap.get(fromId);
-                if(summary) {
-                    summary.balance += (entry.type === 'DEBIT' ? entry.amount : -entry.amount);
-                }
-            }
-        });
-
-        // Determine last activity date (simplified - could be improved for performance)
-        const allTransactions = [...allTrips, ...ledgerEntries, ...filteredPayments].sort((a,b) => b.date.localeCompare(a.date));
+        const allTransactions = [...filteredTrips, ...filteredPayments].sort((a, b) => b.date.localeCompare(a.date));
         summaryMap.forEach(summary => {
+            if (summary.lastActivityDate) return;
             const lastTx = allTransactions.find(tx => {
-                if ('customer' in tx) { // It's a trip
-                    return masterDataMaps.customerNameToId.get(tx.customer) === summary.id ||
-                           masterDataMaps.vendorCustomerNameToId.get(tx.customer) === summary.id ||
-                           masterDataMaps.vehicleNumberToOwnerId.get(tx.vehicleNumber) === summary.id ||
-                           masterDataMaps.transportOwnerNameToId.get(tx.transporterName) === summary.id ||
-                           masterDataMaps.quarryNameToOwnerId.get(tx.quarryName) === summary.id ||
-                           masterDataMaps.mineQuarryNameToId.get(tx.quarryName) === summary.id ||
-                           masterDataMaps.royaltyNameToId.get(tx.royaltyOwnerName) === summary.id;
-                } else if ('from' in tx) { // It's a ledger entry
-                    return masterDataMaps.accountNameToId.get(tx.from) === summary.id ||
-                           masterDataMaps.accountNameToId.get(tx.to) === summary.id;
+                if ('customer' in tx) {
+                    return tx.customer === summary.name
+                        || tx.quarryName === summary.name
+                        || tx.transporterName === summary.name
+                        || tx.royaltyOwnerName === summary.name;
                 }
                 if ('ratePartyId' in tx) {
-                    return tx.ratePartyId === summary.id;
+                    return tx.ratePartyId === summary.id || tx.ratePartyName?.toLowerCase() === summary.name.toLowerCase();
                 }
+                return false;
             });
             if (lastTx) summary.lastActivityDate = lastTx.date;
         });
 
         return Array.from(summaryMap.values());
-
-    }, [filteredTrips, filteredLedgerEntries, filteredPayments, allTrips, ledgerEntries, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, masterDataMaps]);
+    }, [filteredTrips, filteredPayments, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
     
     const { vendorPayables, vendorReceivables, customerReceivables, otherExpenses, agedBalances } = useMemo(() => {
         const vp: AccountSummary[] = [];
@@ -367,11 +261,51 @@ const Accounting: React.FC = () => {
                     </div>
 
                     <div className="p-4">
-                        {activeTab === 'vp' && <AccountingTable data={vendorPayables} allTrips={allTrips} allLedgerEntries={ledgerEntries} payments={filteredPayments} type="payable" masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}} />}
-                        {activeTab === 'vr' && <AccountingTable data={vendorReceivables} allTrips={allTrips} allLedgerEntries={ledgerEntries} payments={filteredPayments} type="receivable" masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}/>}
-                        {activeTab === 'cr' && <AccountingTable data={customerReceivables} allTrips={allTrips} allLedgerEntries={ledgerEntries} payments={filteredPayments} type="receivable" masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}/>}
-                        {activeTab === 'others' && <AccountingTable data={otherExpenses} allTrips={allTrips} allLedgerEntries={ledgerEntries} payments={filteredPayments} type="other" masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}/>}
-                        {activeTab === 'aged' && <AccountingTable data={agedBalances} allTrips={allTrips} allLedgerEntries={ledgerEntries} payments={filteredPayments} type="aged" masterData={{customers, quarries, vehicles, royaltyOwners, accounts, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles}}/>}
+                        {activeTab === 'vp' && (
+                            <AccountingTable
+                                data={vendorPayables}
+                                allTrips={allTrips}
+                                payments={filteredPayments}
+                                type="payable"
+                                masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
+                            />
+                        )}
+                        {activeTab === 'vr' && (
+                            <AccountingTable
+                                data={vendorReceivables}
+                                allTrips={allTrips}
+                                payments={filteredPayments}
+                                type="receivable"
+                                masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
+                            />
+                        )}
+                        {activeTab === 'cr' && (
+                            <AccountingTable
+                                data={customerReceivables}
+                                allTrips={allTrips}
+                                payments={filteredPayments}
+                                type="receivable"
+                                masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
+                            />
+                        )}
+                        {activeTab === 'others' && (
+                            <AccountingTable
+                                data={otherExpenses}
+                                allTrips={allTrips}
+                                payments={filteredPayments}
+                                type="other"
+                                masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
+                            />
+                        )}
+                        {activeTab === 'aged' && (
+                            <AccountingTable
+                                data={agedBalances}
+                                allTrips={allTrips}
+                                payments={filteredPayments}
+                                type="aged"
+                                masterData={{ vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles }}
+                            />
+                        )}
                     </div>
                 </div>
             </main>

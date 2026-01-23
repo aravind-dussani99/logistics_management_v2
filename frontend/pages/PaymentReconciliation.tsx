@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDateDisplay } from '../utils';
@@ -26,9 +26,8 @@ const PaymentReconciliation: React.FC = () => {
     loadRoyaltyOwnerProfiles,
     refreshKey,
   } = useData();
-  const [mode, setMode] = useState<'party' | 'account' | 'head'>('party');
+  const [mode, setMode] = useState<'party' | 'head'>('party');
   const [selectedParty, setSelectedParty] = useState('');
-  const [selectedAccount, setSelectedAccount] = useState('');
   const [selectedHeadAccount, setSelectedHeadAccount] = useState('');
 
   useEffect(() => {
@@ -48,7 +47,7 @@ const PaymentReconciliation: React.FC = () => {
     refreshKey,
   ]);
 
-  const normalizeName = (value: string) => value.trim().toLowerCase();
+  const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 
   const ratePartyNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -58,22 +57,6 @@ const PaymentReconciliation: React.FC = () => {
     royaltyOwnerProfiles.forEach(item => map.set(`royalty-owner:${item.id}`, item.name));
     return map;
   }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
-
-  const partyOptions = useMemo(() => {
-    const values = new Set<string>();
-    vendorCustomers.forEach(item => values.add(item.name));
-    mineQuarries.forEach(item => values.add(item.name));
-    transportOwnerProfiles.forEach(item => values.add(item.name));
-    royaltyOwnerProfiles.forEach(item => values.add(item.name));
-    payments.forEach(item => {
-      if (item.ratePartyName) values.add(item.ratePartyName);
-      if (item.ratePartyType && item.ratePartyId) {
-        const resolved = ratePartyNameById.get(`${item.ratePartyType}:${item.ratePartyId}`);
-        if (resolved) values.add(resolved);
-      }
-    });
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, payments, ratePartyNameById]);
 
   const accountOptions = useMemo(() => {
     const values = new Set<string>();
@@ -85,6 +68,25 @@ const PaymentReconciliation: React.FC = () => {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [payments]);
 
+  const partyOptions = useMemo(() => {
+    const values = new Set<string>();
+    vendorCustomers.forEach(item => values.add(item.name));
+    mineQuarries.forEach(item => values.add(item.name));
+    transportOwnerProfiles.forEach(item => values.add(item.name));
+    royaltyOwnerProfiles.forEach(item => values.add(item.name));
+    payments.forEach(item => {
+      if (item.ratePartyName) values.add(item.ratePartyName);
+      if (!item.ratePartyName && item.fromAccount) values.add(item.fromAccount);
+      if (!item.ratePartyName && item.toAccount) values.add(item.toAccount);
+      if (item.ratePartyType && item.ratePartyId) {
+        const resolved = ratePartyNameById.get(`${item.ratePartyType}:${item.ratePartyId}`);
+        if (resolved) values.add(resolved);
+      }
+    });
+    accountOptions.forEach(option => values.add(option));
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, payments, ratePartyNameById, accountOptions]);
+
   const headAccountOptions = useMemo(() => {
     const values = new Set<string>();
     payments.forEach(item => {
@@ -94,6 +96,18 @@ const PaymentReconciliation: React.FC = () => {
   }, [payments]);
 
   const selectedPartyKey = normalizeName(selectedParty);
+  const internalAccountKeys = useMemo(() => {
+    const values = new Set<string>();
+    payments.forEach(payment => {
+      if (payment.toAccount) values.add(normalizeName(payment.toAccount));
+      if (payment.headAccount) values.add(normalizeName(payment.headAccount));
+      if (payment.type === 'RECEIPT' && payment.fromAccount && !payment.toAccount && payment.ratePartyName) {
+        values.add(normalizeName(payment.ratePartyName));
+      }
+    });
+    return values;
+  }, [payments]);
+  const isAccountSelection = selectedPartyKey ? internalAccountKeys.has(selectedPartyKey) : false;
 
   const selectedPartyTypes = useMemo(() => {
     if (!selectedPartyKey) return new Set<RatePartyType>();
@@ -121,7 +135,8 @@ const PaymentReconciliation: React.FC = () => {
         const materialCost = Number(trip.materialCost || 0);
         const transportCost = Number(trip.transportCost || 0);
         const royaltyCost = Number(trip.royaltyCost || 0);
-        const matchesCustomer = trip.customer && normalizeName(trip.customer) === selectedPartyKey;
+        const matchesCustomer = (trip.customer && normalizeName(trip.customer) === selectedPartyKey)
+          || (trip.vendorName && normalizeName(trip.vendorName) === selectedPartyKey);
         const matchesQuarry = trip.quarryName && normalizeName(trip.quarryName) === selectedPartyKey;
         const matchesTransport = trip.transporterName && normalizeName(trip.transporterName) === selectedPartyKey;
         const matchesRoyalty = trip.royaltyOwnerName && normalizeName(trip.royaltyOwnerName) === selectedPartyKey;
@@ -187,42 +202,134 @@ const PaymentReconciliation: React.FC = () => {
   const partyPaymentRows = useMemo(() => {
     if (!selectedPartyKey) return [];
     return payments.filter(payment => {
-    const name = payment.ratePartyName
-      || (payment.ratePartyType && payment.ratePartyId
-        ? ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || ''
-        : '');
-      return name && normalizeName(name) === selectedPartyKey;
+      const name = payment.ratePartyName
+        || (payment.ratePartyType && payment.ratePartyId
+          ? ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || ''
+          : '');
+      if (name && normalizeName(name) === selectedPartyKey) return true;
+      if (!name && normalizeName(payment.fromAccount || '') === selectedPartyKey) return true;
+      if (!name && normalizeName(payment.toAccount || '') === selectedPartyKey) return true;
+      return false;
     });
   }, [payments, ratePartyNameById, selectedPartyKey]);
 
+  const nonTripTransactionRows = useMemo(() => {
+    if (!selectedPartyKey) return [];
+    return payments.filter(payment => {
+      if (normalizeName(payment.ratePartyName || '') === selectedPartyKey) return true;
+      if (normalizeName(payment.fromAccount || '') === selectedPartyKey) return true;
+      if (normalizeName(payment.toAccount || '') === selectedPartyKey) return true;
+      return false;
+    });
+  }, [payments, selectedPartyKey]);
+
+  const resolveAccountMatch = (payment: (typeof payments)[number], key: string) => {
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    if (fromMatch || toMatch) {
+      return { fromMatch, toMatch, viaCounterparty: false };
+    }
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (counterpartyMatch && !payment.toAccount && payment.type === 'RECEIPT') {
+      return { fromMatch: false, toMatch: true, viaCounterparty: true };
+    }
+    if (counterpartyMatch && !payment.fromAccount && payment.type === 'PAYMENT') {
+      return { fromMatch: true, toMatch: false, viaCounterparty: true };
+    }
+    return null;
+  };
+
+  const getCounterpartyDelta = useCallback((payment: (typeof payments)[number], key: string) => {
+    const amount = Number(payment.amount || 0);
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (payment.type === 'RECEIPT') {
+      if (fromMatch || (counterpartyMatch && !payment.fromAccount)) return amount;
+      return 0;
+    }
+    if (payment.type === 'PAYMENT') {
+      if (counterpartyMatch || toMatch) return -amount;
+      return 0;
+    }
+    return 0;
+  }, [normalizeName]);
+
+  const accountStatementRows = useMemo(() => {
+    if (!selectedPartyKey || !isAccountSelection) return [];
+    return payments.filter(payment => resolveAccountMatch(payment, selectedPartyKey));
+  }, [payments, selectedPartyKey, isAccountSelection]);
+
   const partySummary: PartySummary = useMemo(() => {
     const tripTotal = partyTripRows.reduce((sum, row) => sum + row.amount, 0);
-    const paymentTotal = partyPaymentRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const paymentTotal = partyPaymentRows.reduce((sum, row) => {
+      const amountValue = Number(row.amount || 0);
+      if (selectedPartyTypes.has('vendor-customer')) {
+        return sum + (row.type === 'RECEIPT' ? amountValue : -amountValue);
+      }
+      if (selectedPartyTypes.size > 0) {
+        return sum + (row.type === 'PAYMENT' ? amountValue : -amountValue);
+      }
+      const matchesFrom = normalizeName(row.fromAccount || '') === selectedPartyKey;
+      const matchesTo = normalizeName(row.toAccount || '') === selectedPartyKey;
+      if (matchesFrom && row.type === 'RECEIPT') return sum - amountValue;
+      if (matchesTo && row.type === 'PAYMENT') return sum + amountValue;
+      return sum;
+    }, 0);
     return {
       tripTotal,
       paymentTotal,
       balance: tripTotal - paymentTotal,
     };
-  }, [partyTripRows, partyPaymentRows]);
+  }, [partyTripRows, partyPaymentRows, selectedPartyKey, selectedPartyTypes]);
 
-  const accountPaymentRows = useMemo(() => {
-    if (!selectedAccount) return [];
-    const key = normalizeName(selectedAccount);
-    return payments.filter(payment => {
-      return normalizeName(payment.fromAccount || '') === key || normalizeName(payment.toAccount || '') === key;
+  const partyHasTrips = partyTripRows.length > 0;
+  const partyPaymentTotals = useMemo(() => {
+    if (!selectedPartyKey) return { inflow: 0, outflow: 0 };
+    if (isAccountSelection) {
+      return accountStatementRows.reduce(
+        (acc, payment) => {
+          const amount = Number(payment.amount || 0);
+          const match = resolveAccountMatch(payment, selectedPartyKey);
+          if (!match) return acc;
+          if (match.toMatch) acc.inflow += amount;
+          if (match.fromMatch) acc.outflow += amount;
+          return acc;
+        },
+        { inflow: 0, outflow: 0 }
+      );
+    }
+    if (!partyHasTrips) {
+      return nonTripTransactionRows.reduce(
+        (acc, payment) => {
+          const amount = Number(payment.amount || 0);
+          const delta = getCounterpartyDelta(payment, selectedPartyKey);
+          if (delta > 0) acc.inflow += amount;
+          if (delta < 0) acc.outflow += amount;
+          return acc;
+        },
+        { inflow: 0, outflow: 0 }
+      );
+    }
+    return { inflow: 0, outflow: 0 };
+  }, [selectedPartyKey, isAccountSelection, accountStatementRows, partyHasTrips, nonTripTransactionRows, getCounterpartyDelta]);
+
+  const partyPaymentBalance = partyHasTrips
+    ? partySummary.balance
+    : partyPaymentTotals.inflow - partyPaymentTotals.outflow;
+
+  const partyTransactionRows = useMemo(() => {
+    if (!selectedPartyKey) return [];
+    const rows = partyHasTrips
+      ? partyPaymentRows
+      : (isAccountSelection ? accountStatementRows : nonTripTransactionRows);
+    return [...rows].sort((a, b) => {
+      const aTime = new Date(a.date).getTime();
+      const bTime = new Date(b.date).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+      return (a.id || 0) - (b.id || 0);
     });
-  }, [payments, selectedAccount]);
-
-  const accountBalance = useMemo(() => {
-    if (!selectedAccount) return 0;
-    const key = normalizeName(selectedAccount);
-    return accountPaymentRows.reduce((sum, payment) => {
-      const amount = Number(payment.amount || 0);
-      if (normalizeName(payment.toAccount || '') === key) return sum + amount;
-      if (normalizeName(payment.fromAccount || '') === key) return sum - amount;
-      return sum;
-    }, 0);
-  }, [accountPaymentRows, selectedAccount]);
+  }, [selectedPartyKey, partyHasTrips, isAccountSelection, accountStatementRows, partyPaymentRows, nonTripTransactionRows]);
 
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
@@ -264,7 +371,6 @@ const PaymentReconciliation: React.FC = () => {
       ...(showTransportColumns ? ['Transport Rate/Ton', 'Transport Amount'] : []),
       ...(showRoyaltyColumns ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
       'Total Value',
-      'Matched Amount',
     ];
     const rows = partyTripRows.map(row => [
       `#${row.id}`,
@@ -278,7 +384,6 @@ const PaymentReconciliation: React.FC = () => {
       ...(showTransportColumns ? [row.transportRate.toFixed(2), row.transportCost.toFixed(2)] : []),
       ...(showRoyaltyColumns ? [row.royaltyRate.toFixed(2), row.royaltyCost.toFixed(2)] : []),
       row.totalValue.toFixed(2),
-      row.amount.toFixed(2),
     ]);
     exportCsv(`reconciliation_trips_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
   };
@@ -323,13 +428,6 @@ const PaymentReconciliation: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => setMode('account')}
-            className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'account' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
-          >
-            Account
-          </button>
-          <button
-            type="button"
             onClick={() => setMode('head')}
             className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'head' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
           >
@@ -351,14 +449,14 @@ const PaymentReconciliation: React.FC = () => {
           {mode === 'party' ? (
             <div className="space-y-4">
               <div className="max-w-md">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty Name</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty / Account</label>
                 <input
                   type="text"
                   value={selectedParty}
                   onChange={(event) => setSelectedParty(event.target.value)}
                   list="recon-party-list"
                   className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800"
-                  placeholder="Select or type a rate party name"
+                  placeholder="Select or type a counterparty or account"
                 />
                 <datalist id="recon-party-list">
                   {partyOptions.map(option => (
@@ -370,42 +468,21 @@ const PaymentReconciliation: React.FC = () => {
               {selectedParty && (
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">Trips Total</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(partySummary.tripTotal)}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{partyHasTrips ? 'Trips Total' : 'Total In'}</p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      {partyHasTrips ? formatCurrency(partySummary.tripTotal) : formatCurrency(partyPaymentTotals.inflow)}
+                    </p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">Payments Total</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(partySummary.paymentTotal)}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{partyHasTrips ? 'Payments Total' : 'Total Out'}</p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      {partyHasTrips ? formatCurrency(partySummary.paymentTotal) : formatCurrency(partyPaymentTotals.outflow)}
+                    </p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
                     <p className="text-gray-500 dark:text-gray-400">Balance</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(partySummary.balance)}</p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(partyPaymentBalance)}</p>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : mode === 'account' ? (
-            <div className="space-y-4">
-              <div className="max-w-md">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Account</label>
-                <input
-                  type="text"
-                  value={selectedAccount}
-                  onChange={(event) => setSelectedAccount(event.target.value)}
-                  list="recon-account-list"
-                  className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800"
-                  placeholder="Select or type an account"
-                />
-                <datalist id="recon-account-list">
-                  {accountOptions.map(option => (
-                    <option key={option} value={option} />
-                  ))}
-                </datalist>
-              </div>
-              {selectedAccount && (
-                <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                  <p className="text-gray-500 dark:text-gray-400">Balance</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(accountBalance)}</p>
                 </div>
               )}
             </div>
@@ -440,7 +517,8 @@ const PaymentReconciliation: React.FC = () => {
 
       {mode === 'party' && selectedParty && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          {partyHasTrips && (
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
               <span>Trips</span>
               <div className="flex items-center gap-2 text-xs">
@@ -480,7 +558,6 @@ const PaymentReconciliation: React.FC = () => {
                     {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Rate/Ton</th>}
                     {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Amount</th>}
                     <th className="px-4 py-3 text-left">Total Value</th>
-                    <th className="px-4 py-3 text-left">Matched Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -501,8 +578,7 @@ const PaymentReconciliation: React.FC = () => {
                       {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportCost)}</td>}
                       {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyRate)}</td>}
                       {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyCost)}</td>}
-                      <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
-                      <td className="px-4 py-3">{formatCurrency(row.amount)}</td>
+                    <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
                     </tr>
                   ))}
                   {partyTripRows.length === 0 && (
@@ -514,9 +590,10 @@ const PaymentReconciliation: React.FC = () => {
               </table>
             </div>
           </div>
+          )}
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
-              <span>Payments</span>
+              <span>{partyHasTrips ? 'Payments' : 'Transactions'}</span>
               <div className="flex items-center gap-2 text-xs">
                 <button
                   type="button"
@@ -543,65 +620,57 @@ const PaymentReconciliation: React.FC = () => {
                     <th className="px-4 py-3 text-left">From</th>
                     <th className="px-4 py-3 text-left">To</th>
                     <th className="px-4 py-3 text-left">Amount</th>
+                    {!partyHasTrips && <th className="px-4 py-3 text-left">Opening Balance</th>}
+                    {!partyHasTrips && <th className="px-4 py-3 text-left">Closing Balance</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {partyPaymentRows.map(payment => (
-                    <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
-                      <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
-                      <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
-                      <td className="px-4 py-3">{payment.fromAccount || '-'}</td>
-                      <td className="px-4 py-3">{payment.toAccount || '-'}</td>
-                      <td className="px-4 py-3">{formatCurrency(Number(payment.amount || 0))}</td>
-                    </tr>
-                  ))}
-                  {partyPaymentRows.length === 0 && (
+                  {(() => {
+                    let runningBalance = 0;
+                    return partyTransactionRows.map(payment => {
+                    const match = isAccountSelection ? resolveAccountMatch(payment, selectedPartyKey) : null;
+                    const displayFrom = match?.viaCounterparty && match.fromMatch && !payment.fromAccount
+                      ? selectedParty
+                      : (payment.fromAccount || '-');
+                    const displayTo = match?.viaCounterparty && match.toMatch && !payment.toAccount
+                      ? selectedParty
+                      : (payment.toAccount || '-');
+                    const amountValue = Number(payment.amount || 0);
+                    let delta = 0;
+                    if (!partyHasTrips) {
+                      if (isAccountSelection) {
+                        if (match?.toMatch) delta += amountValue;
+                        if (match?.fromMatch) delta -= amountValue;
+                      } else {
+                        delta = getCounterpartyDelta(payment, selectedPartyKey);
+                      }
+                    }
+                    const openingBalance = runningBalance;
+                    const closingBalance = openingBalance + delta;
+                    runningBalance = closingBalance;
+                    return (
+                      <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
+                        <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
+                        <td className="px-4 py-3">{displayFrom}</td>
+                        <td className="px-4 py-3">{displayTo}</td>
+                        <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
+                        {!partyHasTrips && <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>}
+                        {!partyHasTrips && <td className="px-4 py-3">{formatCurrency(closingBalance)}</td>}
+                      </tr>
+                    );
+                    });
+                  })()}
+                  {partyTransactionRows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">No payments found for this rate party.</td>
+                      <td colSpan={partyHasTrips ? 5 : 7} className="px-4 py-6 text-center text-sm text-gray-500">
+                        No transactions found for this selection.
+                      </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      )}
-
-      {mode === 'account' && selectedAccount && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-          <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
-            Account Payments
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                <tr>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-left">Type</th>
-                  <th className="px-4 py-3 text-left">From</th>
-                  <th className="px-4 py-3 text-left">To</th>
-                  <th className="px-4 py-3 text-left">Amount</th>
-                  <th className="px-4 py-3 text-left">Rate Party</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accountPaymentRows.map(payment => (
-                  <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
-                    <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
-                    <td className="px-4 py-3">{payment.fromAccount || '-'}</td>
-                    <td className="px-4 py-3">{payment.toAccount || '-'}</td>
-                    <td className="px-4 py-3">{formatCurrency(Number(payment.amount || 0))}</td>
-                    <td className="px-4 py-3">{payment.ratePartyName || '-'}</td>
-                  </tr>
-                ))}
-                {accountPaymentRows.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">No payments found for this account.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
       )}

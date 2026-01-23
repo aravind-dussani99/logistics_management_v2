@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AccountSummary } from '../pages/Accounting';
-import { Trip, QuarryOwner, LedgerEntry, VehicleOwner, Customer, RoyaltyOwner, Account, Payment, PaymentType, VendorCustomerData, MineQuarryData, TransportOwnerData, RoyaltyOwnerData } from '../types';
+import { Trip, Payment, PaymentType, VendorCustomerData, MineQuarryData, TransportOwnerData, RoyaltyOwnerData } from '../types';
 import Pagination from './Pagination';
 import { formatCurrency, formatDateDisplay, safeToFixed } from '../utils';
 
@@ -9,15 +9,9 @@ const ITEMS_PER_PAGE = 10;
 interface AccountingTableProps {
     data: AccountSummary[];
     allTrips: Trip[];
-    allLedgerEntries: LedgerEntry[];
     payments: Payment[];
     type: 'payable' | 'receivable' | 'aged' | 'other';
     masterData: {
-        customers: Customer[];
-        quarries: QuarryOwner[];
-        vehicles: VehicleOwner[];
-        royaltyOwners: RoyaltyOwner[];
-        accounts: Account[];
         vendorCustomers: VendorCustomerData[];
         mineQuarries: MineQuarryData[];
         transportOwnerProfiles: TransportOwnerData[];
@@ -25,7 +19,7 @@ interface AccountingTableProps {
     }
 }
 
-const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLedgerEntries, payments, type, masterData }) => {
+const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, payments, type, masterData }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -41,28 +35,23 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
 
     const getTransactionsForEntity = (entity: AccountSummary) => {
         const { id: entityId, type: entityType } = entity;
-        const allAccounts = masterData.accounts;
 
         const entityTrips = allTrips.filter(trip => {
             if (entityType === 'Customer') {
                 const modernCustomer = masterData.vendorCustomers.find(c => c.name === trip.customer)?.id;
-                const legacyCustomer = masterData.customers.find(c => c.name === trip.customer)?.id;
-                return modernCustomer === entityId || legacyCustomer === entityId;
+                return modernCustomer === entityId;
             }
             if (entityType === 'Vendor-Transport') {
                 const modernTransport = masterData.transportOwnerProfiles.find(t => t.name === trip.transporterName)?.id;
-                const legacyTransport = masterData.vehicles.find(v => v.ownerName === trip.transporterName)?.id;
-                return modernTransport === entityId || legacyTransport === entityId;
+                return modernTransport === entityId;
             }
             if (entityType === 'Vendor-Quarry') {
                 const modernQuarry = masterData.mineQuarries.find(q => q.name === trip.quarryName)?.id;
-                const legacyQuarry = masterData.quarries.find(q => q.quarryName === trip.quarryName)?.id;
-                return modernQuarry === entityId || legacyQuarry === entityId;
+                return modernQuarry === entityId;
             }
             if (entityType === 'Vendor-Royalty') {
                 const modernRoyalty = masterData.royaltyOwnerProfiles.find(r => r.name === trip.royaltyOwnerName)?.id;
-                const legacyRoyalty = masterData.royaltyOwners.find(r => r.ownerName === trip.royaltyOwnerName)?.id;
-                return modernRoyalty === entityId || legacyRoyalty === entityId;
+                return modernRoyalty === entityId;
             }
             return false;
         }).map(trip => {
@@ -79,29 +68,29 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
                 type: 'Trip'
             };
         });
-        
-        const entityLedgerEntries = allLedgerEntries.filter(entry => {
-            const fromId = allAccounts.find(a => a.name === entry.from)?.id;
-            const toId = allAccounts.find(a => a.name === entry.to)?.id;
-            return fromId === entityId || toId === entityId;
-        }).map(entry => {
-            const fromId = allAccounts.find(a => a.name === entry.from)?.id;
-            const isDebitForThisAccount = fromId === entityId; // Money went FROM this account
-            return {
-                date: entry.date,
-                description: `Ledger: ${entry.from} -> ${entry.to} (${entry.remarks})`,
-                credit: !isDebitForThisAccount ? entry.amount : 0,
-                debit: isDebitForThisAccount ? entry.amount : 0,
-                type: 'Payment'
-            }
-        });
 
         const entityPayments = payments.filter(payment => {
             if (payment.ratePartyId && payment.ratePartyId === entityId) return true;
-            const fromId = masterData.accounts.find(a => a.name === payment.fromAccount)?.id;
-            const toId = masterData.accounts.find(a => a.name === payment.toAccount)?.id;
-            return fromId === entityId || toId === entityId;
+            if (payment.ratePartyName && payment.ratePartyName.trim().toLowerCase() === entity.name.trim().toLowerCase()) return true;
+            if (entityType === 'Account') {
+                const name = entity.name.trim().toLowerCase();
+                return (payment.fromAccount || '').trim().toLowerCase() === name
+                    || (payment.toAccount || '').trim().toLowerCase() === name;
+            }
+            return false;
         }).map(payment => {
+            if (entityType === 'Account') {
+                const name = entity.name.trim().toLowerCase();
+                const isFrom = (payment.fromAccount || '').trim().toLowerCase() === name;
+                const isTo = (payment.toAccount || '').trim().toLowerCase() === name;
+                return {
+                    date: payment.date,
+                    description: `Payment: ${payment.fromAccount || '-'} -> ${payment.toAccount || '-'} (${payment.type})`,
+                    credit: isTo ? payment.amount : 0,
+                    debit: isFrom ? payment.amount : 0,
+                    type: 'Payment'
+                };
+            }
             const isCustomer = entityType === 'Customer';
             const isReceipt = payment.type === PaymentType.RECEIPT;
             const credit = isCustomer
@@ -119,7 +108,7 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, allLe
             };
         });
 
-        const transactions = [...entityTrips, ...entityLedgerEntries, ...entityPayments]
+        const transactions = [...entityTrips, ...entityPayments]
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             
         let runningBalance = entity.balance - transactions.reduce((acc, t) => acc + t.credit - t.debit, 0);
