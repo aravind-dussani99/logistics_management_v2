@@ -238,8 +238,6 @@ jobs:
           fi
           npm install
           npx prisma generate
-          # Temporary fix for stalled migration
-          npx prisma migrate resolve --rolled-back 20260119200804_add_payment_receipt_remove_site_expense || true
           npx prisma migrate deploy
 
   lint-frontend:
@@ -520,8 +518,8 @@ jobs:
 
   build-push-deploy-backend-dev:
     runs-on: ubuntu-latest
-    needs: [lint-frontend, lint-backend, migrate-dev]
-    if: github.event_name == 'pull_request'
+    needs: [migrate-dev]
+    if: github.event_name == 'pull_request' && needs.migrate-dev.result == 'success'
     outputs:
       backend_url: ${{ steps.capture-backend-url.outputs.backend_url }}
     steps:
@@ -742,8 +740,8 @@ jobs:
 
   build-deploy-frontend-dev:
     runs-on: ubuntu-latest
-    needs: [lint-frontend, lint-backend, migrate-dev, build-push-deploy-backend-dev]
-    if: github.event_name == 'pull_request'
+    needs: [migrate-dev, build-push-deploy-backend-dev]
+    if: github.event_name == 'pull_request' && needs.build-push-deploy-backend-dev.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
