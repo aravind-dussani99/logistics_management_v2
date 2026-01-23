@@ -496,7 +496,9 @@ jobs:
   build-push-deploy-backend-dev:
     runs-on: ubuntu-latest
     needs: [migrate-dev]
-    if: github.event_name == 'pull_request' 
+    if: |
+        always() &&
+        github.event_name == 'pull_request' 
     outputs:
       backend_url: ${{ steps.capture-backend-url.outputs.backend_url }}
     steps:
@@ -675,7 +677,9 @@ jobs:
   build-deploy-frontend-dev:
     runs-on: ubuntu-latest
     needs: [migrate-dev, build-push-deploy-backend-dev]
-    if: github.event_name == 'pull_request' 
+    if: |
+        always() &&
+        github.event_name == 'pull_request' 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
