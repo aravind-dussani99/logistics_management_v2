@@ -165,7 +165,13 @@ const VehiclesPage: React.FC = () => {
               >
                 Delete Selected
               </button>
-              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredVehicles.length}
+                pageSize={ITEMS_PER_PAGE}
+              />
             </div>
           </div>
           <div className="overflow-x-auto">

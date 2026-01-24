@@ -8,7 +8,7 @@ import { useUI } from '../contexts/UIContext';
 import { Payment, PaymentType } from '../types';
 import { formatCurrency, formatDateDisplay } from '../utils';
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 10;
 
 const getMtdRange = () => {
   const today = new Date();
@@ -206,7 +206,13 @@ const Payments: React.FC = () => {
             />
           </div>
           <div className="ml-auto">
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredPayments.length}
+              pageSize={ITEMS_PER_PAGE}
+            />
           </div>
         </div>
 

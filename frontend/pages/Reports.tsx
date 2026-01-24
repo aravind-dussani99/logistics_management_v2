@@ -21,7 +21,7 @@ import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 
 type ReportType = 'trips' | 'received' | 'advances' | 'expenses' | 'site-expenses';
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 10;
 
 const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports' }) => {
     const location = useLocation();
@@ -651,6 +651,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                             currentPage={currentPage}
                             totalPages={totalPages}
                             onPageChange={setCurrentPage}
+                            totalItems={filteredData.length}
+                            pageSize={ITEMS_PER_PAGE}
                         />
                     </div>
                     {activeNotification && (

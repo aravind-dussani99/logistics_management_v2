@@ -70,7 +70,13 @@ const TripDataPage: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
             <h2 className="text-xl font-semibold">Trip Data</h2>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={filteredTrips.length}
+              pageSize={ITEMS_PER_PAGE}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

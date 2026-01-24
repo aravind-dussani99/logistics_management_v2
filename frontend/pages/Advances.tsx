@@ -103,6 +103,8 @@ const AdvancesPage: React.FC = () => {
                             currentPage={currentPage}
                             totalPages={totalPages}
                             onPageChange={setCurrentPage}
+                            totalItems={filteredAdvances.length}
+                            pageSize={ITEMS_PER_PAGE}
                         />
                     </div>
                     <DataTable

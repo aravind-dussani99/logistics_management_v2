@@ -8,6 +8,8 @@ interface ParsedTrip {
   key: string;
   data: Omit<Trip, 'id' | 'paymentStatus' | 'revenue' | 'materialCost' | 'transportCost' | 'royaltyCost' | 'profit' | 'status' | 'createdBy'>;
   duplicate?: boolean;
+  issues?: string[];
+  warnings?: string[];
 }
 
 interface ParseError {
@@ -16,20 +18,35 @@ interface ParseError {
 }
 
 const REQUIRED_HEADERS = [
-  'DATE',
-  'Invoice & DC Number',
-  'Vendor & Customer Name',
-  'Transport & Owner Name',
-  'VEHICLE NO',
-  'Mine & Quarry Name',
-  'Material Type',
-  'Royalty Owner Name',
-  'Net Weight (Tons)',
-  'Pickup Place',
-  'Drop-off Place',
+  'date',
+  'invoice & dc number',
+  'vendor & customer name',
+  'transport & owner name',
+  'vehicle number',
+  'mine & quarry name',
+  'material type',
+  'royalty owner name',
+  'net weight (tons)',
+  'pickup place',
+  'drop-off place',
 ];
 
 const normalizeHeader = (value: string) => value.trim().toLowerCase();
+const DATE_INPUT_HINT = 'Expected: YYYY-MM-DD, DD/MM/YYYY, or MM/DD/YYYY';
+
+const HEADER_ALIASES: Record<string, string[]> = {
+  date: ['Date', 'DATE', 'Trip Date', 'TripDate'],
+  invoice: ['Invoice & DC Number', 'Invoice/DC Number', 'Invoice Number', 'Invoice/DC', 'Invoice DC Number', 'Invoice & Dc Number'],
+  vendorCustomer: ['Vendor & Customer Name', 'Vendor Name', 'Customer Name', 'Vendor Customer', 'Vendor'],
+  transportOwner: ['Transport & Owner Name', 'Transport Owner Name', 'Transporter Name', 'Transport Owner', 'Transporter'],
+  vehicle: ['Vehicle No', 'VEHICLE NO', 'Vehicle Number', 'Vehicle', 'Vehicle No.'],
+  mineQuarry: ['Mine & Quarry Name', 'Quarry Name', 'Mine Name', 'Mine/Quarry', 'Quarry'],
+  material: ['Material Type', 'Material'],
+  royaltyOwner: ['Royalty Owner Name', 'Royalty Owner', 'Royalty'],
+  netWeight: ['Net Weight (Tons)', 'Net Weight', 'Net Weight (Ton)', 'Net Weight (T)'],
+  pickupPlace: ['Pickup Place', 'Pickup', 'Pick-up Place'],
+  dropOffPlace: ['Drop-off Place', 'Dropoff Place', 'Drop Off Place', 'Drop-off', 'Drop Off'],
+};
 
 const parseCsvText = (text: string) => {
   const rows: string[][] = [];
@@ -76,31 +93,54 @@ const parseCsvText = (text: string) => {
   return rows;
 };
 
-const parseDate = (value: string) => {
+const parseDate = (value: string): { value: string; warning?: string } => {
   const trimmed = value.trim();
-  if (!trimmed) return '';
+  if (!trimmed) return { value: '' };
   const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoMatch) {
     const [, year, month, day] = isoMatch;
     const isoMonth = String(Number(month)).padStart(2, '0');
     const isoDay = String(Number(day)).padStart(2, '0');
-    return `${year}-${isoMonth}-${isoDay}`;
+    return { value: `${year}-${isoMonth}-${isoDay}` };
+  }
+  if (/[a-zA-Z]/.test(trimmed)) {
+    const wordDate = new Date(trimmed);
+    if (!Number.isNaN(wordDate.getTime())) {
+      return { value: wordDate.toISOString().split('T')[0] };
+    }
   }
   const parts = trimmed.split(/[./-]/).map(part => part.trim()).filter(Boolean);
   if (parts.length >= 3) {
     const [partA, partB, yearPart] = parts;
     const yearNum = Number(yearPart.length === 2 ? `20${yearPart}` : yearPart);
-    const monthNum = Number(partB);
-    const dayNum = Number(partA);
-    if (yearNum && monthNum && dayNum) {
-      const isoMonth = String(monthNum).padStart(2, '0');
-      const isoDay = String(dayNum).padStart(2, '0');
-      return `${yearNum}-${isoMonth}-${isoDay}`;
+    const numA = Number(partA);
+    const numB = Number(partB);
+    if (yearNum && numA && numB) {
+      let dayNum = numA;
+      let monthNum = numB;
+      let warning: string | undefined;
+      if (numA > 12 && numB <= 12) {
+        dayNum = numA;
+        monthNum = numB;
+      } else if (numB > 12 && numA <= 12) {
+        dayNum = numB;
+        monthNum = numA;
+      } else if (numA <= 12 && numB <= 12) {
+        dayNum = numA;
+        monthNum = numB;
+        warning = 'Assumed DD/MM/YYYY for ambiguous date.';
+      }
+      const candidate = new Date(yearNum, monthNum - 1, dayNum);
+      if (!Number.isNaN(candidate.getTime()) && candidate.getDate() === dayNum && candidate.getMonth() === monthNum - 1) {
+        const isoMonth = String(monthNum).padStart(2, '0');
+        const isoDay = String(dayNum).padStart(2, '0');
+        return { value: `${yearNum}-${isoMonth}-${isoDay}`, warning };
+      }
     }
   }
   const fallback = new Date(trimmed);
-  if (Number.isNaN(fallback.getTime())) return '';
-  return fallback.toISOString().split('T')[0];
+  if (Number.isNaN(fallback.getTime())) return { value: '' };
+  return { value: fallback.toISOString().split('T')[0], warning: 'Date parsed using browser locale.' };
 };
 
 const TripImport: React.FC = () => {
@@ -128,6 +168,19 @@ const TripImport: React.FC = () => {
     }, new Map<string, number>());
   }, [rows]);
 
+  const getColumnIndex = (aliases: string[]) => {
+    for (const alias of aliases) {
+      const col = headerMap.get(normalizeHeader(alias));
+      if (col !== undefined) return col;
+    }
+    return undefined;
+  };
+
+  const getValueFromRow = (row: string[], aliases: string[]) => {
+    const col = getColumnIndex(aliases);
+    return col === undefined ? '' : (row[col] || '').trim();
+  };
+
   const formatKeyDate = (value: string | null | undefined) => {
     if (!value) return '';
     const normalized = new Date(value);
@@ -141,7 +194,8 @@ const TripImport: React.FC = () => {
 
   const excludedRowsSet = useMemo(() => new Set(excludedRowNumbers), [excludedRowNumbers]);
   const duplicateRows = useMemo(() => parsedTrips.filter(row => row.duplicate && !excludedRowsSet.has(row.rowNumber)), [parsedTrips, excludedRowsSet]);
-  const readyRows = useMemo(() => parsedTrips.filter(row => !row.duplicate && !excludedRowsSet.has(row.rowNumber)), [parsedTrips, excludedRowsSet]);
+  const readyRows = useMemo(() => parsedTrips.filter(row => !row.duplicate && !excludedRowsSet.has(row.rowNumber) && (!row.issues || row.issues.length === 0)), [parsedTrips, excludedRowsSet]);
+  const reviewRows = useMemo(() => parsedTrips.filter(row => (row.issues || []).length > 0 && !excludedRowsSet.has(row.rowNumber)), [parsedTrips, excludedRowsSet]);
   const totalDuplicateCount = parsedTrips.filter(row => row.duplicate).length;
   const toggleExcludeRow = (rowNumber: number) => {
     setExcludedRowNumbers(prev => (prev.includes(rowNumber) ? prev : [...prev, rowNumber]));
@@ -171,68 +225,155 @@ const TripImport: React.FC = () => {
     setShowDuplicateDialog(false);
   };
 
+  const recomputeDuplicates = (entries: ParsedTrip[]) => {
+    const fileKeys = new Set<string>();
+    return entries
+      .slice()
+      .sort((a, b) => a.rowNumber - b.rowNumber)
+      .map(entry => {
+        const key = `${entry.data.date}|${entry.data.invoiceDCNumber}`;
+        const isDuplicate = Boolean(entry.data.date && entry.data.invoiceDCNumber) && (existingKeys.has(key) || fileKeys.has(key));
+        if (!fileKeys.has(key)) {
+          fileKeys.add(key);
+        }
+        return {
+          ...entry,
+          key,
+          duplicate: isDuplicate,
+        };
+      });
+  };
+
+  const validateRow = (data: ParsedTrip['data']) => {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    const dateParsed = parseDate(data.date || '');
+    if (!dateParsed.value) {
+      issues.push(`Invalid date format. ${DATE_INPUT_HINT}`);
+    } else if (dateParsed.warning) {
+      warnings.push(dateParsed.warning);
+    }
+    if (!data.customer) {
+      issues.push('Vendor & Customer Name is required.');
+    }
+    if (!data.vehicleNumber) {
+      issues.push('Vehicle number is required.');
+    }
+    if (!data.invoiceDCNumber) {
+      issues.push('Invoice/DC Number is required.');
+    }
+    if (!Number.isFinite(Number(data.netWeight))) {
+      issues.push('Net Weight must be a valid number.');
+    }
+    return { issues, warnings, date: dateParsed.value || data.date };
+  };
+
+  const updateRowValue = (rowNumber: number, field: keyof ParsedTrip['data'], value: string) => {
+    setParsedTrips(prev => {
+      const updated = prev.map(entry => {
+        if (entry.rowNumber !== rowNumber) return entry;
+        let nextData: ParsedTrip['data'] = { ...entry.data };
+        if (field !== 'netWeight') {
+          (nextData as Record<string, string>)[field] = value;
+        }
+        if (field === 'netWeight') {
+          const weight = Number(value || 0);
+          nextData = {
+            ...nextData,
+            netWeight: weight,
+            grossWeight: weight,
+            royaltyTons: weight,
+            tonnage: weight,
+          };
+        }
+        const result = validateRow(nextData);
+        return {
+          ...entry,
+          data: { ...nextData, date: result.date },
+          issues: result.issues,
+          warnings: result.warnings,
+        };
+      });
+      return recomputeDuplicates(updated);
+    });
+  };
+
   const validateAndParse = () => {
     if (rows.length === 0) {
       setErrors([{ rowNumber: 0, message: 'CSV file is empty.' }]);
       setParsedTrips([]);
       return;
     }
-    const missingHeaders = REQUIRED_HEADERS.filter(header => !headerMap.has(normalizeHeader(header)));
+    const requiredLookup: Record<string, string[]> = {
+      date: HEADER_ALIASES.date,
+      invoice: HEADER_ALIASES.invoice,
+      vendorCustomer: HEADER_ALIASES.vendorCustomer,
+      transportOwner: HEADER_ALIASES.transportOwner,
+      vehicle: HEADER_ALIASES.vehicle,
+      mineQuarry: HEADER_ALIASES.mineQuarry,
+      material: HEADER_ALIASES.material,
+      royaltyOwner: HEADER_ALIASES.royaltyOwner,
+      netWeight: HEADER_ALIASES.netWeight,
+      pickupPlace: HEADER_ALIASES.pickupPlace,
+      dropOffPlace: HEADER_ALIASES.dropOffPlace,
+    };
+    const missingHeaders = Object.entries(requiredLookup).filter(([, aliases]) => getColumnIndex(aliases) === undefined);
     if (missingHeaders.length > 0) {
-      setErrors([{ rowNumber: 0, message: `Missing headers: ${missingHeaders.join(', ')}` }]);
+      setErrors([{ rowNumber: 0, message: `Missing headers: ${missingHeaders.map(([key]) => key).join(', ')}` }]);
       setParsedTrips([]);
       return;
     }
 
     const parsed: ParsedTrip[] = [];
     const parseErrors: ParseError[] = [];
-    const fileKeys = new Set<string>();
 
     rows.slice(1).forEach((row, index) => {
       const rowNumber = index + 2;
-      const getValue = (header: string) => {
-        const col = headerMap.get(normalizeHeader(header));
-        return col === undefined ? '' : (row[col] || '').trim();
-      };
-      const date = parseDate(getValue('DATE'));
-      const netWeight = Number(getValue('Net Weight (Tons)') || 0);
+      const issues: string[] = [];
+      const warnings: string[] = [];
+      const dateValue = getValueFromRow(row, HEADER_ALIASES.date);
+      const dateParsed = parseDate(dateValue);
+      const date = dateParsed.value;
+      if (dateParsed.warning) warnings.push(dateParsed.warning);
+      const netWeightRaw = getValueFromRow(row, HEADER_ALIASES.netWeight);
+      const netWeight = Number(netWeightRaw || 0);
 
       if (!date) {
-        parseErrors.push({ rowNumber, message: 'Invalid date format.' });
-        return;
+        issues.push(`Invalid date format. ${DATE_INPUT_HINT}`);
       }
-      const invoiceNumber = getValue('Invoice & DC Number');
-      const vehicleNumber = getValue('VEHICLE NO');
-      if (!getValue('Vendor & Customer Name')) {
-        parseErrors.push({ rowNumber, message: 'Vendor & Customer Name is required.' });
-        return;
+      const invoiceNumber = getValueFromRow(row, HEADER_ALIASES.invoice);
+      const vehicleNumber = getValueFromRow(row, HEADER_ALIASES.vehicle);
+      if (!getValueFromRow(row, HEADER_ALIASES.vendorCustomer)) {
+        issues.push('Vendor & Customer Name is required.');
       }
-      if (!getValue('VEHICLE NO')) {
-        parseErrors.push({ rowNumber, message: 'Vehicle number is required.' });
-        return;
+      if (!vehicleNumber) {
+        issues.push('Vehicle number is required.');
+      }
+      if (!invoiceNumber) {
+        issues.push('Invoice/DC Number is required.');
+      }
+      if (!Number.isFinite(netWeight)) {
+        issues.push('Net Weight must be a valid number.');
       }
 
       const key = `${date}|${invoiceNumber}`;
-      const isDuplicate = existingKeys.has(key) || fileKeys.has(key);
-      if (!fileKeys.has(key)) {
-        fileKeys.add(key);
-      }
       parsed.push({
         rowNumber,
         key,
-        duplicate: isDuplicate,
+        issues,
+        warnings,
         data: {
           date,
-          place: getValue('Drop-off Place'),
-          pickupPlace: getValue('Pickup Place'),
-          dropOffPlace: getValue('Drop-off Place'),
-          customer: getValue('Vendor & Customer Name'),
+          place: getValueFromRow(row, HEADER_ALIASES.dropOffPlace),
+          pickupPlace: getValueFromRow(row, HEADER_ALIASES.pickupPlace),
+          dropOffPlace: getValueFromRow(row, HEADER_ALIASES.dropOffPlace),
+          customer: getValueFromRow(row, HEADER_ALIASES.vendorCustomer),
           invoiceDCNumber: invoiceNumber,
-          quarryName: getValue('Mine & Quarry Name'),
-          royaltyOwnerName: getValue('Royalty Owner Name'),
-          material: getValue('Material Type'),
+          quarryName: getValueFromRow(row, HEADER_ALIASES.mineQuarry),
+          royaltyOwnerName: getValueFromRow(row, HEADER_ALIASES.royaltyOwner),
+          material: getValueFromRow(row, HEADER_ALIASES.material),
           vehicleNumber,
-          transporterName: getValue('Transport & Owner Name'),
+          transporterName: getValueFromRow(row, HEADER_ALIASES.transportOwner),
           transportOwnerMobileNumber: '',
           netWeight,
           emptyWeight: 0,
@@ -251,7 +392,7 @@ const TripImport: React.FC = () => {
     });
 
     setErrors(parseErrors);
-    setParsedTrips(parsed);
+    setParsedTrips(recomputeDuplicates(parsed));
     setExcludedRowNumbers([]);
     setShowDuplicateDialog(false);
   };
@@ -384,7 +525,8 @@ const TripImport: React.FC = () => {
           {parsedTrips.length > 0 && errors.length === 0 && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {parsedTrips.length} rows parsed —
-              {` ${parsedTrips.filter(row => !row.duplicate).length} ready,`}
+              {` ${readyRows.length} ready,`}
+              {` ${reviewRows.length} need review,`}
               {` ${parsedTrips.filter(row => row.duplicate).length} duplicates.`}
             </div>
           )}
@@ -452,6 +594,127 @@ const TripImport: React.FC = () => {
             </div>
           )}
 
+          {reviewRows.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Rows needing review</div>
+              <div className="overflow-x-auto rounded-md border border-amber-200 bg-amber-50/40 dark:border-amber-700 dark:bg-amber-900/10">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-amber-100/70 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100">
+                    <tr>
+                      {['Row', 'Date', 'Invoice/DC', 'Vendor', 'Transport', 'Vehicle', 'Mine/Quarry', 'Material', 'Royalty Owner', 'Net Weight', 'Pickup', 'Drop-off', 'Issues', 'Actions'].map(header => (
+                        <th key={header} className="px-3 py-2 text-left uppercase tracking-wide">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewRows.map(row => (
+                      <tr key={`review-${row.rowNumber}`} className="even:bg-amber-50/60 dark:even:bg-amber-900/20">
+                        <td className="px-3 py-2">{row.rowNumber}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.date || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'date', event.target.value)}
+                            placeholder="YYYY-MM-DD"
+                            className="w-28 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.invoiceDCNumber || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'invoiceDCNumber', event.target.value)}
+                            className="w-28 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.customer || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'customer', event.target.value)}
+                            className="w-32 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.transporterName || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'transporterName', event.target.value)}
+                            className="w-32 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.vehicleNumber || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'vehicleNumber', event.target.value)}
+                            className="w-24 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.quarryName || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'quarryName', event.target.value)}
+                            className="w-28 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.material || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'material', event.target.value)}
+                            className="w-24 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.royaltyOwnerName || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'royaltyOwnerName', event.target.value)}
+                            className="w-28 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.netWeight === 0 ? '' : String(row.data.netWeight)}
+                            onChange={event => updateRowValue(row.rowNumber, 'netWeight', event.target.value)}
+                            className="w-20 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.pickupPlace || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'pickupPlace', event.target.value)}
+                            className="w-24 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={row.data.dropOffPlace || ''}
+                            onChange={event => updateRowValue(row.rowNumber, 'dropOffPlace', event.target.value)}
+                            className="w-24 rounded-md border border-amber-200 bg-white/70 px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 dark:border-amber-700 dark:bg-gray-900/40 dark:text-gray-200"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-xxs text-amber-900 dark:text-amber-100">
+                          <div className="space-y-1">
+                            {(row.issues || []).map(issue => (
+                              <div key={issue}>{issue}</div>
+                            ))}
+                            {(row.warnings || []).map(warning => (
+                              <div key={warning} className="text-amber-700 dark:text-amber-300">{warning}</div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleExcludeRow(row.rowNumber)}
+                            className="text-xxs font-medium text-blue-600 hover:underline"
+                          >
+                            Exclude
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {parsedTrips.length > 0 && (
             <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
               <table className="min-w-full text-xs">
@@ -473,6 +736,8 @@ const TripImport: React.FC = () => {
                       <td className="px-3 py-1 space-y-1">
                         {row.duplicate ? (
                           <div className="text-xxs font-semibold text-red-600">Duplicate</div>
+                        ) : row.issues && row.issues.length > 0 ? (
+                          <div className="text-xxs font-semibold text-amber-600">Needs review</div>
                         ) : (
                           <div className="text-xxs font-semibold text-emerald-600">Ready</div>
                         )}

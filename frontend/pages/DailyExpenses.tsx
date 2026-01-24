@@ -285,7 +285,13 @@ const DailyExpenses: React.FC = () => {
                                 Export to Excel
                             </button>
                         </div>
-                        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                            totalItems={filteredExpenses.length}
+                            pageSize={ITEMS_PER_PAGE}
+                        />
                     </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

@@ -5,7 +5,7 @@ import { useUI } from '../contexts/UIContext';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 10;
 
 const Accounts: React.FC = () => {
     const { accounts, addAccount, accountCategories, loadAccounts, loadAccountCategories, refreshKey } = useData();
@@ -47,7 +47,13 @@ const Accounts: React.FC = () => {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
                      <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
                         <h2 className="text-xl font-semibold">All Accounts</h2>
-                        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                        <Pagination
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={setCurrentPage}
+                          totalItems={accounts.length}
+                          pageSize={ITEMS_PER_PAGE}
+                        />
                     </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">

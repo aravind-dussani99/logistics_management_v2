@@ -5,10 +5,20 @@ interface PaginationProps {
     currentPage: number;
     totalPages: number;
     onPageChange: (page: number) => void;
+    totalItems?: number;
+    pageSize?: number;
 }
 
-const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPageChange }) => {
-    if (totalPages <= 1) return null;
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPageChange, totalItems, pageSize }) => {
+    const hasSummary = typeof totalItems === 'number' && typeof pageSize === 'number';
+    if (totalPages <= 1 && !hasSummary) return null;
+
+    const start = hasSummary && totalItems > 0
+        ? Math.min((currentPage - 1) * pageSize + 1, totalItems)
+        : 0;
+    const end = hasSummary
+        ? Math.min(currentPage * pageSize, totalItems)
+        : 0;
 
     const pageNumbers = [];
     for (let i = 1; i <= totalPages; i++) {
@@ -58,14 +68,23 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
 
 
     return (
-        <div className="flex justify-center items-center mt-6">
-            <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 mx-1 rounded-md text-sm bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                Previous
-            </button>
-            {renderPageNumbers()}
-            <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 mx-1 rounded-md text-sm bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                Next
-            </button>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {hasSummary && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Showing {start}–{end} of {totalItems}
+                </div>
+            )}
+            {totalPages > 1 && (
+                <div className="flex justify-center items-center">
+                    <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 mx-1 rounded-md text-sm bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Previous
+                    </button>
+                    {renderPageNumbers()}
+                    <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 mx-1 rounded-md text-sm bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Next
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

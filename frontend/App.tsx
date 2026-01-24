@@ -37,6 +37,7 @@ import TransportOwnerVehicles from './pages/TransportOwnerVehicles';
 import MaterialTypes from './pages/MaterialTypes';
 import MaterialRates from './pages/MaterialRates';
 import TripData from './pages/TripData';
+import TripRecords from './pages/TripRecords';
 import ConfigManager from './pages/ConfigManager';
 import SupervisorDashboard from './pages/Supervisor/Dashboard';
 import SupervisorEnterTrips from './pages/Supervisor/EnterTrips';
@@ -207,6 +208,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/material-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><MaterialTypes /></ProtectedRoute>} />
       <Route path="/material-rates" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><MaterialRates /></ProtectedRoute>} />
       <Route path="/trip-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><TripData /></ProtectedRoute>} />
+      <Route path="/trip-records" element={<ProtectedRoute roles={[Role.ADMIN]}><TripRecords /></ProtectedRoute>} />
       <Route path="/config-manager" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><ConfigManager /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute roles={[Role.ADMIN]}><Users /></ProtectedRoute>} />
     </Route>

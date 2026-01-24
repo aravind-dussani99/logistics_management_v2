@@ -162,7 +162,13 @@ const MaterialTypesPage: React.FC = () => {
               >
                 Delete Selected
               </button>
-              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredTypes.length}
+                pageSize={ITEMS_PER_PAGE}
+              />
             </div>
           </div>
           <div className="overflow-x-auto">

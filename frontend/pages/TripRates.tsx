@@ -25,14 +25,22 @@ const partyTabs: PartyTab[] = [
   { key: 'allIn', label: 'All-in Rate' },
 ];
 
-const getMtdRange = () => {
-  const today = new Date();
+const getMtdRange = (referenceDate?: Date) => {
+  const today = referenceDate ?? new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
   return {
     dateFrom: formatDate(startOfMonth),
     dateTo: formatDate(today),
   };
+};
+
+const getLatestTripDate = (tripList: Trip[]) => {
+  const dates = tripList
+    .map(trip => (trip.date ? new Date(trip.date) : null))
+    .filter((date): date is Date => Boolean(date) && !Number.isNaN(date.getTime()));
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map(date => date.getTime())));
 };
 
 const TripRateLedger: React.FC = () => {
@@ -58,6 +66,7 @@ const TripRateLedger: React.FC = () => {
     refreshKey,
   } = useData();
   const [filters, setFilters] = useState<Filters>(getMtdRange());
+  const [filtersTouched, setFiltersTouched] = useState(false);
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
@@ -94,6 +103,20 @@ const TripRateLedger: React.FC = () => {
     loadSiteLocations,
     refreshKey,
   ]);
+
+  useEffect(() => {
+    if (!filtersTouched) {
+      const latestTripDate = getLatestTripDate(trips);
+      if (latestTripDate) {
+        setFilters(getMtdRange(latestTripDate));
+      }
+    }
+  }, [filtersTouched, trips]);
+
+  const handleFilterChange = (nextFilters: Filters) => {
+    setFiltersTouched(true);
+    setFilters(nextFilters);
+  };
 
   const handleInput = (tabKey: string, tripId: number, value: string) => {
     const mapKey = `${tabKey}-${tripId}`;
@@ -255,7 +278,7 @@ const TripRateLedger: React.FC = () => {
       <PageHeader
         title="Trip Rate Ledger"
         filters={filters}
-        onFilterChange={setFilters}
+        onFilterChange={handleFilterChange}
         filterData={filterData}
         showFilters={['date']}
         showAddAction={false}
@@ -352,7 +375,13 @@ const TripRateLedger: React.FC = () => {
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         Showing {awaitingStart}–{awaitingEnd} of {awaitingTotal}
                       </div>
-                      <Pagination currentPage={awaitingPage} totalPages={Math.max(1, Math.ceil(awaitingTotal / PAGE_SIZE))} onPageChange={page => handlePageChange(awaitingKey, page)} />
+                      <Pagination
+                        currentPage={awaitingPage}
+                        totalPages={Math.max(1, Math.ceil(awaitingTotal / PAGE_SIZE))}
+                        onPageChange={page => handlePageChange(awaitingKey, page)}
+                        totalItems={awaitingTotal}
+                        pageSize={PAGE_SIZE}
+                      />
                     </div>
                   </div>
                   <div className="px-6 py-4">
@@ -445,7 +474,13 @@ const TripRateLedger: React.FC = () => {
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         Showing {appliedStart}–{appliedEnd} of {appliedTotal}
                       </div>
-                      <Pagination currentPage={appliedPage} totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))} onPageChange={page => handlePageChange(appliedKey, page)} />
+                      <Pagination
+                        currentPage={appliedPage}
+                        totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))}
+                        onPageChange={page => handlePageChange(appliedKey, page)}
+                        totalItems={appliedTotal}
+                        pageSize={PAGE_SIZE}
+                      />
                     </div>
                   </div>
                   <div className="px-6 py-4">
@@ -713,7 +748,13 @@ const TripRateLedger: React.FC = () => {
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       Showing {awaitingStart}–{awaitingEnd} of {awaitingTotal}
                     </div>
-                    <Pagination currentPage={awaitingPage} totalPages={Math.max(1, Math.ceil(awaitingTrips.length / PAGE_SIZE))} onPageChange={page => handlePageChange(awaitingKey, page)} />
+                    <Pagination
+                      currentPage={awaitingPage}
+                      totalPages={Math.max(1, Math.ceil(awaitingTrips.length / PAGE_SIZE))}
+                      onPageChange={page => handlePageChange(awaitingKey, page)}
+                      totalItems={awaitingTrips.length}
+                      pageSize={PAGE_SIZE}
+                    />
                   </div>
                 </div>
                 <div className="px-6 py-4">
@@ -876,7 +917,13 @@ const TripRateLedger: React.FC = () => {
                     <div className="text-xs text-gray-500 dark:text-gray-400">
                       Showing {appliedStart}–{appliedEnd} of {appliedTotal}
                     </div>
-                    <Pagination currentPage={appliedPage} totalPages={Math.max(1, Math.ceil(appliedTrips.length / PAGE_SIZE))} onPageChange={page => handlePageChange(appliedKey, page)} />
+                    <Pagination
+                      currentPage={appliedPage}
+                      totalPages={Math.max(1, Math.ceil(appliedTrips.length / PAGE_SIZE))}
+                      onPageChange={page => handlePageChange(appliedKey, page)}
+                      totalItems={appliedTrips.length}
+                      pageSize={PAGE_SIZE}
+                    />
                   </div>
                 </div>
                 <div className="px-6 py-4">
