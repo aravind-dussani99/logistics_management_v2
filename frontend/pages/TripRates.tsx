@@ -25,22 +25,14 @@ const partyTabs: PartyTab[] = [
   { key: 'allIn', label: 'All-in Rate' },
 ];
 
-const getMtdRange = (referenceDate?: Date) => {
-  const today = referenceDate ?? new Date();
+const getMtdRange = () => {
+  const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
   return {
     dateFrom: formatDate(startOfMonth),
     dateTo: formatDate(today),
   };
-};
-
-const getLatestTripDate = (tripList: Trip[]) => {
-  const dates = tripList
-    .map(trip => (trip.date ? new Date(trip.date) : null))
-    .filter((date): date is Date => Boolean(date) && !Number.isNaN(date.getTime()));
-  if (!dates.length) return null;
-  return new Date(Math.max(...dates.map(date => date.getTime())));
 };
 
 const TripRateLedger: React.FC = () => {
@@ -66,7 +58,6 @@ const TripRateLedger: React.FC = () => {
     refreshKey,
   } = useData();
   const [filters, setFilters] = useState<Filters>(getMtdRange());
-  const [filtersTouched, setFiltersTouched] = useState(false);
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
@@ -104,17 +95,7 @@ const TripRateLedger: React.FC = () => {
     refreshKey,
   ]);
 
-  useEffect(() => {
-    if (!filtersTouched) {
-      const latestTripDate = getLatestTripDate(trips);
-      if (latestTripDate) {
-        setFilters(getMtdRange(latestTripDate));
-      }
-    }
-  }, [filtersTouched, trips]);
-
   const handleFilterChange = (nextFilters: Filters) => {
-    setFiltersTouched(true);
     setFilters(nextFilters);
   };
 

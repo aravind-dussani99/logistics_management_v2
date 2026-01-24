@@ -17,22 +17,14 @@ import { notificationApi } from '../services/notificationApi';
 
 const TRIPS_PER_PAGE = 10;
 
-const getMtdRange = (referenceDate?: Date) => {
-    const today = referenceDate ?? new Date();
+const getMtdRange = () => {
+    const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const formatDate = (date: Date) => date.toISOString().split('T')[0];
     return {
       dateFrom: formatDate(startOfMonth),
       dateTo: formatDate(today)
     };
-};
-
-const getLatestTripDate = (tripList: Trip[]) => {
-    const dates = tripList
-        .map(trip => (trip.date ? new Date(trip.date) : null))
-        .filter((date): date is Date => Boolean(date) && !Number.isNaN(date.getTime()));
-    if (!dates.length) return null;
-    return new Date(Math.max(...dates.map(date => date.getTime())));
 };
 
 const DailyTrips: React.FC = () => {
@@ -53,7 +45,6 @@ const DailyTrips: React.FC = () => {
     const [activeRequest, setActiveRequest] = useState<Notification | null>(null);
     
     const [filters, setFilters] = useState<Filters>(getMtdRange());
-    const [filtersTouched, setFiltersTouched] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState<'all' | 'in transit' | 'pending validation' | 'completed' | 'trip completed'>('all');
     const isAdminLike = currentUser ? [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT].includes(currentUser.role) : false;
@@ -171,12 +162,6 @@ const DailyTrips: React.FC = () => {
 
     useEffect(() => {
         setAllTrips(trips);
-        if (!filtersTouched) {
-            const latestTripDate = getLatestTripDate(trips);
-            if (latestTripDate) {
-                setFilters(getMtdRange(latestTripDate));
-            }
-        }
         const uniqueRoyaltyOwners = Array.from(new Set(trips.map(t => t.royaltyOwnerName).filter(Boolean)));
         const uniqueVehicles = Array.from(new Set(trips.map(t => t.vehicleNumber).filter(Boolean)));
         const uniqueQuarries = Array.from(new Set(trips.map(t => t.quarryName).filter(Boolean)));
@@ -220,10 +205,9 @@ const DailyTrips: React.FC = () => {
         }));
 
         setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners as string[] });
-    }, [refreshKey, trips, filtersTouched]);
+    }, [refreshKey, trips]);
 
     const handleFilterChange = (nextFilters: Filters) => {
-        setFiltersTouched(true);
         setFilters(nextFilters);
     };
 
