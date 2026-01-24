@@ -2,6 +2,8 @@
 
 LogiTrack is a comprehensive web application designed to digitize and streamline logistics operations. It replaces manual, spreadsheet-based tracking with a modern, intuitive, and powerful system for managing trips, financials, vendors, and customers.
 
+Note: Deployment trigger change (no functional impact).
+
 ---
 
 ## Getting Started: Logging In
