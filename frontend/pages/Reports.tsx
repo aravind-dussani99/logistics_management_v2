@@ -16,6 +16,7 @@ import ReceiveTripForm from '../components/ReceiveTripForm';
 import RequestDialog from '../components/RequestDialog';
 import AlertDialog from '../components/AlertDialog';
 import DailyExpenseForm from '../components/DailyExpenseForm';
+import PaymentForm from '../components/PaymentForm';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 
@@ -26,7 +27,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     const location = useLocation();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
-    const { trips, payments, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadPayments, updateTrip, deleteTrip, updateDailyExpense, deleteDailyExpense } = useData();
+    const { trips, payments, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadPayments, updateTrip, deleteTrip, updateDailyExpense, deleteDailyExpense, updatePayment, deletePayment } = useData();
     const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
@@ -152,13 +153,36 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         switch(reportType) {
             case 'trips': data = trips; break;
             case 'payments': data = payments; break;
-            case 'expenses': data = allExpenses.filter(expense => !expense.siteExpense); break;
+            case 'expenses': data = allExpenses; break;
         }
 
         const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
         const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
 
-        return (data || []).filter(item => {
+        const openingBalanceEntry = reportType === 'expenses'
+            ? {
+                id: 'opening',
+                date: '---',
+                from: 'System',
+                to: 'Opening Balance',
+                amount: 0,
+                remarks: '',
+                availableBalance: 0,
+                closingBalance: 0,
+                type: 'CREDIT',
+                via: '',
+                headAccount: '',
+                category: '',
+                subCategory: '',
+                ratePartyName: '',
+                siteExpense: false,
+              }
+            : null;
+
+        const combinedData = openingBalanceEntry ? [openingBalanceEntry, ...data] : data;
+
+        return (combinedData || []).filter(item => {
+            if (item?.id === 'opening') return true;
             const itemDate = item?.date ? new Date(item.date) : null;
             if (fromDate && itemDate && itemDate < fromDate) return false;
             if (toDate && itemDate && itemDate > toDate) return false;
@@ -362,6 +386,22 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 expenses={filteredData as DailyExpense[]}
                 openingBalance={0}
                 isViewMode={isViewMode}
+            />
+        ));
+    };
+
+    const openPaymentModal = (title: string, payment?: Payment, isViewMode?: boolean) => {
+        openModal(title, (
+            <PaymentForm
+                initialData={payment}
+                onSave={async (data) => {
+                    if (payment) {
+                        await updatePayment(payment.id, data);
+                    }
+                }}
+                onClose={closeModal}
+                isViewMode={isViewMode}
+                hideSecondary={Boolean(isViewMode)}
             />
         ));
     };
@@ -572,8 +612,11 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     </tr>
                 )} />;
             }
-            case 'payments':
-                 return <DataTable title="" headers={["Date", "Transaction Type", "From Account", "To Account", "Counterparty Name", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"]} data={tableData} renderRow={(p: Payment) => (
+            case 'payments': {
+                 const headers = showActions
+                    ? ["Date", "Transaction Type", "From Account", "To Account", "Counterparty Name", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category", "Actions"]
+                    : ["Date", "Transaction Type", "From Account", "To Account", "Counterparty Name", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"];
+                 return <DataTable title="" headers={headers} data={tableData} renderRow={(p: Payment) => (
                     <tr key={p.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(p.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.type}</td>
@@ -587,8 +630,34 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.tripId ? `#${p.tripId}` : '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.category || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.subCategory || '-'}</td>
+                        {showActions && (
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
+                                <button onClick={() => openPaymentModal('View Payment', p, true)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                                <button onClick={() => openPaymentModal('Edit Payment', p)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                                <button
+                                    onClick={() => {
+                                        openModal('Delete Payment', (
+                                            <AlertDialog
+                                                message="Delete this payment? This action cannot be undone."
+                                                confirmLabel="Delete"
+                                                cancelLabel="Cancel"
+                                                onCancel={closeModal}
+                                                onConfirm={async () => {
+                                                    await deletePayment(p.id);
+                                                    closeModal();
+                                                }}
+                                            />
+                                        ));
+                                    }}
+                                    className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                                >
+                                    Delete
+                                </button>
+                            </td>
+                        )}
                     </tr>
                 )} />;
+            }
             case 'expenses':
                  return <DataTable title="" headers={mode === 'dashboard' ? ["Date", "Supervisor", "To", "Amount", "Type", "Actions"] : ["Date", "Supervisor", "To", "Amount", "Type"]} data={tableData} renderRow={(e: DailyExpense) => (
                      <tr key={e.id}>
@@ -612,7 +681,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     return (
          <div className="relative">
             <PageHeader
-                title={mode === 'dashboard' ? 'Dashboard' : 'Operations Ledger'}
+                title={mode === 'dashboard' ? 'Management Ledger' : 'Reports'}
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now

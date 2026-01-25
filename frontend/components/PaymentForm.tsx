@@ -45,6 +45,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   const [paymentReceiptFiles, setPaymentReceiptFiles] = useState<TripUploadFile[]>([]);
   const [bankAccountFiles, setBankAccountFiles] = useState<TripUploadFile[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showOptional, setShowOptional] = useState(isViewMode);
+  const isReceipt = type === PaymentType.RECEIPT;
+  const fromLabel = isReceipt ? 'From Name' : 'From';
+  const toLabel = isReceipt ? 'To Account' : 'To';
 
   const parseUploadValue = (value?: TripUploadPayload | string | null) => {
     if (!value) return [];
@@ -323,7 +327,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     setErrorMessage('');
 
     if (!date || !type || !fromAccount || !ratePartyName || !amount || !remarks) {
-      setErrorMessage('Date, transaction type, from account, counterparty name, amount, and remarks are required.');
+      setErrorMessage('Date, transaction type, from, to, amount, and remarks are required.');
       return;
     }
 
@@ -390,7 +394,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           </select>
         </div>
         <div>
-          <label htmlFor="from-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">From Account *</label>
+          <label htmlFor="from-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{fromLabel} *</label>
           <input
             id="from-account"
             type="text"
@@ -405,7 +409,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           )}
         </div>
         <div>
-          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty Name *</label>
+          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{toLabel} *</label>
           <input
             id="rate-party-name"
             type="text"
@@ -427,6 +431,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              onWheel={(event) => event.currentTarget.blur()}
               required
               disabled={isViewMode}
               placeholder="Enter amount"
@@ -442,7 +447,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
                 )}
                 {projectedRatePartyBalance !== undefined && (
                   <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Counterparty after:</div>
+                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">To after:</div>
                     <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
                   </div>
                 )}
@@ -464,8 +469,17 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
       </div>
 
       <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
-        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Optional Details</h4>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={showOptional}
+            onChange={(event) => setShowOptional(event.target.checked)}
+            disabled={isViewMode}
+          />
+          Optional Fields
+        </label>
+        {showOptional && (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>
             <label htmlFor="head-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Head Account</label>
             <input
@@ -573,7 +587,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               />
             )}
           </div>
-        </div>
+          </div>
+        )}
       </div>
 
       <datalist id="account-list">

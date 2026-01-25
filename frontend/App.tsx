@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
 import ReportDashboard from './pages/Dashboard';
@@ -125,13 +125,13 @@ const AppRoutes: React.FC = () => (
           <TripRates />
         </ProtectedRoute>
       } />
-      <Route path="/bills" element={
+      <Route path="/bills-invoices" element={
         <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <Bills />
         </ProtectedRoute>
       } />
       <Route path="/enter-trips" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER]}>
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <SupervisorEnterTrips />
         </ProtectedRoute>
       } />
@@ -141,12 +141,12 @@ const AppRoutes: React.FC = () => (
         </ProtectedRoute>
       } />
       {/* Advances route deprecated */}
-      <Route path="/reports" element={
+      <Route path="/management-ledger" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Reports mode="dashboard" />
         </ProtectedRoute>
       } />
-      <Route path="/reports-export" element={
+      <Route path="/reports" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Reports mode="reports" />
         </ProtectedRoute>
@@ -227,16 +227,30 @@ const AppRoutes: React.FC = () => (
 );
 
 
-const App: React.FC = () => (
-  <UIProvider>
-    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AuthProvider>
-        <DataProvider>
-          <AppRoutes />
-        </DataProvider>
-      </AuthProvider>
-    </HashRouter>
-  </UIProvider>
-);
+const App: React.FC = () => {
+  useEffect(() => {
+    const handleWheel = (event: WheelEvent) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement && active.type === 'number') {
+        event.preventDefault();
+        active.blur();
+      }
+    };
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    return () => document.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  return (
+    <UIProvider>
+      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AuthProvider>
+          <DataProvider>
+            <AppRoutes />
+          </DataProvider>
+        </AuthProvider>
+      </HashRouter>
+    </UIProvider>
+  );
+};
 
 export default App;

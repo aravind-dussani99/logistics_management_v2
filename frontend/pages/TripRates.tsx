@@ -60,53 +60,55 @@ const RateDialog: React.FC<RateDialogProps> = ({
   const ratePartyName = getRatePartyName(trip, tabKey) || '-';
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 text-sm text-gray-700 dark:text-gray-200">
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
-          <div className="font-semibold">#{trip.id}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
-          <div className="font-semibold">{formatDateDisplay(trip.date)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
-          <div className="font-semibold">{trip.invoiceDCNumber || '-'}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Rate Party</div>
-          <div className="font-semibold">{ratePartyName}</div>
-        </div>
-        {showMaterialColumn && (
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Material Type</div>
-            <div className="font-semibold">{trip.material || '-'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+            <div className="text-base font-semibold">#{trip.id}</div>
           </div>
-        )}
-        {showLocationColumns && (
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Pickup Location</div>
-            <div className="font-semibold">{trip.pickupPlace || '-'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+            <div className="text-base font-semibold">{formatDateDisplay(trip.date)}</div>
           </div>
-        )}
-        {showLocationColumns && (
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Drop-off Location</div>
-            <div className="font-semibold">{trip.dropOffPlace || '-'}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+            <div className="text-base font-semibold">{trip.invoiceDCNumber || '-'}</div>
           </div>
-        )}
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Net Quantity</div>
-          <div className="font-semibold">{netQty.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
-          <div className="font-semibold">{tripAmount.toFixed(2)}</div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Rate Party</div>
+            <div className="text-base font-semibold">{ratePartyName}</div>
+          </div>
+          {showMaterialColumn && (
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Material Type</div>
+              <div className="text-base font-semibold">{trip.material || '-'}</div>
+            </div>
+          )}
+          {showLocationColumns && (
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Pickup Location</div>
+              <div className="text-base font-semibold">{trip.pickupPlace || '-'}</div>
+            </div>
+          )}
+          {showLocationColumns && (
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Drop-off Location</div>
+              <div className="text-base font-semibold">{trip.dropOffPlace || '-'}</div>
+            </div>
+          )}
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Net Quantity</div>
+            <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
+            <div className="text-base font-semibold">{tripAmount.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Rate</label>
         {mode === 'edit' ? (
           <input
@@ -114,11 +116,11 @@ const RateDialog: React.FC<RateDialogProps> = ({
             inputMode="decimal"
             value={rateValue}
             onChange={event => setRateValue(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
             placeholder="Enter rate"
           />
         ) : (
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {Number.isFinite(numericRate) ? numericRate.toFixed(2) : '0.00'}
           </div>
         )}
@@ -324,7 +326,7 @@ const TripRateLedger: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={filterData}
-        showFilters={['singleDate']}
+        showFilters={['singleDate', 'vehicle', 'vendor', 'mine', 'material']}
         showAddAction={false}
       />
       <div className="space-y-6">
@@ -715,6 +717,7 @@ const TripRateLedger: React.FC = () => {
               await Promise.all(selectedTripsList.map(trip => applyRateForTrip(tab.key, trip, rateInputs[`${tab.key}-${trip.id}`])));
               setSelectedTrips(prev => ({ ...prev, [tab.key]: new Set() }));
               setBulkModeActive(active => ({ ...active, [tab.key]: false }));
+              setBulkRateInputs(prev => ({ ...prev, [tab.key]: '' }));
             } finally {
               setBulkApplying(false);
             }

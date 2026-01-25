@@ -92,8 +92,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         });
     }, [filters, hasDateFilters, onFilterChange]);
     
+    const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     const handleFilterChangeInternal = (key: keyof Filters, value: string) => {
-        if ((key === 'dateFrom' || key === 'dateTo') && value === '') {
+        if ((key === 'dateFrom' || key === 'dateTo') && (value === '' || !isCompleteDate(value))) {
             return;
         }
         if (hasSingleDate && key === 'dateFrom') {
@@ -147,13 +148,28 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         const names = transportOwners.map(item => item?.name || '');
         return Array.from(new Set(names)).filter(Boolean);
     }, [transportOwners]);
+    const uniqueVendors = useMemo(() => {
+        const names = customers.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [customers]);
+    const uniqueMines = useMemo(() => {
+        const names = mineQuarries.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [mineQuarries]);
+    const uniqueMaterials = useMemo(() => {
+        const names = materials.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [materials]);
 
     const moreFilterFields = useMemo<FilterField[] | undefined>(() => {
+        const visibleFields = new Set<FilterField>(showFilters as FilterField[]);
         if (showMoreFilters.length > 0) {
-            return Array.from(new Set<FilterField>([...showMoreFilters, ...DEFAULT_MORE_FILTERS]));
+            return Array.from(new Set<FilterField>([...showMoreFilters, ...DEFAULT_MORE_FILTERS]))
+                .filter(field => !visibleFields.has(field));
         }
         if (showFilters.length > 0) {
-            return Array.from(new Set<FilterField>([...showFilters as FilterField[], ...DEFAULT_MORE_FILTERS]));
+            return Array.from(new Set<FilterField>([...showFilters as FilterField[], ...DEFAULT_MORE_FILTERS]))
+                .filter(field => !visibleFields.has(field));
         }
         return undefined;
     }, [showFilters, showMoreFilters]);
@@ -161,13 +177,44 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     const filterComponents = {
         date: (
             <>
-                <FilterInput label="Date From"><input type="date" className={baseInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)} /></FilterInput>
-                <FilterInput label="Date To"><input type="date" className={baseInputClass} value={filters.dateTo || ''} onChange={e => handleFilterChangeInternal('dateTo', e.target.value)} /></FilterInput>
+                <FilterInput label="Date From">
+                    <input
+                        type="date"
+                        inputMode="none"
+                        onKeyDown={e => e.preventDefault()}
+                        onPaste={e => e.preventDefault()}
+                        onDrop={e => e.preventDefault()}
+                        className={baseInputClass}
+                        value={filters.dateFrom || ''}
+                        onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}
+                    />
+                </FilterInput>
+                <FilterInput label="Date To">
+                    <input
+                        type="date"
+                        inputMode="none"
+                        onKeyDown={e => e.preventDefault()}
+                        onPaste={e => e.preventDefault()}
+                        onDrop={e => e.preventDefault()}
+                        className={baseInputClass}
+                        value={filters.dateTo || ''}
+                        onChange={e => handleFilterChangeInternal('dateTo', e.target.value)}
+                    />
+                </FilterInput>
             </>
         ),
         singleDate: (
             <FilterInput label="Date">
-                <input type="date" className={baseInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)} />
+                <input
+                    type="date"
+                    inputMode="none"
+                    onKeyDown={e => e.preventDefault()}
+                    onPaste={e => e.preventDefault()}
+                    onDrop={e => e.preventDefault()}
+                    className={baseInputClass}
+                    value={filters.dateFrom || ''}
+                    onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}
+                />
             </FilterInput>
         ),
         transporter: (
@@ -186,6 +233,62 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 </select>
             </FilterInput>
         ),
+        vehicle: (
+            <FilterInput label="Vehicle">
+                <select className={baseInputClass} value={filters.vehicle || ''} onChange={e => handleFilterChangeInternal('vehicle', e.target.value)}>
+                    <option value="">All Vehicles</option>
+                    {safeFilterData.vehicles.map(v => <option key={v.id || v.vehicleNumber} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        customer: (
+            <FilterInput label="Customer">
+                <select className={baseInputClass} value={filters.customer || ''} onChange={e => handleFilterChangeInternal('customer', e.target.value)}>
+                    <option value="">All Customers</option>
+                    {uniqueVendors.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        vendor: (
+            <FilterInput label="Vendor & Customer">
+                <select className={baseInputClass} value={filters.vendor || ''} onChange={e => handleFilterChangeInternal('vendor', e.target.value)}>
+                    <option value="">All Vendors</option>
+                    {uniqueVendors.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        transportOwner: (
+            <FilterInput label="Transport & Owner">
+                <select className={baseInputClass} value={filters.transportOwner || ''} onChange={e => handleFilterChangeInternal('transportOwner', e.target.value)}>
+                    <option value="">All Transport Owners</option>
+                    {safeFilterData.transportOwners.map(owner => <option key={owner.id || owner.name} value={owner.name}>{owner.name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        mine: (
+            <FilterInput label="Mine & Quarry">
+                <select className={baseInputClass} value={filters.mine || ''} onChange={e => handleFilterChangeInternal('mine', e.target.value)}>
+                    <option value="">All Mines/Quarries</option>
+                    {uniqueMines.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        material: (
+            <FilterInput label="Material Type">
+                <select className={baseInputClass} value={filters.material || ''} onChange={e => handleFilterChangeInternal('material', e.target.value)}>
+                    <option value="">All Materials</option>
+                    {uniqueMaterials.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        royalty: (
+            <FilterInput label="Royalty Owner">
+                <select className={baseInputClass} value={filters.royalty || ''} onChange={e => handleFilterChangeInternal('royalty', e.target.value)}>
+                    <option value="">All Royalty</option>
+                    {safeFilterData.royaltyOwners.map(owner => <option key={owner.id || owner.name} value={owner.name}>{owner.name}</option>)}
+                </select>
+            </FilterInput>
+        ),
     };
 
 
@@ -201,6 +304,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     {showFilters.includes('singleDate') && filterComponents.singleDate}
                     {showFilters.includes('transporter') && filterComponents.transporter}
                     {showFilters.includes('quarry') && filterComponents.quarry}
+                    {showFilters.includes('vehicle') && filterComponents.vehicle}
+                    {showFilters.includes('customer') && filterComponents.customer}
+                    {showFilters.includes('vendor') && filterComponents.vendor}
+                    {showFilters.includes('transportOwner') && filterComponents.transportOwner}
+                    {showFilters.includes('mine') && filterComponents.mine}
+                    {showFilters.includes('material') && filterComponents.material}
+                    {showFilters.includes('royalty') && filterComponents.royalty}
                 </div>
                 <div className="flex items-center space-x-3 flex-shrink-0">
                     {(showFilters.length > 0 || showMoreFilters.length > 0) &&

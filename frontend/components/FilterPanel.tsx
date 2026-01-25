@@ -42,8 +42,9 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
     const uniqueMines = Array.from(new Set(mineQuarries.map(item => item.name))).filter(Boolean);
     const uniqueMaterials = Array.from(new Set(materials.map(item => item.name))).filter(Boolean);
 
+    const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     const handleFilterChange = (key: keyof Filters, value: string) => {
-        if ((key === 'dateFrom' || key === 'dateTo') && value === '') {
+        if ((key === 'dateFrom' || key === 'dateTo') && (value === '' || !isCompleteDate(value))) {
             return;
         }
         if (hasSingleDate && key === 'dateFrom') {
@@ -74,7 +75,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                 <div>
                     <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
                     <div className="relative">
-                        <input type="date" id="dateFrom" className={dateInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChange('dateFrom', e.target.value)} />
+                        <input
+                            type="date"
+                            id="dateFrom"
+                            readOnly
+                            inputMode="none"
+                            onKeyDown={e => e.preventDefault()}
+                            className={dateInputClass}
+                            value={filters.dateFrom || ''}
+                            onChange={e => handleFilterChange('dateFrom', e.target.value)}
+                        />
                         <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                             <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                         </div>
@@ -87,7 +97,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <div>
                         <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date From</label>
                         <div className="relative">
-                            <input type="date" id="dateFrom" className={dateInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChange('dateFrom', e.target.value)} />
+                            <input
+                                type="date"
+                                id="dateFrom"
+                                readOnly
+                                inputMode="none"
+                                onKeyDown={e => e.preventDefault()}
+                                className={dateInputClass}
+                                value={filters.dateFrom || ''}
+                                onChange={e => handleFilterChange('dateFrom', e.target.value)}
+                            />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                 <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                             </div>
@@ -96,7 +115,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                     <div>
                         <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date To</label>
                         <div className="relative">
-                            <input type="date" id="dateTo" className={dateInputClass} value={filters.dateTo || ''} onChange={e => handleFilterChange('dateTo', e.target.value)} />
+                            <input
+                                type="date"
+                                id="dateTo"
+                                readOnly
+                                inputMode="none"
+                                onKeyDown={e => e.preventDefault()}
+                                className={dateInputClass}
+                                value={filters.dateTo || ''}
+                                onChange={e => handleFilterChange('dateTo', e.target.value)}
+                            />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                 <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                             </div>

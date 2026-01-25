@@ -10,7 +10,23 @@ type PartySummary = {
   balance: number;
 };
 
-const PaymentReconciliation: React.FC = () => {
+type PaymentReconciliationProps = {
+  showHeader?: boolean;
+  initialMode?: 'party' | 'head';
+  hideModeToggle?: boolean;
+  hideDownload?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
+  showHeader = true,
+  initialMode = 'party',
+  hideModeToggle = false,
+  hideDownload = false,
+  dateFrom,
+  dateTo,
+}) => {
   const {
     trips,
     payments,
@@ -26,7 +42,7 @@ const PaymentReconciliation: React.FC = () => {
     loadRoyaltyOwnerProfiles,
     refreshKey,
   } = useData();
-  const [mode, setMode] = useState<'party' | 'head'>('party');
+  const [mode, setMode] = useState<'party' | 'head'>(initialMode);
   const [selectedParty, setSelectedParty] = useState('');
   const [selectedHeadAccount, setSelectedHeadAccount] = useState('');
 
@@ -47,7 +63,35 @@ const PaymentReconciliation: React.FC = () => {
     refreshKey,
   ]);
 
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  const filteredTrips = useMemo(() => {
+    if (!dateFrom && !dateTo) return trips;
+    const fromDate = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+    return trips.filter(trip => {
+      const tripDate = trip.date ? new Date(trip.date) : null;
+      if (fromDate && tripDate && tripDate < fromDate) return false;
+      if (toDate && tripDate && tripDate > toDate) return false;
+      return true;
+    });
+  }, [trips, dateFrom, dateTo]);
+
+  const filteredPayments = useMemo(() => {
+    if (!dateFrom && !dateTo) return payments;
+    const fromDate = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+    return payments.filter(payment => {
+      const paymentDate = payment.date ? new Date(payment.date) : null;
+      if (fromDate && paymentDate && paymentDate < fromDate) return false;
+      if (toDate && paymentDate && paymentDate > toDate) return false;
+      return true;
+    });
+  }, [payments, dateFrom, dateTo]);
 
   const ratePartyNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -60,13 +104,13 @@ const PaymentReconciliation: React.FC = () => {
 
   const accountOptions = useMemo(() => {
     const values = new Set<string>();
-    payments.forEach(item => {
+    filteredPayments.forEach(item => {
       if (item.fromAccount) values.add(item.fromAccount);
       if (item.toAccount) values.add(item.toAccount);
       if (item.headAccount) values.add(item.headAccount);
     });
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [payments]);
+  }, [filteredPayments]);
 
   const partyOptions = useMemo(() => {
     const values = new Set<string>();
@@ -74,7 +118,7 @@ const PaymentReconciliation: React.FC = () => {
     mineQuarries.forEach(item => values.add(item.name));
     transportOwnerProfiles.forEach(item => values.add(item.name));
     royaltyOwnerProfiles.forEach(item => values.add(item.name));
-    payments.forEach(item => {
+    filteredPayments.forEach(item => {
       if (item.ratePartyName) values.add(item.ratePartyName);
       if (!item.ratePartyName && item.fromAccount) values.add(item.fromAccount);
       if (!item.ratePartyName && item.toAccount) values.add(item.toAccount);
@@ -85,20 +129,20 @@ const PaymentReconciliation: React.FC = () => {
     });
     accountOptions.forEach(option => values.add(option));
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, payments, ratePartyNameById, accountOptions]);
+  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, filteredPayments, ratePartyNameById, accountOptions]);
 
   const headAccountOptions = useMemo(() => {
     const values = new Set<string>();
-    payments.forEach(item => {
+    filteredPayments.forEach(item => {
       if (item.headAccount) values.add(item.headAccount);
     });
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [payments]);
+  }, [filteredPayments]);
 
   const selectedPartyKey = normalizeName(selectedParty);
   const internalAccountKeys = useMemo(() => {
     const values = new Set<string>();
-    payments.forEach(payment => {
+    filteredPayments.forEach(payment => {
       if (payment.toAccount) values.add(normalizeName(payment.toAccount));
       if (payment.headAccount) values.add(normalizeName(payment.headAccount));
       if (payment.type === 'RECEIPT' && payment.fromAccount && !payment.toAccount && payment.ratePartyName) {
@@ -106,7 +150,7 @@ const PaymentReconciliation: React.FC = () => {
       }
     });
     return values;
-  }, [payments]);
+  }, [filteredPayments]);
   const isAccountSelection = selectedPartyKey ? internalAccountKeys.has(selectedPartyKey) : false;
 
   const selectedPartyTypes = useMemo(() => {
@@ -125,7 +169,7 @@ const PaymentReconciliation: React.FC = () => {
       if (normalizeName(item.name) === selectedPartyKey) types.add('royalty-owner');
     });
     if (!types.has('vendor-customer')) {
-      const matchesTripCustomer = trips.some(trip => {
+      const matchesTripCustomer = filteredTrips.some(trip => {
         const actualName = trip.actualVendorCustomerName || '';
         if (actualName && normalizeName(actualName) === selectedPartyKey) return true;
         if (trip.customer && normalizeName(trip.customer) === selectedPartyKey) return true;
@@ -135,11 +179,11 @@ const PaymentReconciliation: React.FC = () => {
       if (matchesTripCustomer) types.add('vendor-customer');
     }
     return types;
-  }, [selectedPartyKey, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, trips]);
+  }, [selectedPartyKey, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, filteredTrips]);
 
   const partyTripRows = useMemo(() => {
     if (!selectedPartyKey) return [];
-    return trips
+    return filteredTrips
       .map(trip => {
         const revenue = Number(trip.revenue || 0);
         const materialCost = Number(trip.materialCost || 0);
@@ -198,7 +242,7 @@ const PaymentReconciliation: React.FC = () => {
         totalValue: number;
         amount: number;
       }>;
-  }, [trips, selectedPartyKey]);
+  }, [filteredTrips, selectedPartyKey]);
 
   const showCustomerColumns = selectedPartyTypes.has('vendor-customer');
   const showMineColumns = selectedPartyTypes.has('mine-quarry');
@@ -212,7 +256,7 @@ const PaymentReconciliation: React.FC = () => {
 
   const partyPaymentRows = useMemo(() => {
     if (!selectedPartyKey) return [];
-    return payments.filter(payment => {
+    return filteredPayments.filter(payment => {
       const name = payment.ratePartyName
         || (payment.ratePartyType && payment.ratePartyId
           ? ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || ''
@@ -222,19 +266,19 @@ const PaymentReconciliation: React.FC = () => {
       if (!name && normalizeName(payment.toAccount || '') === selectedPartyKey) return true;
       return false;
     });
-  }, [payments, ratePartyNameById, selectedPartyKey]);
+  }, [filteredPayments, ratePartyNameById, selectedPartyKey]);
 
   const nonTripTransactionRows = useMemo(() => {
     if (!selectedPartyKey) return [];
-    return payments.filter(payment => {
+    return filteredPayments.filter(payment => {
       if (normalizeName(payment.ratePartyName || '') === selectedPartyKey) return true;
       if (normalizeName(payment.fromAccount || '') === selectedPartyKey) return true;
       if (normalizeName(payment.toAccount || '') === selectedPartyKey) return true;
       return false;
     });
-  }, [payments, selectedPartyKey]);
+  }, [filteredPayments, selectedPartyKey]);
 
-  const resolveAccountMatch = (payment: (typeof payments)[number], key: string) => {
+  const resolveAccountMatch = (payment: (typeof filteredPayments)[number], key: string) => {
     const fromMatch = normalizeName(payment.fromAccount || '') === key;
     const toMatch = normalizeName(payment.toAccount || '') === key;
     if (fromMatch || toMatch) {
@@ -250,7 +294,7 @@ const PaymentReconciliation: React.FC = () => {
     return null;
   };
 
-  const getCounterpartyDelta = useCallback((payment: (typeof payments)[number], key: string) => {
+  const getCounterpartyDelta = useCallback((payment: (typeof filteredPayments)[number], key: string) => {
     const amount = Number(payment.amount || 0);
     const fromMatch = normalizeName(payment.fromAccount || '') === key;
     const toMatch = normalizeName(payment.toAccount || '') === key;
@@ -268,8 +312,8 @@ const PaymentReconciliation: React.FC = () => {
 
   const accountStatementRows = useMemo(() => {
     if (!selectedPartyKey || !isAccountSelection) return [];
-    return payments.filter(payment => resolveAccountMatch(payment, selectedPartyKey));
-  }, [payments, selectedPartyKey, isAccountSelection]);
+    return filteredPayments.filter(payment => resolveAccountMatch(payment, selectedPartyKey));
+  }, [filteredPayments, selectedPartyKey, isAccountSelection]);
 
   const partySummary: PartySummary = useMemo(() => {
     const tripTotal = partyTripRows.reduce((sum, row) => sum + row.amount, 0);
@@ -345,8 +389,8 @@ const PaymentReconciliation: React.FC = () => {
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
     const key = normalizeName(selectedHeadAccount);
-    return payments.filter(payment => normalizeName(payment.headAccount || '') === key);
-  }, [payments, selectedHeadAccount]);
+    return filteredPayments.filter(payment => normalizeName(payment.headAccount || '') === key);
+  }, [filteredPayments, selectedHeadAccount]);
 
   const headBalance = useMemo(() => {
     if (!selectedHeadAccount) return 0;
@@ -417,57 +461,63 @@ const PaymentReconciliation: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Payment Reconciliation"
-        subtitle="Cross-check trip charges, payments, and balances for a rate party or account."
-        filters={{}}
-        onFilterChange={() => undefined}
-        filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
-        showFilters={[]}
-        showAddAction={false}
-      />
+      {showHeader && (
+        <PageHeader
+          title="Payment Reconciliation"
+          subtitle="Cross-check trip charges, payments, and balances for a rate party or account."
+          filters={{}}
+          onFilterChange={() => undefined}
+          filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
+          showFilters={[]}
+          showAddAction={false}
+        />
+      )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setMode('party')}
-            className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'party' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
-          >
-            Counterparty
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('head')}
-            className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'head' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
-          >
-            Head Account
-          </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-            >
-              Download PDF
-            </button>
-          </div>
+          {!hideModeToggle && (
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setMode('party')}
+                className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'party' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
+              >
+                Name
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('head')}
+                className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'head' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
+              >
+                Head Account
+              </button>
+            </div>
+          )}
+          {!hideDownload && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="rounded-md border border-gray-300 px-3 py-1 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Download PDF
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
           {mode === 'party' ? (
             <div className="space-y-4">
               <div className="max-w-md">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty / Account</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Name / Account</label>
                 <input
                   type="text"
                   value={selectedParty}
                   onChange={(event) => setSelectedParty(event.target.value)}
                   list="recon-party-list"
                   className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800"
-                  placeholder="Select or type a counterparty or account"
+                  placeholder="Select or type a name or account"
                 />
                 <datalist id="recon-party-list">
                   {partyOptions.map(option => (
@@ -700,7 +750,7 @@ const PaymentReconciliation: React.FC = () => {
                   <th className="px-4 py-3 text-left">From</th>
                   <th className="px-4 py-3 text-left">To</th>
                   <th className="px-4 py-3 text-left">Amount</th>
-                  <th className="px-4 py-3 text-left">Counterparty</th>
+                  <th className="px-4 py-3 text-left">Name</th>
                 </tr>
               </thead>
               <tbody>

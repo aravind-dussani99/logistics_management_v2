@@ -23,6 +23,12 @@ const InputField: React.FC<
   const inputId = props.id || props.name || toId(label);
   const inputName = props.name || inputId;
   const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+  const handleWheel: React.WheelEventHandler<HTMLInputElement> = event => {
+    if (props.type === 'number') {
+      event.currentTarget.blur();
+    }
+    props.onWheel?.(event);
+  };
   return (
     <div className="col-span-1">
       <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -60,6 +66,7 @@ const InputField: React.FC<
           id={inputId}
           name={inputName}
           value={inputValue}
+          onWheel={handleWheel}
           className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
         />
       )}
@@ -76,6 +83,8 @@ interface DailyExpenseFormProps {
   openingBalance: number;
   isViewMode?: boolean;
   defaultSiteExpense?: boolean;
+  cancelLabel?: string;
+  submitLabel?: string;
 }
 
 const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
@@ -87,6 +96,8 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   openingBalance,
   isViewMode = false,
   defaultSiteExpense,
+  cancelLabel = 'Cancel',
+  submitLabel = 'Save Transaction',
 }) => {
   const { currentUser } = useAuth();
   const {
@@ -133,7 +144,8 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
     }
   }, [formData.ratePartyType, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles]);
 
-  const allDestinations = useMemo(() => Array.from(new Set(expenses.map(e => e.to))), [expenses]);
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const allDestinations = useMemo(() => Array.from(new Set(safeExpenses.map(e => e.to))), [safeExpenses]);
 
   useEffect(() => {
     if (currentUser?.name && formData.from !== currentUser.name) {
@@ -309,14 +321,14 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
           onClick={onClose}
           className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
         >
-          {isViewMode ? 'Close' : 'Cancel'}
+          {isViewMode ? 'Close' : cancelLabel}
         </button>
         {!isViewMode && (
           <button
             type="submit"
             className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none"
           >
-            Save Transaction
+            {submitLabel}
           </button>
         )}
       </div>

@@ -35,46 +35,48 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
   const tripAmount = netQty * (Number.isFinite(numericRate) ? numericRate : 0);
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 text-sm text-gray-700 dark:text-gray-200">
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
-          <div className="font-semibold">#{trip.id}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
-          <div className="font-semibold">{formatDateDisplay(trip.date)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
-          <div className="font-semibold">{trip.invoiceDCNumber || '-'}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Net Quantity</div>
-          <div className="font-semibold">{netQty.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
-          <div className="font-semibold">{tripAmount.toFixed(2)}</div>
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+            <div className="text-base font-semibold">#{trip.id}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+            <div className="text-base font-semibold">{formatDateDisplay(trip.date)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+            <div className="text-base font-semibold">{trip.invoiceDCNumber || '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Net Quantity</div>
+            <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
+            <div className="text-base font-semibold">{tripAmount.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Actual Vendor & Customer Name</label>
         {mode === 'edit' ? (
           <input
             type="text"
             value={nameValue}
             onChange={event => setNameValue(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
             placeholder="Enter actual vendor/customer"
           />
         ) : (
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{nameValue || '-'}</div>
+          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">{nameValue || '-'}</div>
         )}
       </div>
 
-      <div className="space-y-2">
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Vendor & Customer Rate</label>
         {mode === 'edit' ? (
           <input
@@ -82,11 +84,11 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
             inputMode="decimal"
             value={rateValue}
             onChange={event => setRateValue(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
             placeholder="Enter rate"
           />
         ) : (
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {Number.isFinite(numericRate) ? numericRate.toFixed(2) : '0.00'}
           </div>
         )}
@@ -150,6 +152,10 @@ const Bills: React.FC = () => {
     return displayTrips.filter(trip => {
       const tripDate = (trip.date || '').split('T')[0];
       if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
+      if (filters.vendor) {
+        const customerName = trip.actualVendorCustomerName || trip.customer || '';
+        if (customerName !== filters.vendor) return false;
+      }
       return true;
     });
   }, [displayTrips, filters]);
@@ -267,6 +273,9 @@ const Bills: React.FC = () => {
         const { name, rate } = getBillInput(trip);
         await applyBillForTrip(trip, name, rate);
       }
+      setBulkNameInput('');
+      setBulkRateInput('');
+      setSelectedTrips(new Set());
     } finally {
       setBulkApplying(false);
     }
@@ -275,7 +284,7 @@ const Bills: React.FC = () => {
   return (
     <div>
       <PageHeader
-        title="Bills"
+        title="Bills / Invoices"
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={{
@@ -285,7 +294,7 @@ const Bills: React.FC = () => {
           quarries: [],
           royaltyOwners: [],
         }}
-        showFilters={['singleDate']}
+        showFilters={['singleDate', 'vendor', 'material']}
         showAddAction={false}
       />
 
@@ -293,7 +302,7 @@ const Bills: React.FC = () => {
         <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
             <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Trips Awaiting Bills
+              Trips Awaiting Bills / Invoices
               <span className={`ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${awaitingTotal > 0 ? 'bg-primary text-white animate-pulse' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}>
                 {awaitingTotal}
               </span>
@@ -304,6 +313,7 @@ const Bills: React.FC = () => {
                 value={bulkNameInput}
                 onChange={event => setBulkNameInput(event.target.value)}
                 placeholder="Bulk customer"
+                list="bill-vendor-options"
                 className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
               />
               <input
@@ -454,7 +464,7 @@ const Bills: React.FC = () => {
 
         <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bills Applied</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Bills / Invoices Applied</div>
             <div className="flex items-center gap-3">
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Showing {appliedStart}–{appliedEnd} of {appliedTotal}
