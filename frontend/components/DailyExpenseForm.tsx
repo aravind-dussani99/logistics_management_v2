@@ -92,7 +92,7 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   onClose,
   onSubmitSuccess,
   initialData,
-  expenses,
+  expenses = [],
   openingBalance,
   isViewMode = false,
   defaultSiteExpense,
@@ -129,20 +129,25 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   );
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
+  const safeMineQuarries = Array.isArray(mineQuarries) ? mineQuarries : [];
+  const safeVendorCustomers = Array.isArray(vendorCustomers) ? vendorCustomers : [];
+  const safeRoyaltyOwnerProfiles = Array.isArray(royaltyOwnerProfiles) ? royaltyOwnerProfiles : [];
+  const safeTransportOwnerProfiles = Array.isArray(transportOwnerProfiles) ? transportOwnerProfiles : [];
+
   const ratePartyOptions = useMemo(() => {
     switch (formData.ratePartyType) {
       case 'mine-quarry':
-        return mineQuarries.map(item => ({ id: item.id, name: item.name }));
+        return safeMineQuarries.map(item => ({ id: item.id, name: item.name }));
       case 'vendor-customer':
-        return vendorCustomers.map(item => ({ id: item.id, name: item.name }));
+        return safeVendorCustomers.map(item => ({ id: item.id, name: item.name }));
       case 'royalty-owner':
-        return royaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+        return safeRoyaltyOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
       case 'transport-owner':
-        return transportOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
+        return safeTransportOwnerProfiles.map(item => ({ id: item.id, name: item.name }));
       default:
         return [];
     }
-  }, [formData.ratePartyType, mineQuarries, vendorCustomers, royaltyOwnerProfiles, transportOwnerProfiles]);
+  }, [formData.ratePartyType, safeMineQuarries, safeVendorCustomers, safeRoyaltyOwnerProfiles, safeTransportOwnerProfiles]);
 
   const safeExpenses = Array.isArray(expenses) ? expenses : [];
   const allDestinations = useMemo(() => Array.from(new Set(safeExpenses.map(e => e.to))), [safeExpenses]);
@@ -211,7 +216,7 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   const getAvailableBalance = () => {
     if (initialData) return initialData.availableBalance;
 
-    const sorted = [...expenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const sorted = [...safeExpenses].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const lastExpense = sorted[sorted.length - 1];
     return lastExpense ? lastExpense.closingBalance : openingBalance;
   };

@@ -35,9 +35,9 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
   const tripAmount = netQty * (Number.isFinite(numericRate) ? numericRate : 0);
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="space-y-6 max-w-3xl w-full mx-auto">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-6 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
           <div>
             <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
             <div className="text-base font-semibold">#{trip.id}</div>
@@ -61,7 +61,7 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Actual Vendor & Customer Name</label>
         {mode === 'edit' ? (
           <input
@@ -76,7 +76,7 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
         )}
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Vendor & Customer Rate</label>
         {mode === 'edit' ? (
           <input
@@ -94,7 +94,7 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
         )}
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-3">
         <button
           type="button"
           onClick={onClose}
@@ -120,8 +120,10 @@ const Bills: React.FC = () => {
   const {
     trips,
     vendorCustomers,
+    vehicleMasters,
     loadTrips,
     loadVendorCustomers,
+    loadVehicleMasters,
     refreshKey,
   } = useData();
   const { openModal, closeModal, alert } = useUI();
@@ -137,7 +139,8 @@ const Bills: React.FC = () => {
   useEffect(() => {
     loadTrips();
     loadVendorCustomers();
-  }, [loadTrips, loadVendorCustomers, refreshKey]);
+    loadVehicleMasters();
+  }, [loadTrips, loadVendorCustomers, loadVehicleMasters, refreshKey]);
 
   const handleFilterChange = (nextFilters: Filters) => {
     setFilters(nextFilters);
@@ -220,6 +223,12 @@ const Bills: React.FC = () => {
       vendorCustomerRatePerTon: rateNumber,
     });
     setOptimisticTripUpdates(prev => ({ ...prev, [trip.id]: updatedTrip }));
+    setBillInputs(prev => {
+      if (!prev[trip.id]) return prev;
+      const next = { ...prev };
+      delete next[trip.id];
+      return next;
+    });
     setSelectedTrips(prev => {
       const next = new Set(prev);
       next.delete(trip.id);
@@ -288,13 +297,13 @@ const Bills: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={{
-          vehicles: [],
+          vehicles: vehicleMasters,
           transportOwners: [],
           customers: vendorCustomers.map(item => ({ id: item.id, name: item.name })),
           quarries: [],
           royaltyOwners: [],
         }}
-        showFilters={['singleDate', 'vendor', 'material']}
+        showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
         showAddAction={false}
       />
 

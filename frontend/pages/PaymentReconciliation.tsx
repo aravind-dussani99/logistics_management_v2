@@ -15,6 +15,7 @@ type PaymentReconciliationProps = {
   initialMode?: 'party' | 'head';
   hideModeToggle?: boolean;
   hideDownload?: boolean;
+  hidePrint?: boolean;
   dateFrom?: string;
   dateTo?: string;
 };
@@ -24,6 +25,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
   initialMode = 'party',
   hideModeToggle = false,
   hideDownload = false,
+  hidePrint = false,
   dateFrom,
   dateTo,
 }) => {
@@ -45,6 +47,8 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
   const [mode, setMode] = useState<'party' | 'head'>(initialMode);
   const [selectedParty, setSelectedParty] = useState('');
   const [selectedHeadAccount, setSelectedHeadAccount] = useState('');
+  const safeTrips = Array.isArray(trips) ? trips : [];
+  const safePayments = Array.isArray(payments) ? payments : [];
 
   useEffect(() => {
     loadTrips();
@@ -69,29 +73,61 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 
+  function resolveAccountMatch(payment: (typeof payments)[number], key: string) {
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    if (fromMatch || toMatch) {
+      return { fromMatch, toMatch, viaCounterparty: false };
+    }
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (counterpartyMatch && !payment.toAccount && payment.type === 'RECEIPT') {
+      return { fromMatch: false, toMatch: true, viaCounterparty: true };
+    }
+    if (counterpartyMatch && !payment.fromAccount && payment.type === 'PAYMENT') {
+      return { fromMatch: true, toMatch: false, viaCounterparty: true };
+    }
+    return null;
+  }
+
+  function getCounterpartyDelta(payment: (typeof payments)[number], key: string) {
+    const amount = Number(payment.amount || 0);
+    const fromMatch = normalizeName(payment.fromAccount || '') === key;
+    const toMatch = normalizeName(payment.toAccount || '') === key;
+    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
+    if (payment.type === 'RECEIPT') {
+      if (fromMatch || (counterpartyMatch && !payment.fromAccount)) return amount;
+      return 0;
+    }
+    if (payment.type === 'PAYMENT') {
+      if (counterpartyMatch || toMatch) return -amount;
+      return 0;
+    }
+    return 0;
+  }
+
   const filteredTrips = useMemo(() => {
-    if (!dateFrom && !dateTo) return trips;
+    if (!dateFrom && !dateTo) return safeTrips;
     const fromDate = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
     const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
-    return trips.filter(trip => {
+    return safeTrips.filter(trip => {
       const tripDate = trip.date ? new Date(trip.date) : null;
       if (fromDate && tripDate && tripDate < fromDate) return false;
       if (toDate && tripDate && tripDate > toDate) return false;
       return true;
     });
-  }, [trips, dateFrom, dateTo]);
+  }, [safeTrips, dateFrom, dateTo]);
 
   const filteredPayments = useMemo(() => {
-    if (!dateFrom && !dateTo) return payments;
+    if (!dateFrom && !dateTo) return safePayments;
     const fromDate = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
     const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
-    return payments.filter(payment => {
+    return safePayments.filter(payment => {
       const paymentDate = payment.date ? new Date(payment.date) : null;
       if (fromDate && paymentDate && paymentDate < fromDate) return false;
       if (toDate && paymentDate && paymentDate > toDate) return false;
       return true;
     });
-  }, [payments, dateFrom, dateTo]);
+  }, [safePayments, dateFrom, dateTo]);
 
   const ratePartyNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -278,65 +314,66 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
     });
   }, [filteredPayments, selectedPartyKey]);
 
-  const resolveAccountMatch = (payment: (typeof filteredPayments)[number], key: string) => {
-    const fromMatch = normalizeName(payment.fromAccount || '') === key;
-    const toMatch = normalizeName(payment.toAccount || '') === key;
-    if (fromMatch || toMatch) {
-      return { fromMatch, toMatch, viaCounterparty: false };
-    }
-    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
-    if (counterpartyMatch && !payment.toAccount && payment.type === 'RECEIPT') {
-      return { fromMatch: false, toMatch: true, viaCounterparty: true };
-    }
-    if (counterpartyMatch && !payment.fromAccount && payment.type === 'PAYMENT') {
-      return { fromMatch: true, toMatch: false, viaCounterparty: true };
-    }
-    return null;
-  };
-
-  const getCounterpartyDelta = useCallback((payment: (typeof filteredPayments)[number], key: string) => {
-    const amount = Number(payment.amount || 0);
-    const fromMatch = normalizeName(payment.fromAccount || '') === key;
-    const toMatch = normalizeName(payment.toAccount || '') === key;
-    const counterpartyMatch = normalizeName(payment.ratePartyName || '') === key;
-    if (payment.type === 'RECEIPT') {
-      if (fromMatch || (counterpartyMatch && !payment.fromAccount)) return amount;
-      return 0;
-    }
-    if (payment.type === 'PAYMENT') {
-      if (counterpartyMatch || toMatch) return -amount;
-      return 0;
-    }
-    return 0;
-  }, [normalizeName]);
-
   const accountStatementRows = useMemo(() => {
     if (!selectedPartyKey || !isAccountSelection) return [];
     return filteredPayments.filter(payment => resolveAccountMatch(payment, selectedPartyKey));
   }, [filteredPayments, selectedPartyKey, isAccountSelection]);
 
+  const ratePartyTypeByName = useMemo(() => {
+    const map = new Map<string, RatePartyType>();
+    vendorCustomers.forEach(item => map.set(normalizeName(item.name), 'vendor-customer'));
+    mineQuarries.forEach(item => map.set(normalizeName(item.name), 'mine-quarry'));
+    transportOwnerProfiles.forEach(item => map.set(normalizeName(item.name), 'transport-owner'));
+    royaltyOwnerProfiles.forEach(item => map.set(normalizeName(item.name), 'royalty-owner'));
+    return map;
+  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
+
+  const resolvePaymentPartyType = useCallback((payment: (typeof payments)[number]) => {
+    if (payment.ratePartyType) return payment.ratePartyType as RatePartyType;
+    const name = payment.ratePartyName
+      || (payment.ratePartyType && payment.ratePartyId
+        ? ratePartyNameById.get(`${payment.ratePartyType}:${payment.ratePartyId}`) || ''
+        : '');
+    if (name) {
+      const inferred = ratePartyTypeByName.get(normalizeName(name));
+      if (inferred) return inferred;
+    }
+    if (selectedPartyTypes.size === 1) {
+      return Array.from(selectedPartyTypes)[0];
+    }
+    if (payment.type === 'RECEIPT' && selectedPartyTypes.has('vendor-customer')) {
+      return 'vendor-customer';
+    }
+    if (payment.type === 'PAYMENT') {
+      if (selectedPartyTypes.has('mine-quarry')) return 'mine-quarry';
+      if (selectedPartyTypes.has('transport-owner')) return 'transport-owner';
+      if (selectedPartyTypes.has('royalty-owner')) return 'royalty-owner';
+    }
+    if (selectedPartyTypes.has('vendor-customer')) return 'vendor-customer';
+    if (selectedPartyTypes.has('mine-quarry')) return 'mine-quarry';
+    if (selectedPartyTypes.has('transport-owner')) return 'transport-owner';
+    if (selectedPartyTypes.has('royalty-owner')) return 'royalty-owner';
+    return null;
+  }, [ratePartyNameById, ratePartyTypeByName, selectedPartyTypes]);
+
   const partySummary: PartySummary = useMemo(() => {
     const tripTotal = partyTripRows.reduce((sum, row) => sum + row.amount, 0);
     const paymentTotal = partyPaymentRows.reduce((sum, row) => {
-      const amountValue = Number(row.amount || 0);
-      if (selectedPartyTypes.has('vendor-customer')) {
-        return sum + (row.type === 'RECEIPT' ? amountValue : -amountValue);
-      }
-      if (selectedPartyTypes.size > 0) {
-        return sum + (row.type === 'PAYMENT' ? amountValue : -amountValue);
-      }
-      const matchesFrom = normalizeName(row.fromAccount || '') === selectedPartyKey;
-      const matchesTo = normalizeName(row.toAccount || '') === selectedPartyKey;
-      if (matchesFrom && row.type === 'RECEIPT') return sum - amountValue;
-      if (matchesTo && row.type === 'PAYMENT') return sum + amountValue;
-      return sum;
+      const amount = Number(row.amount || 0);
+      const partyType = resolvePaymentPartyType(row);
+      if (!partyType) return sum;
+      const isCustomer = partyType === 'vendor-customer';
+      const signed = row.type === 'RECEIPT'
+        ? (isCustomer ? amount : -amount)
+        : (isCustomer ? -amount : amount);
+      return sum + signed;
     }, 0);
     return {
       tripTotal,
       paymentTotal,
       balance: tripTotal - paymentTotal,
     };
-  }, [partyTripRows, partyPaymentRows, selectedPartyKey, selectedPartyTypes]);
+  }, [partyTripRows, partyPaymentRows, resolvePaymentPartyType]);
 
   const partyHasTrips = partyTripRows.length > 0;
   const partyPaymentTotals = useMemo(() => {
@@ -482,7 +519,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                 onClick={() => setMode('party')}
                 className={`rounded-md px-4 py-2 text-sm font-semibold ${mode === 'party' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
               >
-                Name
+                Name / Account
               </button>
               <button
                 type="button"
@@ -578,80 +615,6 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
 
       {mode === 'party' && selectedParty && (
         <div className="space-y-6">
-          {partyHasTrips && (
-            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
-              <span>Trips</span>
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={handleExportTrips}
-                  className="rounded-md border border-primary px-3 py-1 text-primary transition hover:bg-primary hover:text-white"
-                >
-                  Export Trips CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-                >
-                  Print
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Trip #</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-left">Invoice/DC</th>
-                    {showMineColumns && <th className="px-4 py-3 text-left">Material</th>}
-                    {showTransportColumns && <th className="px-4 py-3 text-left">Pickup</th>}
-                    {showTransportColumns && <th className="px-4 py-3 text-left">Drop-off</th>}
-                    <th className="px-4 py-3 text-left">Net Qty</th>
-                    {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Rate/Ton</th>}
-                    {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Amount</th>}
-                    {showMineColumns && <th className="px-4 py-3 text-left">Mine Rate/Ton</th>}
-                    {showMineColumns && <th className="px-4 py-3 text-left">Mine Amount</th>}
-                    {showTransportColumns && <th className="px-4 py-3 text-left">Transport Rate/Ton</th>}
-                    {showTransportColumns && <th className="px-4 py-3 text-left">Transport Amount</th>}
-                    {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Rate/Ton</th>}
-                    {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Amount</th>}
-                    <th className="px-4 py-3 text-left">Total Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {partyTripRows.map(row => (
-                    <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
-                      <td className="px-4 py-3">#{row.id}</td>
-                      <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
-                      <td className="px-4 py-3">{row.invoice || '-'}</td>
-                      {showMineColumns && <td className="px-4 py-3">{row.material || '-'}</td>}
-                      {showTransportColumns && <td className="px-4 py-3">{row.pickupPlace || '-'}</td>}
-                      {showTransportColumns && <td className="px-4 py-3">{row.dropOffPlace || '-'}</td>}
-                      <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
-                      {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.customerRate)}</td>}
-                      {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.revenue)}</td>}
-                      {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.mineRate)}</td>}
-                      {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.materialCost)}</td>}
-                      {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportRate)}</td>}
-                      {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportCost)}</td>}
-                      {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyRate)}</td>}
-                      {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyCost)}</td>}
-                    <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
-                    </tr>
-                  ))}
-                  {partyTripRows.length === 0 && (
-                    <tr>
-                      <td colSpan={tripColCount} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          )}
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
               <span>{partyHasTrips ? 'Payments' : 'Transactions'}</span>
@@ -663,13 +626,15 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                 >
                   Export Payments CSV
                 </button>
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-                >
-                  Print
-                </button>
+                {!hidePrint && (
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Print
+                  </button>
+                )}
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -733,6 +698,82 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
               </table>
             </div>
           </div>
+          {partyHasTrips && (
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+              <span>Trips</span>
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={handleExportTrips}
+                  className="rounded-md border border-primary px-3 py-1 text-primary transition hover:bg-primary hover:text-white"
+                >
+                  Export Trips CSV
+                </button>
+                {!hidePrint && (
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    Print
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Trip #</th>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-left">Invoice/DC</th>
+                    {showMineColumns && <th className="px-4 py-3 text-left">Material</th>}
+                    {showTransportColumns && <th className="px-4 py-3 text-left">Pickup</th>}
+                    {showTransportColumns && <th className="px-4 py-3 text-left">Drop-off</th>}
+                    <th className="px-4 py-3 text-left">Net Qty</th>
+                    {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Rate/Ton</th>}
+                    {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Amount</th>}
+                    {showMineColumns && <th className="px-4 py-3 text-left">Mine Rate/Ton</th>}
+                    {showMineColumns && <th className="px-4 py-3 text-left">Mine Amount</th>}
+                    {showTransportColumns && <th className="px-4 py-3 text-left">Transport Rate/Ton</th>}
+                    {showTransportColumns && <th className="px-4 py-3 text-left">Transport Amount</th>}
+                    {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Rate/Ton</th>}
+                    {showRoyaltyColumns && <th className="px-4 py-3 text-left">Royalty Amount</th>}
+                    <th className="px-4 py-3 text-left">Total Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {partyTripRows.map(row => (
+                    <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="px-4 py-3">#{row.id}</td>
+                      <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
+                      <td className="px-4 py-3">{row.invoice || '-'}</td>
+                      {showMineColumns && <td className="px-4 py-3">{row.material || '-'}</td>}
+                      {showTransportColumns && <td className="px-4 py-3">{row.pickupPlace || '-'}</td>}
+                      {showTransportColumns && <td className="px-4 py-3">{row.dropOffPlace || '-'}</td>}
+                      <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
+                      {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.customerRate)}</td>}
+                      {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.revenue)}</td>}
+                      {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.mineRate)}</td>}
+                      {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.materialCost)}</td>}
+                      {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportRate)}</td>}
+                      {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportCost)}</td>}
+                      {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyRate)}</td>}
+                      {showRoyaltyColumns && <td className="px-4 py-3">{formatCurrency(row.royaltyCost)}</td>}
+                    <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
+                    </tr>
+                  ))}
+                  {partyTripRows.length === 0 && (
+                    <tr>
+                      <td colSpan={tripColCount} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          )}
         </div>
       )}
 

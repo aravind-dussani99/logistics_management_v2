@@ -275,6 +275,41 @@ const AccountLedgerOverview: React.FC = () => {
     popup.print();
   };
 
+  const exportCurrentTabPdf = () => {
+    if (activeTab === 'abstract') {
+      exportPdf();
+      return;
+    }
+    const tabId = activeTab === 'party' ? 'ledger-tab-party' : 'ledger-tab-head';
+    const content = document.getElementById(tabId);
+    if (!content) return;
+    const html = `
+      <html>
+        <head>
+          <title>Logistics Accounts Reports</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; text-align: left; }
+            th { background: #f2f2f2; }
+            h3 { margin-top: 24px; }
+            button { display: none !important; }
+          </style>
+        </head>
+        <body>
+          <h2>Logistics Accounts Reports</h2>
+          ${content.innerHTML}
+        </body>
+      </html>
+    `;
+    const popup = window.open('', '_blank', 'width=1000,height=700');
+    if (!popup) return;
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  };
+
   return (
     <div>
       <PageHeader
@@ -285,7 +320,7 @@ const AccountLedgerOverview: React.FC = () => {
         filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={['date']}
         pageAction={{ label: 'Export CSV', action: exportCsv }}
-        secondaryAction={{ label: 'Export PDF', action: exportPdf }}
+        secondaryAction={{ label: 'Export PDF', action: exportCurrentTabPdf }}
       />
       <main className="pt-6 space-y-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-3">
@@ -301,7 +336,7 @@ const AccountLedgerOverview: React.FC = () => {
             onClick={() => setActiveTab('party')}
             className={`rounded-md px-4 py-2 text-sm font-semibold ${activeTab === 'party' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
           >
-            Counterparty
+            Name / Account
           </button>
           <button
             type="button"
@@ -353,25 +388,31 @@ const AccountLedgerOverview: React.FC = () => {
         )}
 
         {activeTab === 'party' && (
-          <PaymentReconciliation
-            showHeader={false}
-            initialMode="party"
-            hideModeToggle
-            hideDownload
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-          />
+          <div id="ledger-tab-party">
+            <PaymentReconciliation
+              showHeader={false}
+              initialMode="party"
+              hideModeToggle
+              hideDownload
+              hidePrint
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+            />
+          </div>
         )}
 
         {activeTab === 'head' && (
-          <PaymentReconciliation
-            showHeader={false}
-            initialMode="head"
-            hideModeToggle
-            hideDownload
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-          />
+          <div id="ledger-tab-head">
+            <PaymentReconciliation
+              showHeader={false}
+              initialMode="head"
+              hideModeToggle
+              hideDownload
+              hidePrint
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+            />
+          </div>
         )}
       </main>
     </div>

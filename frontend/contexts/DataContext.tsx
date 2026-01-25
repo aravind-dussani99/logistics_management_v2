@@ -708,9 +708,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
   const getSupervisorAccounts = useCallback(async () => {
     const users = await usersApi.listUsers();
-    return users
-      .filter((user) => user.role === Role.PICKUP_SUPERVISOR || user.role === Role.DROPOFF_SUPERVISOR)
-      .map((user) => user.name);
+    const names = users.map((user) => user.name).filter(Boolean);
+    return Array.from(new Set(names));
   }, []);
 
   const addVehicleOwner = async () => {

@@ -126,6 +126,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             {children}
         </div>
     );
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+        }
+    };
+    const preventDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Tab') return;
+        event.preventDefault();
+    };
     const vehicles = filterData?.vehicles ?? [];
     const transportOwners = filterData?.transportOwners ?? [];
     const customers = filterData?.customers ?? [];
@@ -181,9 +191,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     <input
                         type="date"
                         inputMode="none"
-                        onKeyDown={e => e.preventDefault()}
+                        onKeyDown={preventDateTyping}
                         onPaste={e => e.preventDefault()}
                         onDrop={e => e.preventDefault()}
+                        onClick={openDatePicker}
+                        onFocus={openDatePicker}
                         className={baseInputClass}
                         value={filters.dateFrom || ''}
                         onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}
@@ -193,9 +205,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     <input
                         type="date"
                         inputMode="none"
-                        onKeyDown={e => e.preventDefault()}
+                        onKeyDown={preventDateTyping}
                         onPaste={e => e.preventDefault()}
                         onDrop={e => e.preventDefault()}
+                        onClick={openDatePicker}
+                        onFocus={openDatePicker}
                         className={baseInputClass}
                         value={filters.dateTo || ''}
                         onChange={e => handleFilterChangeInternal('dateTo', e.target.value)}
@@ -208,9 +222,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 <input
                     type="date"
                     inputMode="none"
-                    onKeyDown={e => e.preventDefault()}
+                    onKeyDown={preventDateTyping}
                     onPaste={e => e.preventDefault()}
                     onDrop={e => e.preventDefault()}
+                    onClick={openDatePicker}
+                    onFocus={openDatePicker}
                     className={baseInputClass}
                     value={filters.dateFrom || ''}
                     onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}

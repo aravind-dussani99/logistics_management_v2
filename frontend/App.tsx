@@ -23,7 +23,6 @@ import Reports from './pages/Reports';
 import SiteManagerDashboard from './pages/SiteManagerDashboard';
 import TripRates from './pages/TripRates';
 import Bills from './pages/Bills';
-import DailyPayments from './pages/DailyPayments';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
 import MerchantTypes from './pages/MerchantTypes';
@@ -177,16 +176,6 @@ const AppRoutes: React.FC = () => (
           <RoyaltyStock />
         </ProtectedRoute>
       } />
-      <Route path="/daily-payments" element={
-        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <DailyPayments />
-        </ProtectedRoute>
-      } />
-      <Route path="/site-manager/daily-payments" element={
-        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <DailyPayments />
-        </ProtectedRoute>
-      } />
       <Route path="/profile" element={<Profile />} />
       <Route path="/royalty" element={<Navigate to="/royalty-owner-data" replace />} />
       <Route path="/daily-expenses" element={
@@ -236,8 +225,20 @@ const App: React.FC = () => {
         active.blur();
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLInputElement)) return;
+      if (active.type !== 'number') return;
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+      }
+    };
     document.addEventListener('wheel', handleWheel, { passive: false });
-    return () => document.removeEventListener('wheel', handleWheel);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   return (

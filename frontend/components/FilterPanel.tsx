@@ -66,6 +66,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
     const dateInputClass = `${baseInputClass} pr-8`;
     const fields = useMemo(() => new Set<FilterField>(visibleFields.length ? visibleFields : defaultVisibleFields), [visibleFields]);
     const hasSingleDate = useMemo(() => fields.has('singleDate'), [fields]);
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+        }
+    };
+    const preventDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Tab') return;
+        event.preventDefault();
+    };
 
     return (
          <div className="p-4 space-y-4">
@@ -78,9 +88,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                         <input
                             type="date"
                             id="dateFrom"
-                            readOnly
                             inputMode="none"
-                            onKeyDown={e => e.preventDefault()}
+                            onKeyDown={preventDateTyping}
+                            onPaste={e => e.preventDefault()}
+                            onDrop={e => e.preventDefault()}
+                            onClick={openDatePicker}
+                            onFocus={openDatePicker}
                             className={dateInputClass}
                             value={filters.dateFrom || ''}
                             onChange={e => handleFilterChange('dateFrom', e.target.value)}
@@ -98,15 +111,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                         <label htmlFor="dateFrom" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date From</label>
                         <div className="relative">
                             <input
-                                type="date"
-                                id="dateFrom"
-                                readOnly
-                                inputMode="none"
-                                onKeyDown={e => e.preventDefault()}
-                                className={dateInputClass}
-                                value={filters.dateFrom || ''}
-                                onChange={e => handleFilterChange('dateFrom', e.target.value)}
-                            />
+                            type="date"
+                            id="dateFrom"
+                            inputMode="none"
+                            onKeyDown={preventDateTyping}
+                            onPaste={e => e.preventDefault()}
+                            onDrop={e => e.preventDefault()}
+                            onClick={openDatePicker}
+                            onFocus={openDatePicker}
+                            className={dateInputClass}
+                            value={filters.dateFrom || ''}
+                            onChange={e => handleFilterChange('dateFrom', e.target.value)}
+                        />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                 <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                             </div>
@@ -116,15 +132,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                         <label htmlFor="dateTo" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date To</label>
                         <div className="relative">
                             <input
-                                type="date"
-                                id="dateTo"
-                                readOnly
-                                inputMode="none"
-                                onKeyDown={e => e.preventDefault()}
-                                className={dateInputClass}
-                                value={filters.dateTo || ''}
-                                onChange={e => handleFilterChange('dateTo', e.target.value)}
-                            />
+                            type="date"
+                            id="dateTo"
+                            inputMode="none"
+                            onKeyDown={preventDateTyping}
+                            onPaste={e => e.preventDefault()}
+                            onDrop={e => e.preventDefault()}
+                            onClick={openDatePicker}
+                            onFocus={openDatePicker}
+                            className={dateInputClass}
+                            value={filters.dateTo || ''}
+                            onChange={e => handleFilterChange('dateTo', e.target.value)}
+                        />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                 <ion-icon name="calendar-outline" className="text-gray-400"></ion-icon>
                             </div>

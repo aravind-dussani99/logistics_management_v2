@@ -12,12 +12,24 @@ const DailyExpenses: React.FC = () => {
   const { alert } = useUI();
   const [formKey, setFormKey] = useState(0);
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
+  const [openingBalance, setOpeningBalance] = useState(0);
 
   useEffect(() => {
     if (!currentUser?.name || !getDailyExpenses) return;
     getDailyExpenses(currentUser.name)
-      .then(setExpenses)
-      .catch(() => setExpenses([]));
+      .then(result => {
+        if (result && Array.isArray(result.expenses)) {
+          setExpenses(result.expenses);
+          setOpeningBalance(Number(result.openingBalance || 0));
+        } else {
+          setExpenses([]);
+          setOpeningBalance(0);
+        }
+      })
+      .catch(() => {
+        setExpenses([]);
+        setOpeningBalance(0);
+      });
   }, [currentUser, getDailyExpenses, formKey]);
 
   const handleReset = () => {
@@ -49,7 +61,7 @@ const DailyExpenses: React.FC = () => {
             onSubmitSuccess={handleReset}
             initialData={undefined}
             expenses={expenses}
-            openingBalance={0}
+            openingBalance={openingBalance}
             cancelLabel="Re-set"
             submitLabel="Add Daily Expense"
           />

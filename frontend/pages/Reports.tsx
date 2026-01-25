@@ -69,12 +69,12 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             if (canViewAll) {
                 const supervisors = await getSupervisorAccounts();
                 const all = await Promise.all(
-                    supervisors.map(name => getDailyExpenses(name).then(res => res.expenses))
+                    supervisors.map(name => getDailyExpenses(name).then(res => res?.expenses ?? []))
                 );
                 setAllExpenses(all.flat());
             } else {
-                const { expenses } = await getDailyExpenses(currentUser.name);
-                setAllExpenses(expenses);
+                const result = await getDailyExpenses(currentUser.name);
+                setAllExpenses(Array.isArray(result?.expenses) ? result.expenses : []);
             }
         };
         fetchAllExpenses();
