@@ -22,6 +22,7 @@ import Advances from './pages/Advances';
 import Reports from './pages/Reports';
 import SiteManagerDashboard from './pages/SiteManagerDashboard';
 import TripRates from './pages/TripRates';
+import Bills from './pages/Bills';
 import DailyPayments from './pages/DailyPayments';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
@@ -124,6 +125,11 @@ const AppRoutes: React.FC = () => (
           <TripRates />
         </ProtectedRoute>
       } />
+      <Route path="/bills" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <Bills />
+        </ProtectedRoute>
+      } />
       <Route path="/enter-trips" element={
         <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER]}>
           <SupervisorEnterTrips />
@@ -137,7 +143,12 @@ const AppRoutes: React.FC = () => (
       {/* Advances route deprecated */}
       <Route path="/reports" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
-          <Reports />
+          <Reports mode="dashboard" />
+        </ProtectedRoute>
+      } />
+      <Route path="/reports-export" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <Reports mode="reports" />
         </ProtectedRoute>
       } />
       <Route path="/ledger" element={<Navigate to="/payments" replace />} />

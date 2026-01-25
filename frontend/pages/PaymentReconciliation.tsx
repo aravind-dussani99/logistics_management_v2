@@ -124,8 +124,18 @@ const PaymentReconciliation: React.FC = () => {
     royaltyOwnerProfiles.forEach(item => {
       if (normalizeName(item.name) === selectedPartyKey) types.add('royalty-owner');
     });
+    if (!types.has('vendor-customer')) {
+      const matchesTripCustomer = trips.some(trip => {
+        const actualName = trip.actualVendorCustomerName || '';
+        if (actualName && normalizeName(actualName) === selectedPartyKey) return true;
+        if (trip.customer && normalizeName(trip.customer) === selectedPartyKey) return true;
+        if (trip.vendorName && normalizeName(trip.vendorName) === selectedPartyKey) return true;
+        return false;
+      });
+      if (matchesTripCustomer) types.add('vendor-customer');
+    }
     return types;
-  }, [selectedPartyKey, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles]);
+  }, [selectedPartyKey, vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, trips]);
 
   const partyTripRows = useMemo(() => {
     if (!selectedPartyKey) return [];
@@ -135,7 +145,8 @@ const PaymentReconciliation: React.FC = () => {
         const materialCost = Number(trip.materialCost || 0);
         const transportCost = Number(trip.transportCost || 0);
         const royaltyCost = Number(trip.royaltyCost || 0);
-        const matchesCustomer = (trip.customer && normalizeName(trip.customer) === selectedPartyKey)
+        const matchesCustomer = (trip.actualVendorCustomerName && normalizeName(trip.actualVendorCustomerName) === selectedPartyKey)
+          || (trip.customer && normalizeName(trip.customer) === selectedPartyKey)
           || (trip.vendorName && normalizeName(trip.vendorName) === selectedPartyKey);
         const matchesQuarry = trip.quarryName && normalizeName(trip.quarryName) === selectedPartyKey;
         const matchesTransport = trip.transporterName && normalizeName(trip.transporterName) === selectedPartyKey;

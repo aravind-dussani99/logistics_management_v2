@@ -8,8 +8,8 @@ import SupervisorTripForm from './SupervisorTripForm';
 interface PageHeaderProps {
     title: string;
     subtitle?: string;
-    showFilters?: ('date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
-    showMoreFilters?: ('date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
+    showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
+    showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
     filterData: {
@@ -56,7 +56,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     const { currentUser } = useAuth();
     const filterPopoverRef = useRef<HTMLDivElement>(null);
     const addMenuRef = useRef<HTMLDivElement>(null);
-    const hasDateFilters = showFilters.includes('date') || showMoreFilters.includes('date');
+    const hasDateFilters = showFilters.includes('date') || showMoreFilters.includes('date') || showFilters.includes('singleDate') || showMoreFilters.includes('singleDate');
+    const hasSingleDate = showFilters.includes('singleDate') || showMoreFilters.includes('singleDate');
 
     const [isFilterPopoverOpen, setFilterPopoverOpen] = useState(false);
     const [isAddMenuOpen, setAddMenuOpen] = useState(false);
@@ -79,14 +80,26 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const formatDate = (date: Date) => date.toISOString().split('T')[0];
-        onFilterChange({
+        const todayValue = formatDate(today);
+        onFilterChange(hasSingleDate ? {
+            ...filters,
+            dateFrom: todayValue,
+            dateTo: todayValue,
+        } : {
             ...filters,
             dateFrom: formatDate(startOfMonth),
-            dateTo: formatDate(today),
+            dateTo: todayValue,
         });
     }, [filters, hasDateFilters, onFilterChange]);
     
     const handleFilterChangeInternal = (key: keyof Filters, value: string) => {
+        if ((key === 'dateFrom' || key === 'dateTo') && value === '') {
+            return;
+        }
+        if (hasSingleDate && key === 'dateFrom') {
+            onFilterChange({ ...filters, dateFrom: value, dateTo: value });
+            return;
+        }
         onFilterChange({ ...filters, [key]: value });
     };
 
@@ -152,6 +165,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 <FilterInput label="Date To"><input type="date" className={baseInputClass} value={filters.dateTo || ''} onChange={e => handleFilterChangeInternal('dateTo', e.target.value)} /></FilterInput>
             </>
         ),
+        singleDate: (
+            <FilterInput label="Date">
+                <input type="date" className={baseInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)} />
+            </FilterInput>
+        ),
         transporter: (
             <FilterInput label="Transporter">
                 <select className={baseInputClass} value={filters.transporter || ''} onChange={e => handleFilterChangeInternal('transporter', e.target.value)}>
@@ -179,7 +197,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
                 </div>
                 <div className="hidden lg:flex items-end gap-2 flex-grow min-w-0">
-                    {showFilters.includes('date') && filterComponents.date}
+                    {showFilters.includes('date') && !showFilters.includes('singleDate') && filterComponents.date}
+                    {showFilters.includes('singleDate') && filterComponents.singleDate}
                     {showFilters.includes('transporter') && filterComponents.transporter}
                     {showFilters.includes('quarry') && filterComponents.quarry}
                 </div>

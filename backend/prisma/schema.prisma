@@ -329,6 +329,8 @@ model TripRecord {
   allInCostPerTon        Float   @default(0)
   allInCost             Float   @default(0)
   customerRatePerTon    Float   @default(0)
+  actualVendorCustomerName String @default("")
+  vendorCustomerRatePerTon Float @default(0)
   profit                Float
   paymentStatus         String
   agent                 String

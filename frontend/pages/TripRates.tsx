@@ -7,12 +7,11 @@ import Pagination from '../components/Pagination';
 import { Filters } from '../components/FilterPanel';
 import { tripRateApi } from '../services/tripRateApi';
 import { formatDateDisplay } from '../utils';
-import SupervisorTripForm from '../components/SupervisorTripForm';
 
 const PAGE_SIZE = 10;
 
 type PartyTab = {
-  key: 'vendorCustomer' | 'transportOwner' | 'mineQuarry' | 'royaltyOwner' | 'allIn';
+  key: 'transportOwner' | 'mineQuarry' | 'royaltyOwner' | 'allIn';
   label: string;
   field?: keyof Trip;
 };
@@ -21,17 +20,139 @@ const partyTabs: PartyTab[] = [
   { key: 'mineQuarry', label: 'Mine & Quarry', field: 'quarryName' },
   { key: 'royaltyOwner', label: 'Royalty Owner', field: 'royaltyOwnerName' },
   { key: 'transportOwner', label: 'Transport & Owner', field: 'transporterName' },
-  { key: 'vendorCustomer', label: 'Vendor & Customer', field: 'customer' },
   { key: 'allIn', label: 'All-in Rate' },
 ];
 
-const getMtdRange = () => {
+const getRatePartyName = (trip: Trip, tabKey: PartyTab['key']) => {
+  if (tabKey === 'transportOwner') return trip.transporterName;
+  if (tabKey === 'mineQuarry') return trip.quarryName;
+  if (tabKey === 'royaltyOwner') return trip.royaltyOwnerName;
+  return '';
+};
+
+type RateDialogProps = {
+  mode: 'view' | 'edit';
+  tabKey: PartyTab['key'];
+  trip: Trip;
+  appliedRate: MaterialRate | undefined;
+  showMaterialColumn: boolean;
+  showLocationColumns: boolean;
+  onSave: (rateValue: string) => Promise<void>;
+  onClose: () => void;
+};
+
+const RateDialog: React.FC<RateDialogProps> = ({
+  mode,
+  tabKey,
+  trip,
+  appliedRate,
+  showMaterialColumn,
+  showLocationColumns,
+  onSave,
+  onClose,
+}) => {
+  const [rateValue, setRateValue] = useState(
+    appliedRate ? String(appliedRate.ratePerTon ?? '') : ''
+  );
+  const netQty = Number(trip.netWeight || 0);
+  const numericRate = Number(rateValue || 0);
+  const tripAmount = netQty * (Number.isFinite(numericRate) ? numericRate : 0);
+  const ratePartyName = getRatePartyName(trip, tabKey) || '-';
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 text-sm text-gray-700 dark:text-gray-200">
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+          <div className="font-semibold">#{trip.id}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+          <div className="font-semibold">{formatDateDisplay(trip.date)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+          <div className="font-semibold">{trip.invoiceDCNumber || '-'}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Rate Party</div>
+          <div className="font-semibold">{ratePartyName}</div>
+        </div>
+        {showMaterialColumn && (
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Material Type</div>
+            <div className="font-semibold">{trip.material || '-'}</div>
+          </div>
+        )}
+        {showLocationColumns && (
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Pickup Location</div>
+            <div className="font-semibold">{trip.pickupPlace || '-'}</div>
+          </div>
+        )}
+        {showLocationColumns && (
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Drop-off Location</div>
+            <div className="font-semibold">{trip.dropOffPlace || '-'}</div>
+          </div>
+        )}
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Net Quantity</div>
+          <div className="font-semibold">{netQty.toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
+          <div className="font-semibold">{tripAmount.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Rate</label>
+        {mode === 'edit' ? (
+          <input
+            type="text"
+            inputMode="decimal"
+            value={rateValue}
+            onChange={event => setRateValue(event.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+            placeholder="Enter rate"
+          />
+        ) : (
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            {Number.isFinite(numericRate) ? numericRate.toFixed(2) : '0.00'}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+        >
+          Close
+        </button>
+        {mode === 'edit' && (
+          <button
+            type="button"
+            onClick={() => onSave(rateValue)}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+          >
+            Save
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const getDefaultDate = () => {
   const today = new Date();
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  const dateValue = formatDate(today);
   return {
-    dateFrom: formatDate(startOfMonth),
-    dateTo: formatDate(today),
+    dateFrom: dateValue,
+    dateTo: dateValue,
   };
 };
 
@@ -57,12 +178,10 @@ const TripRateLedger: React.FC = () => {
     loadSiteLocations,
     refreshKey,
   } = useData();
-  const [filters, setFilters] = useState<Filters>(getMtdRange());
+  const [filters, setFilters] = useState<Filters>(getDefaultDate());
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
-  const [rateScopes, setRateScopes] = useState<Record<string, 'trip' | 'range'>>({});
-  const [rateDates, setRateDates] = useState<Record<string, { from: string; to: string }>>({});
   const [selectedTrips, setSelectedTrips] = useState<Record<string, Set<number>>>({});
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkRateInputs, setBulkRateInputs] = useState<Record<string, string>>({});
@@ -106,26 +225,15 @@ const TripRateLedger: React.FC = () => {
 
   const applyRateForTrip = async (tabKey: PartyTab['key'], trip: Trip, rateValue: string) => {
     if (tabKey === 'allIn') return undefined;
-    const partyName = tabKey === 'vendorCustomer'
-      ? trip.customer
-      : tabKey === 'transportOwner'
-        ? trip.transporterName
-        : tabKey === 'mineQuarry'
-          ? trip.quarryName
-          : trip.royaltyOwnerName;
+    const partyName = getRatePartyName(trip, tabKey);
     if (!partyName) {
       await alert('Missing Rate Party', 'This trip does not have a rate party name for this tab. Please update the trip first.');
       return undefined;
     }
-    const mapKey = `${tabKey}-${trip.id}`;
     const rateNumber = Number(rateValue) || 0;
-    const scope = rateScopes[mapKey] || 'trip';
     const tripDate = String(trip.date || '').split('T')[0];
-    const dates = rateDates[mapKey] || { from: tripDate, to: tripDate };
-    const effectiveFrom = dates.from || tripDate;
-    const effectiveTo = scope === 'trip' ? (dates.from || tripDate) : (dates.to || undefined);
+    const effectiveFrom = tripDate;
     const partyTypeMap: Record<Exclude<PartyTab['key'], 'allIn'>, RatePartyType> = {
-      vendorCustomer: 'vendor-customer',
       transportOwner: 'transport-owner',
       mineQuarry: 'mine-quarry',
       royaltyOwner: 'royalty-owner',
@@ -134,9 +242,8 @@ const TripRateLedger: React.FC = () => {
       tripId: trip.id,
       ratePartyType: partyTypeMap[tabKey],
       ratePerTon: rateNumber,
-      applyScope: scope,
       effectiveFrom,
-      effectiveTo,
+      applyScope: 'trip',
     });
     setOptimisticRates(prev => [createdRate, ...prev]);
     return createdRate;
@@ -146,6 +253,10 @@ const TripRateLedger: React.FC = () => {
     const mapKey = `${tabKey}-${trip.id}`;
     await applyRateForTrip(tabKey, trip, rateValue);
     setRateInputs(prev => ({ ...prev, [mapKey]: rateValue }));
+  };
+
+  const handleEditAppliedRate = async (tabKey: PartyTab['key'], trip: Trip, rateValue: string) => {
+    await applyRateForTrip(tabKey, trip, rateValue);
   };
 
   const handlePageChange = (tabSection: string, page: number) => {
@@ -177,8 +288,7 @@ const TripRateLedger: React.FC = () => {
   const filteredTrips = useMemo(() => {
     return displayTrips.filter(trip => {
       const tripDate = (trip.date || '').split('T')[0];
-      if (filters.dateFrom && tripDate < filters.dateFrom) return false;
-      if (filters.dateTo && tripDate > filters.dateTo) return false;
+      if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
       if (filters.vendor && trip.customer !== filters.vendor) return false;
       if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
@@ -190,30 +300,10 @@ const TripRateLedger: React.FC = () => {
   }, [displayTrips, filters]);
 
   const partyTypeByTab: Record<string, RatePartyType> = {
-    vendorCustomer: 'vendor-customer',
     transportOwner: 'transport-owner',
     mineQuarry: 'mine-quarry',
     royaltyOwner: 'royalty-owner',
   };
-
-  const materialTypeByName = useMemo(() => {
-    const map = new Map<string, string>();
-    materialTypeDefinitions.forEach(item => map.set(item.name, item.id));
-    return map;
-  }, [materialTypeDefinitions]);
-
-  const siteLocationByName = useMemo(() => {
-    const map = new Map<string, string>();
-    siteLocations.forEach(item => map.set(item.name, item.id));
-    return map;
-  }, [siteLocations]);
-
-  const partyIdByType = useMemo(() => ({
-    'vendor-customer': new Map(vendorCustomers.map(item => [item.name, item.id])),
-    'mine-quarry': new Map(mineQuarries.map(item => [item.name, item.id])),
-    'royalty-owner': new Map(royaltyOwnerProfiles.map(item => [item.name, item.id])),
-    'transport-owner': new Map(transportOwnerProfiles.map(item => [item.name, item.id])),
-  }), [vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles]);
 
   const combinedRates = useMemo(() => {
     if (optimisticRates.length === 0) return materialRates;
@@ -223,35 +313,8 @@ const TripRateLedger: React.FC = () => {
   const getApplicableRate = (trip: Trip, tabKey: PartyTab['key']) => {
     const partyType = partyTypeByTab[tabKey];
     if (!partyType) return undefined;
-    const partyName = tabKey === 'vendorCustomer'
-      ? trip.customer
-      : tabKey === 'transportOwner'
-        ? trip.transporterName
-        : tabKey === 'mineQuarry'
-          ? trip.quarryName
-          : trip.royaltyOwnerName;
-    const partyId = partyIdByType[partyType]?.get(partyName || '') || '';
-    const materialTypeId = materialTypeByName.get(trip.material || '') || '';
-    const pickupLocationId = siteLocationByName.get(trip.pickupPlace || '') || '';
-    const dropOffLocationId = siteLocationByName.get(trip.dropOffPlace || '') || '';
-    const tripDate = new Date(trip.date);
-
     const tripSpecific = combinedRates.find(rate => rate.tripId === trip.id && rate.ratePartyType === partyType);
-    if (tripSpecific) return tripSpecific;
-
-    const candidates = combinedRates.filter(rate => {
-      if (rate.ratePartyType !== partyType) return false;
-      if (partyId && rate.ratePartyId !== partyId) return false;
-      if (materialTypeId && rate.materialTypeId !== materialTypeId) return false;
-      if (pickupLocationId && rate.pickupLocationId !== pickupLocationId) return false;
-      if (dropOffLocationId && rate.dropOffLocationId !== dropOffLocationId) return false;
-      const from = new Date(rate.effectiveFrom);
-      const to = rate.effectiveTo ? new Date(rate.effectiveTo) : null;
-      if (tripDate < from) return false;
-      if (to && tripDate > to) return false;
-      return true;
-    });
-    return candidates.sort((a, b) => new Date(b.effectiveFrom).getTime() - new Date(a.effectiveFrom).getTime())[0];
+    return tripSpecific;
   };
 
   return (
@@ -261,7 +324,7 @@ const TripRateLedger: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={filterData}
-        showFilters={['date']}
+        showFilters={['singleDate']}
         showAddAction={false}
       />
       <div className="space-y-6">
@@ -406,9 +469,8 @@ const TripRateLedger: React.FC = () => {
                                   <td className="px-3 py-2">{netQty.toFixed(2)}</td>
                                   <td className="px-3 py-2">
                                     <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
+                                      type="text"
+                                      inputMode="decimal"
                                       value={inputs.cost}
                                       placeholder="Cost"
                                       onChange={event => handleAllInInput(trip.id, 'cost', event.target.value)}
@@ -417,9 +479,8 @@ const TripRateLedger: React.FC = () => {
                                   </td>
                                   <td className="px-3 py-2">
                                     <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
+                                      type="text"
+                                      inputMode="decimal"
                                       value={inputs.customer}
                                       placeholder="Rate"
                                       onChange={event => handleAllInInput(trip.id, 'customer', event.target.value)}
@@ -556,7 +617,6 @@ const TripRateLedger: React.FC = () => {
           const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
           const showMaterialColumn = tab.key === 'mineQuarry';
           const showLocationColumns = tab.key === 'transportOwner';
-          const showRangeColumns = awaitingTrips.some(trip => (rateScopes[`${tab.key}-${trip.id}`] || 'trip') === 'range');
           const selectedSet = selectedTrips[tab.key] || new Set<number>();
           const bulkRateValue = bulkRateInputs[tab.key] || '';
           const allSelected = awaitingSlice.length > 0 && awaitingSlice.every(trip => selectedSet.has(trip.id));
@@ -701,9 +761,8 @@ const TripRateLedger: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="Bulk rate"
                         value={bulkRateValue}
                         onChange={event => setBulkRateInputs(prev => ({ ...prev, [tab.key]: event.target.value }))}
@@ -762,9 +821,6 @@ const TripRateLedger: React.FC = () => {
                             {showLocationColumns && <th className="px-3 py-2">Drop-off Location</th>}
                             <th className="px-3 py-2">Net Quantity</th>
                             <th className="px-3 py-2 w-32">Rate</th>
-                            <th className="px-3 py-2 w-28">Applies</th>
-                            {showRangeColumns && <th className="px-3 py-2">Valid From</th>}
-                            {showRangeColumns && <th className="px-3 py-2">Valid To</th>}
                             <th className="px-3 py-2">Trip Amount</th>
                             <th className="px-3 py-2">Action</th>
                           </tr>
@@ -775,11 +831,6 @@ const TripRateLedger: React.FC = () => {
                             const rateValue = rateInputs[mapKey] || '';
                             const netQty = Number(trip.netWeight || 0);
                             const amount = netQty * (Number(rateValue) || 0);
-                            const tripDate = String(trip.date || '').split('T')[0];
-                            const scope = rateScopes[mapKey] || 'trip';
-                            const dateRange = rateDates[mapKey] || { from: tripDate, to: tripDate };
-                            const fromValue = dateRange.from || tripDate;
-                            const toValue = scope === 'trip' ? fromValue : (dateRange.to || '');
                             return (
                               <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
                                 <td className="px-3 py-2">
@@ -789,88 +840,21 @@ const TripRateLedger: React.FC = () => {
                                 <td className="px-3 py-2">#{trip.id}</td>
                                 <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
                                 <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
-                                <td className="px-3 py-2">{trip[tab.field as keyof typeof trip] || '-'}</td>
+                                <td className="px-3 py-2">{getRatePartyName(trip, tab.key) || '-'}</td>
                                 {showMaterialColumn && <td className="px-3 py-2">{trip.material || '-'}</td>}
                                 {showLocationColumns && <td className="px-3 py-2">{trip.pickupPlace || '-'}</td>}
                                 {showLocationColumns && <td className="px-3 py-2">{trip.dropOffPlace || '-'}</td>}
                                 <td className="px-3 py-2">{netQty.toFixed(2)}</td>
                                 <td className="px-3 py-2">
                                   <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
+                                    type="text"
+                                    inputMode="decimal"
                                     value={rateValue}
                                     placeholder="Rate"
                                     onChange={event => handleInput(tab.key, trip.id, event.target.value)}
                                     className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
                                   />
                                 </td>
-                                <td className="px-3 py-2">
-                                  <select
-                                    className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                    value={scope}
-                                    onChange={event => {
-                                      const nextScope = event.target.value as 'trip' | 'range';
-                                      setRateScopes(prev => ({ ...prev, [mapKey]: nextScope }));
-                                      setRateDates(prev => ({
-                                        ...prev,
-                                        [mapKey]: {
-                                          from: prev[mapKey]?.from || tripDate,
-                                          to: nextScope === 'trip' ? (prev[mapKey]?.from || tripDate) : (prev[mapKey]?.to || ''),
-                                        },
-                                      }));
-                                    }}
-                                  >
-                                    <option value="trip">This trip</option>
-                                    <option value="range">Date range</option>
-                                  </select>
-                                </td>
-                                {showRangeColumns && (
-                                  <>
-                                    <td className="px-3 py-2">
-                                      {scope === 'range' ? (
-                                        <input
-                                          type="date"
-                                          value={fromValue}
-                                          onChange={event => {
-                                            const nextValue = event.target.value;
-                                            setRateDates(prev => ({
-                                              ...prev,
-                                              [mapKey]: {
-                                                from: nextValue,
-                                                to: prev[mapKey]?.to || '',
-                                              },
-                                            }));
-                                          }}
-                                          className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                        />
-                                      ) : (
-                                        <span className="text-xs text-gray-400">—</span>
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {scope === 'range' ? (
-                                        <input
-                                          type="date"
-                                          value={toValue}
-                                          onChange={event => {
-                                            const nextValue = event.target.value;
-                                            setRateDates(prev => ({
-                                              ...prev,
-                                              [mapKey]: {
-                                                from: prev[mapKey]?.from || tripDate,
-                                                to: nextValue,
-                                              },
-                                            }));
-                                          }}
-                                          className="w-full rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                        />
-                                      ) : (
-                                        <span className="text-xs text-gray-400">—</span>
-                                      )}
-                                    </td>
-                                  </>
-                                )}
                                 <td className="px-3 py-2">{amount.toFixed(2)}</td>
                                 <td className="px-3 py-2">
                                   <button
@@ -952,14 +936,41 @@ const TripRateLedger: React.FC = () => {
                                   <div className="flex gap-2">
                                     <button
                                       type="button"
-                                      onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)}
+                                      onClick={() => openModal(
+                                        `Rate Details #${trip.id}`,
+                                        <RateDialog
+                                          mode="view"
+                                          tabKey={tab.key}
+                                          trip={trip}
+                                          appliedRate={appliedRate}
+                                          showMaterialColumn={showMaterialColumn}
+                                          showLocationColumns={showLocationColumns}
+                                          onSave={async () => {}}
+                                          onClose={closeModal}
+                                        />
+                                      )}
                                       className="rounded-md bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                                     >
                                       View
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)}
+                                      onClick={() => openModal(
+                                        `Edit Rate #${trip.id}`,
+                                        <RateDialog
+                                          mode="edit"
+                                          tabKey={tab.key}
+                                          trip={trip}
+                                          appliedRate={appliedRate}
+                                          showMaterialColumn={showMaterialColumn}
+                                          showLocationColumns={showLocationColumns}
+                                          onSave={async (rateValue) => {
+                                            await handleEditAppliedRate(tab.key, trip, rateValue);
+                                            closeModal();
+                                          }}
+                                          onClose={closeModal}
+                                        />
+                                      )}
                                       className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
                                     >
                                       Edit

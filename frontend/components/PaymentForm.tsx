@@ -8,6 +8,10 @@ interface PaymentFormProps {
   onSave: (data: Omit<Payment, 'id'>, id?: string) => void;
   onClose: () => void;
   isViewMode?: boolean;
+  submitLabel?: string;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  hideSecondary?: boolean;
 }
 
 const getTodayDate = () => {
@@ -15,7 +19,16 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
-const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose, isViewMode = false }) => {
+const PaymentForm: React.FC<PaymentFormProps> = ({
+  initialData,
+  onSave,
+  onClose,
+  isViewMode = false,
+  submitLabel = 'Save Payment',
+  secondaryLabel,
+  onSecondary,
+  hideSecondary = false,
+}) => {
   const { vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, trips, payments } = useData();
   const [date, setDate] = useState(initialData?.date?.split('T')[0] || getTodayDate());
   const [type, setType] = useState<PaymentType>(initialData?.type || PaymentType.PAYMENT);
@@ -157,8 +170,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     };
 
     trips.forEach(trip => {
-      addTripAmount(trip.vendorName || '', Number(trip.revenue || 0));
-      addTripAmount(trip.customer || '', Number(trip.revenue || 0));
+      const customerName = trip.actualVendorCustomerName || trip.customer || '';
+      addTripAmount(customerName, Number(trip.revenue || 0));
       addTripAmount(trip.quarryName || '', Number(trip.materialCost || 0));
       addTripAmount(trip.transporterName || '', Number(trip.transportCost || 0));
       addTripAmount(trip.royaltyOwnerName || '', Number(trip.royaltyCost || 0));
@@ -590,12 +603,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
       </datalist>
 
       <div className="pt-4 flex justify-end space-x-3">
-        <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
-          {isViewMode ? 'Close' : 'Cancel'}
-        </button>
+        {!hideSecondary && (
+          <button
+            type="button"
+            onClick={onSecondary || onClose}
+            className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
+          >
+            {isViewMode ? 'Close' : (secondaryLabel || 'Cancel')}
+          </button>
+        )}
         {!isViewMode && (
           <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none">
-            Save Payment
+            {submitLabel}
           </button>
         )}
       </div>

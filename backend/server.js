@@ -2534,6 +2534,8 @@ app.put('/api/trips/:id', async (req, res) => {
     'vendorName',
     'vendorCustomerIsOneOff',
     'customer',
+    'actualVendorCustomerName',
+    'vendorCustomerRatePerTon',
     'invoiceDCNumber',
     'quarryName',
     'mineQuarryIsOneOff',
@@ -2618,6 +2620,8 @@ app.put('/api/trips/:id', async (req, res) => {
         vendorName: sanitizedData.vendorName,
         vendorCustomerIsOneOff: sanitizedData.vendorCustomerIsOneOff !== undefined ? Boolean(sanitizedData.vendorCustomerIsOneOff) : undefined,
         customer: sanitizedData.customer,
+        actualVendorCustomerName: sanitizedData.actualVendorCustomerName,
+        vendorCustomerRatePerTon: sanitizedData.vendorCustomerRatePerTon !== undefined ? Number(sanitizedData.vendorCustomerRatePerTon) : undefined,
         invoiceDCNumber: sanitizedData.invoiceDCNumber,
         quarryName: sanitizedData.quarryName,
         mineQuarryIsOneOff: sanitizedData.mineQuarryIsOneOff !== undefined ? Boolean(sanitizedData.mineQuarryIsOneOff) : undefined,
@@ -3989,6 +3993,45 @@ app.post('/api/trip-rates/all-in', async (req, res) => {
   } catch (error) {
     console.error('Failed to apply all-in rate', error);
     res.status(500).json({ error: 'Failed to apply all-in rate' });
+  }
+});
+
+app.post('/api/bills/apply', async (req, res) => {
+  const { tripId, actualVendorCustomerName, vendorCustomerRatePerTon } = req.body || {};
+  if (!tripId) {
+    return res.status(400).json({ error: 'Trip is required.' });
+  }
+  const trimmedName = (actualVendorCustomerName || '').trim();
+  if (!trimmedName) {
+    return res.status(400).json({ error: 'Actual vendor/customer name is required.' });
+  }
+  const rateValue = Number(vendorCustomerRatePerTon);
+  if (Number.isNaN(rateValue)) {
+    return res.status(400).json({ error: 'Vendor/customer rate per ton is required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      await ensureRateParty(tx, 'vendor-customer', trimmedName);
+      const netWeight = Number(trip.netWeight || 0);
+      const revenue = netWeight * rateValue;
+      const profit = revenue - Number(trip.materialCost || 0) - Number(trip.transportCost || 0) - Number(trip.royaltyCost || 0);
+      return tx.tripRecord.update({
+        where: { id: trip.id },
+        data: {
+          actualVendorCustomerName: trimmedName,
+          vendorCustomerRatePerTon: rateValue,
+          customerRatePerTon: rateValue,
+          revenue,
+          profit,
+        },
+      });
+    });
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error('Failed to apply bill rate', error);
+    res.status(500).json({ error: 'Failed to apply bill rate' });
   }
 });
 

@@ -8,7 +8,7 @@ import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
-import { Trip, Advance, DailyExpense, Role, Notification } from '../types';
+import { Trip, DailyExpense, Payment, Role, Notification } from '../types';
 import { formatCurrency } from '../utils';
 import SupervisorTripForm from '../components/SupervisorTripForm';
 import TripHistoryDialog from '../components/TripHistoryDialog';
@@ -16,23 +16,22 @@ import ReceiveTripForm from '../components/ReceiveTripForm';
 import RequestDialog from '../components/RequestDialog';
 import AlertDialog from '../components/AlertDialog';
 import DailyExpenseForm from '../components/DailyExpenseForm';
-import AdvanceForm from '../components/AdvanceForm';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 
-type ReportType = 'trips' | 'received' | 'advances' | 'expenses' | 'site-expenses';
+type ReportType = 'trips' | 'payments' | 'expenses';
 const ITEMS_PER_PAGE = 10;
 
 const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports' }) => {
     const location = useLocation();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
-    const { trips, advances, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadAdvances, updateTrip, deleteTrip, deleteAdvance, updateDailyExpense, deleteDailyExpense } = useData();
+    const { trips, payments, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadPayments, updateTrip, deleteTrip, updateDailyExpense, deleteDailyExpense } = useData();
     const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
     const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
-    const [reportType, setReportType] = useState<ReportType>(isDropoffSupervisor ? 'received' : 'trips');
+    const [reportType, setReportType] = useState<ReportType>('trips');
     const [filters, setFilters] = useState<Filters>({});
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
@@ -41,27 +40,28 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     useEffect(() => {
         const state = location.state as { reportType?: ReportType } | null;
         if (state?.reportType) {
-            setReportType(state.reportType);
+            const mappedType = state.reportType === 'received' ? 'trips' : state.reportType;
+            setReportType(mappedType as ReportType);
             return;
         }
         if (mode === 'dashboard') {
-            setReportType(isDropoffSupervisor ? 'received' : 'trips');
+            setReportType('trips');
         }
     }, [location.state, mode, isDropoffSupervisor]);
 
     useEffect(() => {
-        if (reportType === 'trips' || reportType === 'received') {
+        if (reportType === 'trips') {
             loadTrips();
         }
-        if (reportType === 'advances') {
-            loadAdvances();
+        if (reportType === 'payments') {
+            loadPayments();
         }
-    }, [loadTrips, loadAdvances, refreshKey, reportType]);
+    }, [loadTrips, loadPayments, refreshKey, reportType]);
 
     useEffect(() => {
         const fetchAllExpenses = async () => {
             if (!currentUser) return;
-            if (reportType !== 'expenses' && reportType !== 'site-expenses') {
+            if (reportType !== 'expenses') {
                 setAllExpenses([]);
                 return;
             }
@@ -114,22 +114,20 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
 
         switch(reportType) {
             case 'trips':
-            case 'received':
                 headers = ["Date", "Invoice & DC Number", "Vendor & Customer Name", "Transport & Owner Name", "Vehicle Number", "Mine & Quarry Name", "Material Type", "Royalty Owner Name", "Net Weight", "Pickup Place", "Drop-off Place", "Status"];
                 rows = filteredData.map(d => {
                     const t = d as Trip;
                     return [t.date, t.invoiceDCNumber, t.customer, t.transporterName, t.vehicleNumber, t.quarryName, t.material, t.royaltyOwnerName, t.netWeight, t.pickupPlace, t.dropOffPlace || t.place, t.status];
                 });
                 break;
-            case 'advances':
-                headers = ["Date", "From", "To", "Purpose", "Amount"];
+            case 'payments':
+                headers = ["Date", "Transaction Type", "From Account", "To Account", "Counterparty Name", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"];
                 rows = filteredData.map(d => {
-                    const a = d as Advance;
-                    return [a.date, a.fromAccount, a.toAccount, `"${a.purpose.replace(/"/g, '""')}"`, a.amount];
+                    const p = d as Payment;
+                    return [p.date, p.type, p.fromAccount || '', p.toAccount || '', p.ratePartyName || '', p.amount, p.remarks || '', p.headAccount || '', p.via || '', p.tripId || '', p.category || '', p.subCategory || ''];
                 });
                 break;
             case 'expenses':
-            case 'site-expenses':
                 headers = ["Date", "Supervisor", "To", "Amount", "Type"];
                  rows = filteredData.map(d => {
                     const e = d as DailyExpense;
@@ -153,10 +151,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         let data: any[] = [];
         switch(reportType) {
             case 'trips': data = trips; break;
-            case 'received': data = trips; break;
-            case 'advances': data = advances; break;
+            case 'payments': data = payments; break;
             case 'expenses': data = allExpenses.filter(expense => !expense.siteExpense); break;
-            case 'site-expenses': data = allExpenses.filter(expense => expense.siteExpense); break;
         }
 
         const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
@@ -166,13 +162,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             const itemDate = item?.date ? new Date(item.date) : null;
             if (fromDate && itemDate && itemDate < fromDate) return false;
             if (toDate && itemDate && itemDate > toDate) return false;
-            if (reportType === 'received') {
-                const status = (item.status || '').toLowerCase();
-                if (!['in transit', 'pending validation', 'completed', 'validated', 'trip completed'].includes(status)) return false;
-            }
             return true;
         }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [reportType, filters, trips, advances, allExpenses, currentUser]);
+    }, [reportType, filters, trips, payments, allExpenses, currentUser]);
 
     const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
     const paginatedData = useMemo(() => {
@@ -376,10 +368,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
 
     const renderTable = () => {
         const canManageTrips = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
-        const showActions = mode === 'dashboard' || isSiteManager;
+        const showActions = mode === 'dashboard';
         switch(reportType) {
-            case 'trips':
-            case 'received': {
+            case 'trips': {
                 const headers = showActions
                     ? ['S. No.', 'Trip #', 'Date', 'Invoice & DC Number', 'Vendor & Customer Name', 'Transport & Owner Name', 'Vehicle Number', 'Mine & Quarry Name', 'Material Type', 'Royalty Owner Name', 'Net Weight (Tons)', 'Pickup Place', 'Drop-off Place', 'Status', 'Actions'] 
                     : ['Date', 'Vehicle', 'Customer', 'Material', 'Quarry', 'Net Weight', 'Status'];
@@ -581,24 +572,24 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     </tr>
                 )} />;
             }
-            case 'advances':
-                 return <DataTable title="" headers={mode === 'dashboard' ? ["Date", "From", "To", "Purpose", "Amount", "Actions"] : ["Date", "From", "To", "Purpose", "Amount"]} data={tableData} renderRow={(a: Advance) => (
-                    <tr key={a.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(a.date)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{a.fromAccount}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{a.toAccount}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{a.purpose}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-500">{formatCurrency(a.amount)}</td>
-                        {mode === 'dashboard' && (
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
-                                <button onClick={() => openModal('Edit Advance', <AdvanceForm advance={a} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
-                                <button onClick={() => deleteAdvance(a.id)} className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">Delete</button>
-                            </td>
-                        )}
+            case 'payments':
+                 return <DataTable title="" headers={["Date", "Transaction Type", "From Account", "To Account", "Counterparty Name", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"]} data={tableData} renderRow={(p: Payment) => (
+                    <tr key={p.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(p.date)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.type}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.fromAccount || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.toAccount || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.ratePartyName || '-'}</td>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${p.type === 'PAYMENT' ? 'text-red-500' : 'text-green-500'}`}>{formatCurrency(p.amount)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.remarks || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.headAccount || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.via || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.tripId ? `#${p.tripId}` : '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.category || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.subCategory || '-'}</td>
                     </tr>
                 )} />;
             case 'expenses':
-            case 'site-expenses':
                  return <DataTable title="" headers={mode === 'dashboard' ? ["Date", "Supervisor", "To", "Amount", "Type", "Actions"] : ["Date", "Supervisor", "To", "Amount", "Type"]} data={tableData} renderRow={(e: DailyExpense) => (
                      <tr key={e.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(e.date)}</td>
@@ -621,7 +612,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     return (
          <div className="relative">
             <PageHeader
-                title={mode === 'dashboard' ? 'Dashboard' : 'Consolidated Reports'}
+                title={mode === 'dashboard' ? 'Dashboard' : 'Operations Ledger'}
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now
@@ -632,16 +623,11 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
                     <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center flex-wrap gap-4">
                         <div className="flex items-center gap-4">
-                            <h2 className="text-xl font-semibold">Report Data</h2>
+                            <h2 className="text-xl font-semibold">Records</h2>
                             <select value={reportType} onChange={e => setReportType(e.target.value as ReportType)} className="px-2 py-1 text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary">
-                                {mode === 'dashboard' && isDropoffSupervisor ? (
-                                    <option value="received">Trips Received</option>
-                                ) : (
-                                    <option value="trips">Trips added</option>
-                                )}
+                                <option value="trips">Trips</option>
+                                <option value="payments">Payments</option>
                                 <option value="expenses">Daily Expenses</option>
-                                <option value="site-expenses">Site Expenses</option>
-                                <option value="advances">Advance</option>
                             </select>
                             <button onClick={handleExport} className="px-3 py-1 text-xs font-medium text-green-600 border border-green-600 rounded-md hover:bg-green-600 hover:text-white transition">
                                 Export to Excel

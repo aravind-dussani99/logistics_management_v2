@@ -23,7 +23,9 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/trip-records', icon: 'folder-open-outline', name: 'Trip Records', roles: [Role.ADMIN] },
         { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR] },
-        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/reports', icon: 'document-text-outline', name: 'Operations Ledger', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/reports-export', icon: 'download-outline', name: 'Reports (Export)', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/bills', icon: 'receipt-outline', name: 'Bills', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
       ],
     },
     {
@@ -83,16 +85,18 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const siteManagerItems = [
     { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
+    { to: '/reports', icon: 'document-text-outline', name: 'Operations Ledger' },
+    { to: '/reports-export', icon: 'download-outline', name: 'Reports (Export)' },
     { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
-    { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
-    { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
+    { to: '/bills', icon: 'receipt-outline', name: 'Bills' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
     { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation' },
-    { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
-    { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
     { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
     { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview' },
     { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
+    { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
+    { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
+    { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
   ];
 
   const supervisorItems = isDropOffSupervisor
