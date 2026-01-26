@@ -8,8 +8,8 @@ import SupervisorTripForm from './SupervisorTripForm';
 interface PageHeaderProps {
     title: string;
     subtitle?: string;
-    showFilters?: ('date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
-    showMoreFilters?: ('date' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
+    showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
+    showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
     filterData: {
@@ -56,7 +56,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     const { currentUser } = useAuth();
     const filterPopoverRef = useRef<HTMLDivElement>(null);
     const addMenuRef = useRef<HTMLDivElement>(null);
-    const hasDateFilters = showFilters.includes('date') || showMoreFilters.includes('date');
+    const hasDateFilters = showFilters.includes('date') || showMoreFilters.includes('date') || showFilters.includes('singleDate') || showMoreFilters.includes('singleDate');
+    const hasSingleDate = showFilters.includes('singleDate') || showMoreFilters.includes('singleDate');
 
     const [isFilterPopoverOpen, setFilterPopoverOpen] = useState(false);
     const [isAddMenuOpen, setAddMenuOpen] = useState(false);
@@ -79,14 +80,27 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         const today = new Date();
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         const formatDate = (date: Date) => date.toISOString().split('T')[0];
-        onFilterChange({
+        const todayValue = formatDate(today);
+        onFilterChange(hasSingleDate ? {
+            ...filters,
+            dateFrom: todayValue,
+            dateTo: todayValue,
+        } : {
             ...filters,
             dateFrom: formatDate(startOfMonth),
-            dateTo: formatDate(today),
+            dateTo: todayValue,
         });
     }, [filters, hasDateFilters, onFilterChange]);
     
+    const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     const handleFilterChangeInternal = (key: keyof Filters, value: string) => {
+        if ((key === 'dateFrom' || key === 'dateTo') && (value === '' || !isCompleteDate(value))) {
+            return;
+        }
+        if (hasSingleDate && key === 'dateFrom') {
+            onFilterChange({ ...filters, dateFrom: value, dateTo: value });
+            return;
+        }
         onFilterChange({ ...filters, [key]: value });
     };
 
@@ -112,6 +126,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             {children}
         </div>
     );
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+        }
+    };
+    const preventDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Tab') return;
+        event.preventDefault();
+    };
     const vehicles = filterData?.vehicles ?? [];
     const transportOwners = filterData?.transportOwners ?? [];
     const customers = filterData?.customers ?? [];
@@ -134,13 +158,28 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         const names = transportOwners.map(item => item?.name || '');
         return Array.from(new Set(names)).filter(Boolean);
     }, [transportOwners]);
+    const uniqueVendors = useMemo(() => {
+        const names = customers.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [customers]);
+    const uniqueMines = useMemo(() => {
+        const names = mineQuarries.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [mineQuarries]);
+    const uniqueMaterials = useMemo(() => {
+        const names = materials.map(item => item?.name || '');
+        return Array.from(new Set(names)).filter(Boolean);
+    }, [materials]);
 
     const moreFilterFields = useMemo<FilterField[] | undefined>(() => {
+        const visibleFields = new Set<FilterField>(showFilters as FilterField[]);
         if (showMoreFilters.length > 0) {
-            return Array.from(new Set<FilterField>([...showMoreFilters, ...DEFAULT_MORE_FILTERS]));
+            return Array.from(new Set<FilterField>([...showMoreFilters, ...DEFAULT_MORE_FILTERS]))
+                .filter(field => !visibleFields.has(field));
         }
         if (showFilters.length > 0) {
-            return Array.from(new Set<FilterField>([...showFilters as FilterField[], ...DEFAULT_MORE_FILTERS]));
+            return Array.from(new Set<FilterField>([...showFilters as FilterField[], ...DEFAULT_MORE_FILTERS]))
+                .filter(field => !visibleFields.has(field));
         }
         return undefined;
     }, [showFilters, showMoreFilters]);
@@ -148,9 +187,51 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     const filterComponents = {
         date: (
             <>
-                <FilterInput label="Date From"><input type="date" className={baseInputClass} value={filters.dateFrom || ''} onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)} /></FilterInput>
-                <FilterInput label="Date To"><input type="date" className={baseInputClass} value={filters.dateTo || ''} onChange={e => handleFilterChangeInternal('dateTo', e.target.value)} /></FilterInput>
+                <FilterInput label="Date From">
+                    <input
+                        type="date"
+                        inputMode="none"
+                        onKeyDown={preventDateTyping}
+                        onPaste={e => e.preventDefault()}
+                        onDrop={e => e.preventDefault()}
+                        onClick={openDatePicker}
+                        onFocus={openDatePicker}
+                        className={baseInputClass}
+                        value={filters.dateFrom || ''}
+                        onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}
+                    />
+                </FilterInput>
+                <FilterInput label="Date To">
+                    <input
+                        type="date"
+                        inputMode="none"
+                        onKeyDown={preventDateTyping}
+                        onPaste={e => e.preventDefault()}
+                        onDrop={e => e.preventDefault()}
+                        onClick={openDatePicker}
+                        onFocus={openDatePicker}
+                        className={baseInputClass}
+                        value={filters.dateTo || ''}
+                        onChange={e => handleFilterChangeInternal('dateTo', e.target.value)}
+                    />
+                </FilterInput>
             </>
+        ),
+        singleDate: (
+            <FilterInput label="Date">
+                <input
+                    type="date"
+                    inputMode="none"
+                    onKeyDown={preventDateTyping}
+                    onPaste={e => e.preventDefault()}
+                    onDrop={e => e.preventDefault()}
+                    onClick={openDatePicker}
+                    onFocus={openDatePicker}
+                    className={baseInputClass}
+                    value={filters.dateFrom || ''}
+                    onChange={e => handleFilterChangeInternal('dateFrom', e.target.value)}
+                />
+            </FilterInput>
         ),
         transporter: (
             <FilterInput label="Transporter">
@@ -168,6 +249,62 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 </select>
             </FilterInput>
         ),
+        vehicle: (
+            <FilterInput label="Vehicle">
+                <select className={baseInputClass} value={filters.vehicle || ''} onChange={e => handleFilterChangeInternal('vehicle', e.target.value)}>
+                    <option value="">All Vehicles</option>
+                    {safeFilterData.vehicles.map(v => <option key={v.id || v.vehicleNumber} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        customer: (
+            <FilterInput label="Customer">
+                <select className={baseInputClass} value={filters.customer || ''} onChange={e => handleFilterChangeInternal('customer', e.target.value)}>
+                    <option value="">All Customers</option>
+                    {uniqueVendors.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        vendor: (
+            <FilterInput label="Vendor & Customer">
+                <select className={baseInputClass} value={filters.vendor || ''} onChange={e => handleFilterChangeInternal('vendor', e.target.value)}>
+                    <option value="">All Vendors</option>
+                    {uniqueVendors.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        transportOwner: (
+            <FilterInput label="Transport & Owner">
+                <select className={baseInputClass} value={filters.transportOwner || ''} onChange={e => handleFilterChangeInternal('transportOwner', e.target.value)}>
+                    <option value="">All Transport Owners</option>
+                    {safeFilterData.transportOwners.map(owner => <option key={owner.id || owner.name} value={owner.name}>{owner.name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        mine: (
+            <FilterInput label="Mine & Quarry">
+                <select className={baseInputClass} value={filters.mine || ''} onChange={e => handleFilterChangeInternal('mine', e.target.value)}>
+                    <option value="">All Mines/Quarries</option>
+                    {uniqueMines.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        material: (
+            <FilterInput label="Material Type">
+                <select className={baseInputClass} value={filters.material || ''} onChange={e => handleFilterChangeInternal('material', e.target.value)}>
+                    <option value="">All Materials</option>
+                    {uniqueMaterials.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+            </FilterInput>
+        ),
+        royalty: (
+            <FilterInput label="Royalty Owner">
+                <select className={baseInputClass} value={filters.royalty || ''} onChange={e => handleFilterChangeInternal('royalty', e.target.value)}>
+                    <option value="">All Royalty</option>
+                    {safeFilterData.royaltyOwners.map(owner => <option key={owner.id || owner.name} value={owner.name}>{owner.name}</option>)}
+                </select>
+            </FilterInput>
+        ),
     };
 
 
@@ -179,9 +316,17 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
                 </div>
                 <div className="hidden lg:flex items-end gap-2 flex-grow min-w-0">
-                    {showFilters.includes('date') && filterComponents.date}
+                    {showFilters.includes('date') && !showFilters.includes('singleDate') && filterComponents.date}
+                    {showFilters.includes('singleDate') && filterComponents.singleDate}
                     {showFilters.includes('transporter') && filterComponents.transporter}
                     {showFilters.includes('quarry') && filterComponents.quarry}
+                    {showFilters.includes('vehicle') && filterComponents.vehicle}
+                    {showFilters.includes('customer') && filterComponents.customer}
+                    {showFilters.includes('vendor') && filterComponents.vendor}
+                    {showFilters.includes('transportOwner') && filterComponents.transportOwner}
+                    {showFilters.includes('mine') && filterComponents.mine}
+                    {showFilters.includes('material') && filterComponents.material}
+                    {showFilters.includes('royalty') && filterComponents.royalty}
                 </div>
                 <div className="flex items-center space-x-3 flex-shrink-0">
                     {(showFilters.length > 0 || showMoreFilters.length > 0) &&

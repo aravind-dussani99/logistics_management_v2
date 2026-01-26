@@ -16,6 +16,12 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
     const inputId = props.id || props.name || toId(label);
     const inputName = props.name || inputId;
     const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+    const handleWheel: React.WheelEventHandler<HTMLInputElement> = event => {
+        if (props.type === 'number') {
+            event.currentTarget.blur();
+        }
+        props.onWheel?.(event);
+    };
     return (
         <div>
             <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
@@ -24,7 +30,14 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
             ) : props.type === 'textarea' ? (
                  <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} id={inputId} name={inputName} rows={2} className={inputClass} />
             ) : (
-                <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} value={inputValue} className={inputClass} />
+                <input
+                    {...props as React.InputHTMLAttributes<HTMLInputElement>}
+                    id={inputId}
+                    name={inputName}
+                    value={inputValue}
+                    onWheel={handleWheel}
+                    className={inputClass}
+                />
             )}
         </div>
     );

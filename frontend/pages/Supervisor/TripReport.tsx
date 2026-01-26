@@ -207,6 +207,8 @@ const SupervisorTripReport: React.FC = () => {
                             currentPage={currentPage}
                             totalPages={totalPages}
                             onPageChange={setCurrentPage}
+                            totalItems={filteredTrips.length}
+                            pageSize={SUPERVISOR_TRIPS_PER_PAGE}
                         />
                     </div>
                     {activeNotification && (

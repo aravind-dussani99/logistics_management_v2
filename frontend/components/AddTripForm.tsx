@@ -26,11 +26,18 @@ const InputField: React.FC<InputProps> = ({ label, error, type, children, ...pro
     const finalClasses = `${baseClasses} ${error ? errorClasses : ''} ${type === 'date' ? 'pr-8' : ''}`;
     const inputValue = type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
 
+    const handleWheel: React.WheelEventHandler<HTMLInputElement> = event => {
+        if (type === 'number') {
+            event.currentTarget.blur();
+        }
+        props.onWheel?.(event);
+    };
+
     const renderInput = () => {
         if (type === 'select') {
             return <select {...props} id={inputId} name={inputName} className={finalClasses}>{children}</select>
         }
-        return <input type={type} {...props} id={inputId} name={inputName} value={inputValue} className={finalClasses} />
+        return <input type={type} {...props} id={inputId} name={inputName} value={inputValue} onWheel={handleWheel} className={finalClasses} />
     }
 
     return (

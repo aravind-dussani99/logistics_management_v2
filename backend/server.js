@@ -1793,6 +1793,8 @@ app.get('/api/daily-expenses', async (req, res) => {
         closingBalance: expense.closingBalance ?? 0,
         type: expense.type,
         voucherUploads: expense.voucherUploads,
+        paymentReceiptUploads: expense.paymentReceiptUploads,
+        bankAccountUploads: expense.bankAccountUploads,
       })),
     });
   } catch (error) {
@@ -1828,6 +1830,8 @@ app.get('/api/daily-expenses/all', async (req, res) => {
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
       voucherUploads: expense.voucherUploads,
+      paymentReceiptUploads: expense.paymentReceiptUploads,
+      bankAccountUploads: expense.bankAccountUploads,
     })));
   } catch (error) {
     console.error('Failed to list daily expenses', error);
@@ -1854,10 +1858,21 @@ app.post('/api/daily-expenses', async (req, res) => {
     type = 'DEBIT',
     headAccount = '',
     voucherUploads = null,
+    paymentReceiptUploads = null,
+    bankAccountUploads = null,
   } = req.body || {};
 
   if (!date || !from || !to) {
     return res.status(400).json({ error: 'Date, from, and to are required.' });
+  }
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!amount) {
+    return res.status(400).json({ error: 'Amount is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
   }
 
   try {
@@ -1870,6 +1885,33 @@ app.post('/api/daily-expenses', async (req, res) => {
     const closingBalance = type === 'DEBIT'
       ? availableBalance - Number(amount || 0)
       : availableBalance + Number(amount || 0);
+
+    const processedReceiptUploads = paymentReceiptUploads
+      ? await normalizePaymentUploadField({
+        fieldValue: paymentReceiptUploads,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: to || '',
+          tripId: null,
+        },
+        req,
+        fieldKey: 'payment_receipt',
+      })
+      : null;
+    const processedBankUploads = bankAccountUploads
+      ? await normalizePaymentUploadField({
+        fieldValue: bankAccountUploads,
+        payment: {
+          date,
+          ratePartyType,
+          ratePartyName: to || '',
+          tripId: null,
+        },
+        req,
+        fieldKey: 'bank_account',
+      })
+      : null;
 
     const expense = await prisma.paymentRecord.create({
       data: {
@@ -1890,6 +1932,8 @@ app.post('/api/daily-expenses', async (req, res) => {
         closingBalance,
         type,
         voucherUploads,
+        paymentReceiptUploads: processedReceiptUploads,
+        bankAccountUploads: processedBankUploads,
         createdBy: getUserDisplayName(req.user),
       },
     });
@@ -1912,6 +1956,8 @@ app.post('/api/daily-expenses', async (req, res) => {
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
       voucherUploads: expense.voucherUploads,
+      paymentReceiptUploads: expense.paymentReceiptUploads,
+      bankAccountUploads: expense.bankAccountUploads,
     });
   } catch (error) {
     console.error('Failed to create daily expense', error);
@@ -1939,13 +1985,57 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
     type = 'DEBIT',
     headAccount = '',
     voucherUploads = null,
+    paymentReceiptUploads,
+    bankAccountUploads,
   } = req.body || {};
 
   if (!date || !from || !to) {
     return res.status(400).json({ error: 'Date, from, and to are required.' });
   }
+  if (!type) {
+    return res.status(400).json({ error: 'Transaction type is required.' });
+  }
+  if (!amount) {
+    return res.status(400).json({ error: 'Amount is required.' });
+  }
+  if (!remarks) {
+    return res.status(400).json({ error: 'Remarks are required.' });
+  }
 
   try {
+    let processedReceiptUploads;
+    if (paymentReceiptUploads !== undefined) {
+      processedReceiptUploads = paymentReceiptUploads
+        ? await normalizePaymentUploadField({
+          fieldValue: paymentReceiptUploads,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: to || '',
+            tripId: null,
+          },
+          req,
+          fieldKey: 'payment_receipt',
+        })
+        : null;
+    }
+    let processedBankUploads;
+    if (bankAccountUploads !== undefined) {
+      processedBankUploads = bankAccountUploads
+        ? await normalizePaymentUploadField({
+          fieldValue: bankAccountUploads,
+          payment: {
+            date,
+            ratePartyType,
+            ratePartyName: to || '',
+            tripId: null,
+          },
+          req,
+          fieldKey: 'bank_account',
+        })
+        : null;
+    }
+
     const expense = await prisma.paymentRecord.update({
       where: { id },
       data: {
@@ -1964,6 +2054,8 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
         remarks,
         type,
         voucherUploads,
+        ...(processedReceiptUploads !== undefined ? { paymentReceiptUploads: processedReceiptUploads } : {}),
+        ...(processedBankUploads !== undefined ? { bankAccountUploads: processedBankUploads } : {}),
       },
     });
     await recalculateDailyExpenseBalances(from);
@@ -1985,6 +2077,8 @@ app.put('/api/daily-expenses/:id', async (req, res) => {
       closingBalance: expense.closingBalance ?? 0,
       type: expense.type,
       voucherUploads: expense.voucherUploads,
+      paymentReceiptUploads: expense.paymentReceiptUploads,
+      bankAccountUploads: expense.bankAccountUploads,
     });
   } catch (error) {
     console.error('Failed to update daily expense', error);
@@ -2534,6 +2628,8 @@ app.put('/api/trips/:id', async (req, res) => {
     'vendorName',
     'vendorCustomerIsOneOff',
     'customer',
+    'actualVendorCustomerName',
+    'vendorCustomerRatePerTon',
     'invoiceDCNumber',
     'quarryName',
     'mineQuarryIsOneOff',
@@ -2618,6 +2714,8 @@ app.put('/api/trips/:id', async (req, res) => {
         vendorName: sanitizedData.vendorName,
         vendorCustomerIsOneOff: sanitizedData.vendorCustomerIsOneOff !== undefined ? Boolean(sanitizedData.vendorCustomerIsOneOff) : undefined,
         customer: sanitizedData.customer,
+        actualVendorCustomerName: sanitizedData.actualVendorCustomerName,
+        vendorCustomerRatePerTon: sanitizedData.vendorCustomerRatePerTon !== undefined ? Number(sanitizedData.vendorCustomerRatePerTon) : undefined,
         invoiceDCNumber: sanitizedData.invoiceDCNumber,
         quarryName: sanitizedData.quarryName,
         mineQuarryIsOneOff: sanitizedData.mineQuarryIsOneOff !== undefined ? Boolean(sanitizedData.mineQuarryIsOneOff) : undefined,
@@ -3842,6 +3940,7 @@ app.post('/api/trip-rates/apply', async (req, res) => {
     applyScope = 'trip',
     effectiveFrom,
     effectiveTo,
+    rateSource,
   } = req.body || {};
   if (!tripId || !ratePartyType || ratePerTon === undefined) {
     return res.status(400).json({ error: 'Trip, rate party, and rate per ton are required.' });
@@ -3914,7 +4013,9 @@ app.post('/api/trip-rates/apply', async (req, res) => {
           effectiveFrom: resolvedEffectiveFrom,
           effectiveTo: resolvedEffectiveTo,
           status: getMaterialRateStatus(resolvedEffectiveFrom, resolvedEffectiveTo),
-          remarks: applyScope === 'trip' ? `Trip rate for #${trip.id}` : 'Range rate from trip rates.',
+          remarks: rateSource === 'combo'
+            ? `Combo rate for #${trip.id}`
+            : (applyScope === 'trip' ? `Trip rate for #${trip.id}` : 'Range rate from trip rates.'),
         },
       });
 
@@ -3989,6 +4090,45 @@ app.post('/api/trip-rates/all-in', async (req, res) => {
   } catch (error) {
     console.error('Failed to apply all-in rate', error);
     res.status(500).json({ error: 'Failed to apply all-in rate' });
+  }
+});
+
+app.post('/api/bills/apply', async (req, res) => {
+  const { tripId, actualVendorCustomerName, vendorCustomerRatePerTon } = req.body || {};
+  if (!tripId) {
+    return res.status(400).json({ error: 'Trip is required.' });
+  }
+  const trimmedName = (actualVendorCustomerName || '').trim();
+  if (!trimmedName) {
+    return res.status(400).json({ error: 'Actual vendor/customer name is required.' });
+  }
+  const rateValue = Number(vendorCustomerRatePerTon);
+  if (Number.isNaN(rateValue)) {
+    return res.status(400).json({ error: 'Vendor/customer rate per ton is required.' });
+  }
+  try {
+    const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+    const updatedTrip = await prisma.$transaction(async (tx) => {
+      await ensureRateParty(tx, 'vendor-customer', trimmedName);
+      const netWeight = Number(trip.netWeight || 0);
+      const revenue = netWeight * rateValue;
+      const profit = revenue - Number(trip.materialCost || 0) - Number(trip.transportCost || 0) - Number(trip.royaltyCost || 0);
+      return tx.tripRecord.update({
+        where: { id: trip.id },
+        data: {
+          actualVendorCustomerName: trimmedName,
+          vendorCustomerRatePerTon: rateValue,
+          customerRatePerTon: rateValue,
+          revenue,
+          profit,
+        },
+      });
+    });
+    res.json(updatedTrip);
+  } catch (error) {
+    console.error('Failed to apply bill rate', error);
+    res.status(500).json({ error: 'Failed to apply bill rate' });
   }
 });
 

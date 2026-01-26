@@ -19,10 +19,16 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       title: 'Core Operations',
       items: [
         { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST] },
-        { to: '/trips', icon: 'bus-outline', name: 'Trip Management', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR] },
-        { to: '/reports', icon: 'document-text-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER] },
+        { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/bills-invoices', icon: 'receipt-outline', name: 'Bills / Invoices', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER] },
+        { to: '/management-ledger', icon: 'document-text-outline', name: 'Management Ledger', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/reports', icon: 'download-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER] },
+        { to: '/trip-records', icon: 'folder-open-outline', name: 'Trip Records', roles: [Role.ADMIN] },
       ],
     },
     {
@@ -35,9 +41,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/royalty-stock', icon: 'cube-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         // Advances deprecated
         { to: '/report', icon: 'document-text-outline', name: 'Report', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
       ],
     },
     {
@@ -83,15 +86,15 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
     { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
-    { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
-    { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
+    { to: '/bills-invoices', icon: 'receipt-outline', name: 'Bills / Invoices' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
-    { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation' },
-    { to: '/daily-payments', icon: 'cash-outline', name: 'Daily Payments' },
-    { to: '/reports', icon: 'document-text-outline', name: 'Reports' },
     { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
+    { to: '/management-ledger', icon: 'document-text-outline', name: 'Management Ledger' },
+    { to: '/reports', icon: 'download-outline', name: 'Reports' },
     { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview' },
     { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
+    { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
+    { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
   ];
 
   const supervisorItems = isDropOffSupervisor

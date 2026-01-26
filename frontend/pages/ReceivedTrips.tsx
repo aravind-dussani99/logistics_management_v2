@@ -203,6 +203,8 @@ const ReceivedTrips: React.FC = () => {
                             currentPage={currentPage}
                             totalPages={totalPages}
                             onPageChange={setCurrentPage}
+                            totalItems={inTransitTrips.length}
+                            pageSize={ITEMS_PER_PAGE}
                         />
                     </div>
                     {activeNotification && (

@@ -247,7 +247,13 @@ const AccountingTable: React.FC<AccountingTableProps> = ({ data, allTrips, payme
                     </tbody>
                 </table>
             </div>
-            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={data.length}
+              pageSize={ITEMS_PER_PAGE}
+            />
         </div>
     );
 };

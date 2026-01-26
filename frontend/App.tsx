@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import Layout from './components/Layout';
 import ReportDashboard from './pages/Dashboard';
@@ -15,14 +15,13 @@ import AccountLedgerOverview from './pages/AccountLedgerOverview';
 import { DataProvider } from './contexts/DataContext';
 import { UIProvider } from './contexts/UIContext';
 import Payments from './pages/Payments';
-import PaymentReconciliation from './pages/PaymentReconciliation';
 import DailyExpenses from './pages/DailyExpenses';
 import ReceivedTrips from './pages/ReceivedTrips';
 import Advances from './pages/Advances';
 import Reports from './pages/Reports';
 import SiteManagerDashboard from './pages/SiteManagerDashboard';
 import TripRates from './pages/TripRates';
-import DailyPayments from './pages/DailyPayments';
+import Bills from './pages/Bills';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
 import MerchantTypes from './pages/MerchantTypes';
@@ -37,6 +36,7 @@ import TransportOwnerVehicles from './pages/TransportOwnerVehicles';
 import MaterialTypes from './pages/MaterialTypes';
 import MaterialRates from './pages/MaterialRates';
 import TripData from './pages/TripData';
+import TripRecords from './pages/TripRecords';
 import ConfigManager from './pages/ConfigManager';
 import SupervisorDashboard from './pages/Supervisor/Dashboard';
 import SupervisorEnterTrips from './pages/Supervisor/EnterTrips';
@@ -123,8 +123,13 @@ const AppRoutes: React.FC = () => (
           <TripRates />
         </ProtectedRoute>
       } />
+      <Route path="/bills-invoices" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <Bills />
+        </ProtectedRoute>
+      } />
       <Route path="/enter-trips" element={
-        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER]}>
+        <ProtectedRoute roles={[Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <SupervisorEnterTrips />
         </ProtectedRoute>
       } />
@@ -134,20 +139,20 @@ const AppRoutes: React.FC = () => (
         </ProtectedRoute>
       } />
       {/* Advances route deprecated */}
+      <Route path="/management-ledger" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <Reports mode="dashboard" />
+        </ProtectedRoute>
+      } />
       <Route path="/reports" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
-          <Reports />
+          <Reports mode="reports" />
         </ProtectedRoute>
       } />
       <Route path="/ledger" element={<Navigate to="/payments" replace />} />
       <Route path="/payments" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <Payments />
-        </ProtectedRoute>
-      } />
-      <Route path="/payment-reconciliation" element={
-        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
-          <PaymentReconciliation />
         </ProtectedRoute>
       } />
       <Route path="/accounting" element={
@@ -163,16 +168,6 @@ const AppRoutes: React.FC = () => (
       <Route path="/royalty-stock" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <RoyaltyStock />
-        </ProtectedRoute>
-      } />
-      <Route path="/daily-payments" element={
-        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <DailyPayments />
-        </ProtectedRoute>
-      } />
-      <Route path="/site-manager/daily-payments" element={
-        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
-          <DailyPayments />
         </ProtectedRoute>
       } />
       <Route path="/profile" element={<Profile />} />
@@ -207,6 +202,7 @@ const AppRoutes: React.FC = () => (
       <Route path="/material-types" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><MaterialTypes /></ProtectedRoute>} />
       <Route path="/material-rates" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><MaterialRates /></ProtectedRoute>} />
       <Route path="/trip-data" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}><TripData /></ProtectedRoute>} />
+      <Route path="/trip-records" element={<ProtectedRoute roles={[Role.ADMIN]}><TripRecords /></ProtectedRoute>} />
       <Route path="/config-manager" element={<ProtectedRoute roles={[Role.ADMIN, Role.MANAGER]}><ConfigManager /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute roles={[Role.ADMIN]}><Users /></ProtectedRoute>} />
     </Route>
@@ -214,16 +210,42 @@ const AppRoutes: React.FC = () => (
 );
 
 
-const App: React.FC = () => (
-  <UIProvider>
-    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AuthProvider>
-        <DataProvider>
-          <AppRoutes />
-        </DataProvider>
-      </AuthProvider>
-    </HashRouter>
-  </UIProvider>
-);
+const App: React.FC = () => {
+  useEffect(() => {
+    const handleWheel = (event: WheelEvent) => {
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement && active.type === 'number') {
+        event.preventDefault();
+        active.blur();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLInputElement)) return;
+      if (active.type !== 'number') return;
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  return (
+    <UIProvider>
+      <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <AuthProvider>
+          <DataProvider>
+            <AppRoutes />
+          </DataProvider>
+        </AuthProvider>
+      </HashRouter>
+    </UIProvider>
+  );
+};
 
 export default App;

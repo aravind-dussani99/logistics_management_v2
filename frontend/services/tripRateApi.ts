@@ -20,6 +20,7 @@ export type TripRateApplyPayload = {
   applyScope?: 'trip' | 'range';
   effectiveFrom?: string;
   effectiveTo?: string;
+  rateSource?: 'combo';
 };
 
 export const tripRateApi = {

@@ -20,6 +20,12 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLText
     const inputName = props.name || inputId;
     const rawValue = props.value ?? '';
     const inputValue = props.type === 'number' && (rawValue === 0 || rawValue === '0') ? '' : rawValue;
+    const handleWheel: React.WheelEventHandler<HTMLInputElement> = event => {
+        if (props.type === 'number') {
+            event.currentTarget.blur();
+        }
+        props.onWheel?.(event);
+    };
     return (
         <div className="col-span-1">
             {isReadOnly ? (
@@ -34,7 +40,14 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLText
             ) : props.type === 'textarea' ? (
                  <textarea {...props as React.TextareaHTMLAttributes<HTMLTextAreaElement>} id={inputId} name={inputName} rows={2} value={rawValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
             ) : (
-                 <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+                 <input
+                    {...props as React.InputHTMLAttributes<HTMLInputElement>}
+                    id={inputId}
+                    name={inputName}
+                    value={inputValue}
+                    onWheel={handleWheel}
+                    className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
+                />
             )}
         </div>
     );

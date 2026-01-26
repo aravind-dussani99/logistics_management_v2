@@ -8,6 +8,10 @@ interface PaymentFormProps {
   onSave: (data: Omit<Payment, 'id'>, id?: string) => void;
   onClose: () => void;
   isViewMode?: boolean;
+  submitLabel?: string;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  hideSecondary?: boolean;
 }
 
 const getTodayDate = () => {
@@ -15,7 +19,16 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
-const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose, isViewMode = false }) => {
+const PaymentForm: React.FC<PaymentFormProps> = ({
+  initialData,
+  onSave,
+  onClose,
+  isViewMode = false,
+  submitLabel = 'Save Payment',
+  secondaryLabel,
+  onSecondary,
+  hideSecondary = false,
+}) => {
   const { vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, trips, payments } = useData();
   const [date, setDate] = useState(initialData?.date?.split('T')[0] || getTodayDate());
   const [type, setType] = useState<PaymentType>(initialData?.type || PaymentType.PAYMENT);
@@ -32,6 +45,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
   const [paymentReceiptFiles, setPaymentReceiptFiles] = useState<TripUploadFile[]>([]);
   const [bankAccountFiles, setBankAccountFiles] = useState<TripUploadFile[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showOptional, setShowOptional] = useState(isViewMode);
+  const isReceipt = type === PaymentType.RECEIPT;
+  const fromLabel = isReceipt ? 'From Name' : 'From';
+  const toLabel = isReceipt ? 'To Account' : 'To';
 
   const parseUploadValue = (value?: TripUploadPayload | string | null) => {
     if (!value) return [];
@@ -157,8 +174,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     };
 
     trips.forEach(trip => {
-      addTripAmount(trip.vendorName || '', Number(trip.revenue || 0));
-      addTripAmount(trip.customer || '', Number(trip.revenue || 0));
+      const customerName = trip.actualVendorCustomerName || trip.customer || '';
+      addTripAmount(customerName, Number(trip.revenue || 0));
       addTripAmount(trip.quarryName || '', Number(trip.materialCost || 0));
       addTripAmount(trip.transporterName || '', Number(trip.transportCost || 0));
       addTripAmount(trip.royaltyOwnerName || '', Number(trip.royaltyCost || 0));
@@ -310,7 +327,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
     setErrorMessage('');
 
     if (!date || !type || !fromAccount || !ratePartyName || !amount || !remarks) {
-      setErrorMessage('Date, transaction type, from account, counterparty name, amount, and remarks are required.');
+      setErrorMessage('Date, transaction type, from, to, amount, and remarks are required.');
       return;
     }
 
@@ -377,7 +394,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
           </select>
         </div>
         <div>
-          <label htmlFor="from-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">From Account *</label>
+          <label htmlFor="from-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{fromLabel} *</label>
           <input
             id="from-account"
             type="text"
@@ -392,7 +409,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
           )}
         </div>
         <div>
-          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Counterparty Name *</label>
+          <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{toLabel} *</label>
           <input
             id="rate-party-name"
             type="text"
@@ -414,25 +431,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              onWheel={(event) => event.currentTarget.blur()}
               required
               disabled={isViewMode}
               placeholder="Enter amount"
               className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 sm:max-w-[11rem]"
             />
-            {(projectedFromBalance !== undefined || projectedRatePartyBalance !== undefined) && (
-              <div className="space-y-3 text-sm font-semibold text-gray-600 dark:text-gray-300 sm:ml-28 sm:-mt-8">
-                {projectedFromBalance !== undefined && (
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">From after:</div>
-                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedFromBalance)}</div>
-                  </div>
-                )}
-                {projectedRatePartyBalance !== undefined && (
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Counterparty after:</div>
-                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
-                  </div>
-                )}
+            {projectedRatePartyBalance !== undefined && (
+              <div className="text-sm font-semibold text-gray-600 dark:text-gray-300 sm:ml-28 sm:-mt-8">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">To after:</div>
+                  <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
+                </div>
               </div>
             )}
           </div>
@@ -450,9 +460,35 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
         </div>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
-        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Optional Details</h4>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={showOptional}
+            onChange={(event) => setShowOptional(event.target.checked)}
+            disabled={isViewMode}
+          />
+          Optional Fields
+        </label>
+        <div className="flex items-center gap-3">
+          {!hideSecondary && (
+            <button
+              type="button"
+              onClick={onSecondary || onClose}
+              className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
+            >
+              {isViewMode ? 'Close' : (secondaryLabel || 'Cancel')}
+            </button>
+          )}
+          {!isViewMode && (
+            <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none">
+              {submitLabel}
+            </button>
+          )}
+        </div>
+      </div>
+      {showOptional && (
+        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>
             <label htmlFor="head-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Head Account</label>
             <input
@@ -561,7 +597,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
             )}
           </div>
         </div>
-      </div>
+      )}
 
       <datalist id="account-list">
         {accountOptions.map(value => (
@@ -589,16 +625,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ initialData, onSave, onClose,
         <option value="Maintenance" />
       </datalist>
 
-      <div className="pt-4 flex justify-end space-x-3">
-        <button type="button" onClick={onClose} className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none">
-          {isViewMode ? 'Close' : 'Cancel'}
-        </button>
-        {!isViewMode && (
-          <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none">
-            Save Payment
-          </button>
-        )}
-      </div>
     </form>
   );
 };

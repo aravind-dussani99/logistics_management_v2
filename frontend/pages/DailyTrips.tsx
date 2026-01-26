@@ -15,7 +15,7 @@ import AlertDialog from '../components/AlertDialog';
 import RequestDialog from '../components/RequestDialog';
 import { notificationApi } from '../services/notificationApi';
 
-const TRIPS_PER_PAGE = 20;
+const TRIPS_PER_PAGE = 10;
 
 const getMtdRange = () => {
     const today = new Date();
@@ -207,6 +207,10 @@ const DailyTrips: React.FC = () => {
         setAllData({ quarries, vehicles, customers: customerRates, royaltyOwners: uniqueRoyaltyOwners as string[] });
     }, [refreshKey, trips]);
 
+    const handleFilterChange = (nextFilters: Filters) => {
+        setFilters(nextFilters);
+    };
+
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const notificationId = params.get('notificationId');
@@ -282,7 +286,7 @@ const DailyTrips: React.FC = () => {
                 title="Trip Management"
                 subtitle={dateRangeSubtitle}
                 filters={filters}
-                onFilterChange={setFilters}
+                onFilterChange={handleFilterChange}
                 filterData={allData}
                 showFilters={['date', 'transporter', 'quarry']}
                 showMoreFilters={['vehicle', 'vendor', 'transportOwner', 'mine', 'material', 'royalty']}
@@ -423,6 +427,8 @@ const DailyTrips: React.FC = () => {
                     currentPage={currentPage}
                     totalPages={totalPages}
                     onPageChange={setCurrentPage}
+                    totalItems={filteredTrips.length}
+                    pageSize={TRIPS_PER_PAGE}
                 />
             </main>
         </div>

@@ -234,7 +234,13 @@ const Dashboard: React.FC = () => {
                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Showing the last 30 filtered trips. Click 'Show All' for the complete history.</p>
                         </div>
                         <div className="flex items-center gap-4">
-                            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+                            <Pagination
+                              currentPage={currentPage}
+                              totalPages={totalPages}
+                              onPageChange={setCurrentPage}
+                              totalItems={recent30Trips.length}
+                              pageSize={TRIPS_PER_PAGE}
+                            />
                             <Link to="/trips" className="text-sm font-medium text-primary hover:underline flex-shrink-0">Show All</Link>
                         </div>
                     </div>

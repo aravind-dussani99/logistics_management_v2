@@ -178,10 +178,32 @@ export default function CustomerMaterialRatesPage() {
                       <>
                         <TableCell><TextField name="customer" value={editRow.customer || ''} onChange={handleEditChange} size="small" variant="standard" /></TableCell>
                         <TableCell><TextField name="material" value={editRow.material || ''} onChange={handleEditChange} size="small" variant="standard" /></TableCell>
-                        <TableCell><TextField name="rate" value={editRow.rate || ''} onChange={handleEditChange} type="number" size="small" variant="standard" /></TableCell>
+                        <TableCell>
+                          <TextField
+                            name="rate"
+                            value={editRow.rate || ''}
+                            onChange={handleEditChange}
+                            type="number"
+                            size="small"
+                            variant="standard"
+                            inputProps={{ inputMode: 'decimal' }}
+                            onWheel={(event) => (event.target as HTMLInputElement).blur()}
+                          />
+                        </TableCell>
                         <TableCell><TextField name="from" value={editRow.from || ''} onChange={handleEditChange} type="date" size="small" InputLabelProps={{ shrink: true }} variant="standard" /></TableCell>
                         <TableCell><TextField name="to" value={editRow.to || ''} onChange={handleEditChange} type="date" size="small" InputLabelProps={{ shrink: true }} variant="standard" /></TableCell>
-                        <TableCell><TextField name="rejectionPercent" value={editRow.rejectionPercent || ''} onChange={handleEditChange} type="number" size="small" variant="standard" /></TableCell>
+                        <TableCell>
+                          <TextField
+                            name="rejectionPercent"
+                            value={editRow.rejectionPercent || ''}
+                            onChange={handleEditChange}
+                            type="number"
+                            size="small"
+                            variant="standard"
+                            inputProps={{ inputMode: 'decimal' }}
+                            onWheel={(event) => (event.target as HTMLInputElement).blur()}
+                          />
+                        </TableCell>
                         <TableCell><TextField name="rejectionRemarks" value={editRow.rejectionRemarks || ''} onChange={handleEditChange} size="small" variant="standard" /></TableCell>
                         <TableCell><TextField name="locationFrom" value={editRow.locationFrom || ''} onChange={handleEditChange} size="small" variant="standard" /></TableCell>
                         <TableCell><TextField name="locationTo" value={editRow.locationTo || ''} onChange={handleEditChange} size="small" variant="standard" /></TableCell>
@@ -229,13 +251,36 @@ export default function CustomerMaterialRatesPage() {
                 {/* FIX: Add 'item' prop */}
                 <Grid item xs={12} sm={6} md={4} lg={2}><TextField label="Material Type" name="material" value={form.material} onChange={handleChange} fullWidth required /></Grid>
                 {/* FIX: Add 'item' prop */}
-                <Grid item xs={12} sm={6} md={4} lg={1.5}><TextField label="Rate (₹/ton)" name="rate" value={form.rate} onChange={handleChange} type="number" fullWidth required /></Grid>
+                <Grid item xs={12} sm={6} md={4} lg={1.5}>
+                  <TextField
+                    label="Rate (₹/ton)"
+                    name="rate"
+                    value={form.rate}
+                    onChange={handleChange}
+                    type="number"
+                    fullWidth
+                    required
+                    inputProps={{ inputMode: 'decimal' }}
+                    onWheel={(event) => (event.target as HTMLInputElement).blur()}
+                  />
+                </Grid>
                 {/* FIX: Add 'item' prop */}
                 <Grid item xs={12} sm={6} md={4} lg={1.5}><TextField label="Date From" name="from" value={form.from} onChange={handleChange} type="date" InputLabelProps={{ shrink: true }} fullWidth required /></Grid>
                 {/* FIX: Add 'item' prop */}
                 <Grid item xs={12} sm={6} md={4} lg={1.5}><TextField label="Date To" name="to" value={form.to} onChange={handleChange} type="date" InputLabelProps={{ shrink: true }} fullWidth /></Grid>
                 {/* FIX: Add 'item' prop */}
-                <Grid item xs={12} sm={6} md={4} lg={1}><TextField label="Rejection %" name="rejectionPercent" value={form.rejectionPercent} onChange={handleChange} type="number" fullWidth /></Grid>
+                <Grid item xs={12} sm={6} md={4} lg={1}>
+                  <TextField
+                    label="Rejection %"
+                    name="rejectionPercent"
+                    value={form.rejectionPercent}
+                    onChange={handleChange}
+                    type="number"
+                    fullWidth
+                    inputProps={{ inputMode: 'decimal' }}
+                    onWheel={(event) => (event.target as HTMLInputElement).blur()}
+                  />
+                </Grid>
                 {/* FIX: Add 'item' prop */}
                 <Grid item xs={12} sm={6} md={4} lg={2}><TextField label="Rejection Remarks" name="rejectionRemarks" value={form.rejectionRemarks} onChange={handleChange} fullWidth /></Grid>
                 {/* FIX: Add 'item' prop */}

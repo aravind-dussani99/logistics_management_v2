@@ -7,6 +7,12 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
     const inputId = props.id || props.name || toId(label);
     const inputName = props.name || inputId;
     const inputValue = props.type === 'number' && (props.value === 0 || props.value === '0') ? '' : props.value;
+    const handleWheel: React.WheelEventHandler<HTMLInputElement> = event => {
+        if (props.type === 'number') {
+            event.currentTarget.blur();
+        }
+        props.onWheel?.(event);
+    };
     return (
         <div className="col-span-1">
             <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
@@ -15,7 +21,14 @@ const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLSele
             ) : props.type === 'select' ? (
                  <select {...props as React.SelectHTMLAttributes<HTMLSelectElement>} id={inputId} name={inputName} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm">{props.children}</select>
             ) : (
-                 <input {...props as React.InputHTMLAttributes<HTMLInputElement>} id={inputId} name={inputName} value={inputValue} className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" />
+                 <input
+                    {...props as React.InputHTMLAttributes<HTMLInputElement>}
+                    id={inputId}
+                    name={inputName}
+                    value={inputValue}
+                    onWheel={handleWheel}
+                    className="mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
+                />
             )}
         </div>
     );
