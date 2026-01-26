@@ -437,20 +437,12 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               placeholder="Enter amount"
               className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900 sm:max-w-[11rem]"
             />
-            {(projectedFromBalance !== undefined || projectedRatePartyBalance !== undefined) && (
-              <div className="space-y-3 text-sm font-semibold text-gray-600 dark:text-gray-300 sm:ml-28 sm:-mt-8">
-                {projectedFromBalance !== undefined && (
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">From after:</div>
-                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedFromBalance)}</div>
-                  </div>
-                )}
-                {projectedRatePartyBalance !== undefined && (
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium text-gray-500 dark:text-gray-400">To after:</div>
-                    <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
-                  </div>
-                )}
+            {projectedRatePartyBalance !== undefined && (
+              <div className="text-sm font-semibold text-gray-600 dark:text-gray-300 sm:ml-28 sm:-mt-8">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">To after:</div>
+                  <div className="text-xl font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(projectedRatePartyBalance)}</div>
+                </div>
               </div>
             )}
           </div>

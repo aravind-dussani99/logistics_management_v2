@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useImperativeHandle } from 'react';
 import PageHeader from '../components/PageHeader';
+import Pagination from '../components/Pagination';
 import { useData } from '../contexts/DataContext';
 import { formatCurrency, formatDateDisplay } from '../utils';
 import { RatePartyType } from '../types';
@@ -20,7 +21,11 @@ type PaymentReconciliationProps = {
   dateTo?: string;
 };
 
-const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
+export type PaymentReconciliationHandle = {
+  buildPrintHtml: () => string | null;
+};
+
+const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, PaymentReconciliationProps>(({
   showHeader = true,
   initialMode = 'party',
   hideModeToggle = false,
@@ -28,7 +33,9 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
   hidePrint = false,
   dateFrom,
   dateTo,
-}) => {
+}, ref) => {
+  const PAYMENT_PAGE_SIZE = 40;
+  const TRIP_PAGE_SIZE = 40;
   const {
     trips,
     payments,
@@ -251,6 +258,10 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
           materialCost: matchedMaterial,
           transportCost: matchedTransport,
           royaltyCost: matchedRoyalty,
+          hasCustomer: matchesCustomer,
+          hasMine: !!matchesQuarry,
+          hasTransport: !!matchesTransport,
+          hasRoyalty: !!matchesRoyalty,
           customerRate: netWeight > 0 ? matchedRevenue / netWeight : 0,
           mineRate: netWeight > 0 ? matchedMaterial / netWeight : 0,
           transportRate: netWeight > 0 ? matchedTransport / netWeight : 0,
@@ -271,6 +282,10 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
         materialCost: number;
         transportCost: number;
         royaltyCost: number;
+        hasCustomer: boolean;
+        hasMine: boolean;
+        hasTransport: boolean;
+        hasRoyalty: boolean;
         customerRate: number;
         mineRate: number;
         transportRate: number;
@@ -280,10 +295,19 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
       }>;
   }, [filteredTrips, selectedPartyKey]);
 
-  const showCustomerColumns = selectedPartyTypes.has('vendor-customer');
-  const showMineColumns = selectedPartyTypes.has('mine-quarry');
-  const showTransportColumns = selectedPartyTypes.has('transport-owner');
-  const showRoyaltyColumns = selectedPartyTypes.has('royalty-owner');
+  const partyTripRowsSorted = useMemo(() => {
+    return [...partyTripRows].sort((a, b) => {
+      const aTime = new Date(a.date).getTime();
+      const bTime = new Date(b.date).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+      return a.id - b.id;
+    });
+  }, [partyTripRows]);
+
+  const showCustomerColumns = partyTripRowsSorted.some(row => row.hasCustomer);
+  const showMineColumns = partyTripRowsSorted.some(row => row.hasMine);
+  const showTransportColumns = partyTripRowsSorted.some(row => row.hasTransport);
+  const showRoyaltyColumns = partyTripRowsSorted.some(row => row.hasRoyalty);
   const tripColCount = 6
     + (showMineColumns ? 3 : 0)
     + (showTransportColumns ? 4 : 0)
@@ -356,26 +380,37 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
     return null;
   }, [ratePartyNameById, ratePartyTypeByName, selectedPartyTypes]);
 
+  const partyHasTrips = partyTripRows.length > 0;
+  const partyHasVendor = selectedPartyTypes.has('vendor-customer');
+  const partyHasSupplier = selectedPartyTypes.has('mine-quarry')
+    || selectedPartyTypes.has('transport-owner')
+    || selectedPartyTypes.has('royalty-owner');
+  const isCustomerParty = partyHasTrips && partyHasVendor && !partyHasSupplier;
+  const isSupplierParty = partyHasTrips && partyHasSupplier && !partyHasVendor;
+
   const partySummary: PartySummary = useMemo(() => {
     const tripTotal = partyTripRows.reduce((sum, row) => sum + row.amount, 0);
-    const paymentTotal = partyPaymentRows.reduce((sum, row) => {
+    const receivedTotal = partyPaymentRows.reduce((sum, row) => {
       const amount = Number(row.amount || 0);
-      const partyType = resolvePaymentPartyType(row);
-      if (!partyType) return sum;
-      const isCustomer = partyType === 'vendor-customer';
-      const signed = row.type === 'RECEIPT'
-        ? (isCustomer ? amount : -amount)
-        : (isCustomer ? -amount : amount);
-      return sum + signed;
+      return row.type === 'RECEIPT' ? sum + amount : sum;
     }, 0);
+    const paidTotal = partyPaymentRows.reduce((sum, row) => {
+      const amount = Number(row.amount || 0);
+      return row.type === 'PAYMENT' ? sum + amount : sum;
+    }, 0);
+    const netPayments = isSupplierParty ? paidTotal - receivedTotal : receivedTotal - paidTotal;
+    const paymentTotal = isCustomerParty
+      ? receivedTotal
+      : isSupplierParty
+        ? paidTotal
+        : receivedTotal + paidTotal;
     return {
       tripTotal,
       paymentTotal,
-      balance: tripTotal - paymentTotal,
+      balance: tripTotal - netPayments,
     };
-  }, [partyTripRows, partyPaymentRows, resolvePaymentPartyType]);
+  }, [partyTripRows, partyPaymentRows, isCustomerParty, isSupplierParty]);
 
-  const partyHasTrips = partyTripRows.length > 0;
   const partyPaymentTotals = useMemo(() => {
     if (!selectedPartyKey) return { inflow: 0, outflow: 0 };
     if (isAccountSelection) {
@@ -409,6 +444,26 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
   const partyPaymentBalance = partyHasTrips
     ? partySummary.balance
     : partyPaymentTotals.inflow - partyPaymentTotals.outflow;
+  const paymentTotalLabel = partyHasTrips
+    ? (isCustomerParty ? 'Received Total' : isSupplierParty ? 'Paid Total' : 'Payments Total')
+    : 'Total Out';
+  const balanceLabel = partyHasTrips
+    ? (partyPaymentBalance === 0
+      ? 'Settled'
+      : (partyPaymentBalance > 0
+        ? (isCustomerParty ? 'Under Received' : isSupplierParty ? 'Under Paid' : 'Balance')
+        : (isCustomerParty ? 'Over Received' : isSupplierParty ? 'Over Paid' : 'Balance')))
+    : 'Balance';
+  const balanceValue = partyHasTrips && balanceLabel !== 'Balance'
+    ? formatCurrency(Math.abs(partyPaymentBalance))
+    : formatCurrency(partyPaymentBalance);
+  const balanceTone = partyHasTrips
+    ? (partyPaymentBalance === 0
+      ? 'text-green-600 dark:text-green-400'
+      : (partyPaymentBalance > 0
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-rose-600 dark:text-rose-400'))
+    : 'text-gray-900 dark:text-gray-100';
 
   const partyTransactionRows = useMemo(() => {
     if (!selectedPartyKey) return [];
@@ -422,6 +477,21 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
       return (a.id || 0) - (b.id || 0);
     });
   }, [selectedPartyKey, partyHasTrips, isAccountSelection, accountStatementRows, partyPaymentRows, nonTripTransactionRows]);
+
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [tripPage, setTripPage] = useState(1);
+
+  useEffect(() => {
+    setPaymentPage(1);
+    setTripPage(1);
+  }, [selectedPartyKey, mode]);
+
+  const paymentTotalPages = Math.max(1, Math.ceil(partyTransactionRows.length / PAYMENT_PAGE_SIZE));
+  const tripTotalPages = Math.max(1, Math.ceil(partyTripRowsSorted.length / TRIP_PAGE_SIZE));
+  const paymentSliceStart = (paymentPage - 1) * PAYMENT_PAGE_SIZE;
+  const tripSliceStart = (tripPage - 1) * TRIP_PAGE_SIZE;
+  const paymentSlice = partyTransactionRows.slice(paymentSliceStart, paymentSliceStart + PAYMENT_PAGE_SIZE);
+  const tripSlice = partyTripRowsSorted.slice(tripSliceStart, tripSliceStart + TRIP_PAGE_SIZE);
 
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
@@ -464,7 +534,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
       ...(showRoyaltyColumns ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
       'Total Value',
     ];
-    const rows = partyTripRows.map(row => [
+    const rows = partyTripRowsSorted.map(row => [
       `#${row.id}`,
       formatDateDisplay(row.date),
       row.invoice || '-',
@@ -482,7 +552,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
 
   const handleExportPayments = () => {
     const header = ['Date', 'Type', 'From', 'To', 'Amount'];
-    const rows = partyPaymentRows.map(payment => [
+    const rows = partyTransactionRows.map(payment => [
       formatDateDisplay(payment.date),
       payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
       payment.fromAccount || '-',
@@ -492,8 +562,196 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
     exportCsv(`reconciliation_payments_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
   };
 
+  const buildPrintHtml = useCallback(() => {
+    if (mode === 'party' && !selectedParty) return null;
+    if (mode === 'head' && !selectedHeadAccount) return null;
+    const baseStyles = `
+      body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #e5e7eb; padding: 6px 8px; font-size: 12px; text-align: left; }
+      th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.02em; }
+      h2 { margin: 0 0 12px; }
+      h3 { margin: 18px 0 8px; }
+    `;
+
+    if (mode === 'party') {
+      let runningBalance = 0;
+      const paymentRowsHtml = partyTransactionRows.map(payment => {
+        const match = isAccountSelection ? resolveAccountMatch(payment, selectedPartyKey) : null;
+        const displayFrom = match?.viaCounterparty && match.fromMatch && !payment.fromAccount
+          ? selectedParty
+          : (payment.fromAccount || '-');
+        const displayTo = match?.viaCounterparty && match.toMatch && !payment.toAccount
+          ? selectedParty
+          : (payment.toAccount || '-');
+        const amountValue = Number(payment.amount || 0);
+        let delta = 0;
+        if (!partyHasTrips) {
+          if (isAccountSelection) {
+            if (match?.toMatch) delta += amountValue;
+            if (match?.fromMatch) delta -= amountValue;
+          } else {
+            delta = getCounterpartyDelta(payment, selectedPartyKey);
+          }
+        }
+        const openingBalance = runningBalance;
+        const closingBalance = openingBalance + delta;
+        runningBalance = closingBalance;
+        const balanceCells = !partyHasTrips
+          ? `<td>${formatCurrency(openingBalance)}</td><td>${formatCurrency(closingBalance)}</td>`
+          : '';
+        return `
+          <tr>
+            <td>${formatDateDisplay(payment.date)}</td>
+            <td>${payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
+            <td>${displayFrom}</td>
+            <td>${displayTo}</td>
+            <td>${formatCurrency(amountValue)}</td>
+            ${balanceCells}
+          </tr>
+        `;
+      }).join('');
+
+      const paymentHeader = `
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Amount</th>
+          ${!partyHasTrips ? '<th>Opening Balance</th><th>Closing Balance</th>' : ''}
+        </tr>
+      `;
+
+      const tripsHeader = `
+        <tr>
+          <th>Trip #</th>
+          <th>Date</th>
+          <th>Invoice/DC</th>
+          ${showMineColumns ? '<th>Material</th>' : ''}
+          ${showTransportColumns ? '<th>Pickup</th><th>Drop-off</th>' : ''}
+          <th>Net Qty</th>
+          ${showCustomerColumns ? '<th>Customer Rate/Ton</th><th>Customer Amount</th>' : ''}
+          ${showMineColumns ? '<th>Mine Rate/Ton</th><th>Mine Amount</th>' : ''}
+          ${showTransportColumns ? '<th>Transport Rate/Ton</th><th>Transport Amount</th>' : ''}
+          ${showRoyaltyColumns ? '<th>Royalty Rate/Ton</th><th>Royalty Amount</th>' : ''}
+          <th>Total Value</th>
+        </tr>
+      `;
+
+      const tripsRowsHtml = partyTripRowsSorted.map(row => `
+        <tr>
+          <td>#${row.id}</td>
+          <td>${formatDateDisplay(row.date)}</td>
+          <td>${row.invoice || '-'}</td>
+          ${showMineColumns ? `<td>${row.material || '-'}</td>` : ''}
+          ${showTransportColumns ? `<td>${row.pickupPlace || '-'}</td><td>${row.dropOffPlace || '-'}</td>` : ''}
+          <td>${row.netWeight.toFixed(2)}</td>
+          ${showCustomerColumns ? `<td>${formatCurrency(row.customerRate)}</td><td>${formatCurrency(row.revenue)}</td>` : ''}
+          ${showMineColumns ? `<td>${formatCurrency(row.mineRate)}</td><td>${formatCurrency(row.materialCost)}</td>` : ''}
+          ${showTransportColumns ? `<td>${formatCurrency(row.transportRate)}</td><td>${formatCurrency(row.transportCost)}</td>` : ''}
+          ${showRoyaltyColumns ? `<td>${formatCurrency(row.royaltyRate)}</td><td>${formatCurrency(row.royaltyCost)}</td>` : ''}
+          <td>${formatCurrency(row.totalValue)}</td>
+        </tr>
+      `).join('');
+
+      const tripsTable = partyHasTrips ? `
+        <h3>Trips</h3>
+        <table>
+          <thead>${tripsHeader}</thead>
+          <tbody>${tripsRowsHtml || `<tr><td colspan="${tripColCount}">No trips found for this rate party.</td></tr>`}</tbody>
+        </table>
+      ` : '';
+
+      return `
+        <html>
+          <head>
+            <title>Payment Reconciliation</title>
+            <style>${baseStyles}</style>
+          </head>
+          <body>
+            <h2>Payment Reconciliation</h2>
+            <div><strong>Name/Account:</strong> ${selectedParty}</div>
+            <h3>${partyHasTrips ? 'Payments' : 'Transactions'}</h3>
+            <table>
+              <thead>${paymentHeader}</thead>
+              <tbody>${paymentRowsHtml || `<tr><td colspan="${partyHasTrips ? 5 : 7}">No transactions found for this selection.</td></tr>`}</tbody>
+            </table>
+            ${tripsTable}
+          </body>
+        </html>
+      `;
+    }
+
+    const headRowsHtml = headPaymentRows.map(payment => `
+      <tr>
+        <td>${formatDateDisplay(payment.date)}</td>
+        <td>${payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
+        <td>${payment.fromAccount || '-'}</td>
+        <td>${payment.toAccount || '-'}</td>
+        <td>${formatCurrency(Number(payment.amount || 0))}</td>
+        <td>${payment.ratePartyName || '-'}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <html>
+        <head>
+          <title>Payment Reconciliation</title>
+          <style>${baseStyles}</style>
+        </head>
+        <body>
+          <h2>Payment Reconciliation</h2>
+          <div><strong>Head Account:</strong> ${selectedHeadAccount}</div>
+          <h3>Head Account Payments</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Amount</th>
+                <th>Name</th>
+              </tr>
+            </thead>
+            <tbody>${headRowsHtml || '<tr><td colspan="6">No payments found for this head account.</td></tr>'}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+  }, [
+    mode,
+    selectedParty,
+    selectedHeadAccount,
+    selectedPartyKey,
+    resolveAccountMatch,
+    partyTransactionRows,
+    partyHasTrips,
+    isAccountSelection,
+    headPaymentRows,
+    partyTripRowsSorted,
+    showMineColumns,
+    showTransportColumns,
+    showCustomerColumns,
+    showRoyaltyColumns,
+    tripColCount,
+    getCounterpartyDelta,
+  ]);
+
+  useImperativeHandle(ref, () => ({
+    buildPrintHtml,
+  }), [buildPrintHtml]);
+
   const handlePrint = () => {
-    window.print();
+    const html = buildPrintHtml();
+    if (!html) return;
+    const popup = window.open('', '_blank', 'width=1000,height=700');
+    if (!popup) return;
+    popup.document.write(html);
+    popup.document.close();
+    popup.focus();
+    popup.print();
   };
 
   return (
@@ -572,14 +830,14 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                     </p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">{partyHasTrips ? 'Payments Total' : 'Total Out'}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{paymentTotalLabel}</p>
                     <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                       {partyHasTrips ? formatCurrency(partySummary.paymentTotal) : formatCurrency(partyPaymentTotals.outflow)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">Balance</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(partyPaymentBalance)}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{balanceLabel}</p>
+                    <p className={`text-lg font-semibold ${balanceTone}`}>{balanceValue}</p>
                   </div>
                 </div>
               )}
@@ -636,6 +894,13 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                   </button>
                 )}
               </div>
+              <Pagination
+                currentPage={paymentPage}
+                totalPages={paymentTotalPages}
+                onPageChange={setPaymentPage}
+                totalItems={partyTransactionRows.length}
+                pageSize={PAYMENT_PAGE_SIZE}
+              />
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -653,7 +918,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                 <tbody>
                   {(() => {
                     let runningBalance = 0;
-                    return partyTransactionRows.map(payment => {
+                    return paymentSlice.map(payment => {
                     const match = isAccountSelection ? resolveAccountMatch(payment, selectedPartyKey) : null;
                     const displayFrom = match?.viaCounterparty && match.fromMatch && !payment.fromAccount
                       ? selectedParty
@@ -720,6 +985,13 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                   </button>
                 )}
               </div>
+              <Pagination
+                currentPage={tripPage}
+                totalPages={tripTotalPages}
+                onPageChange={setTripPage}
+                totalItems={partyTripRowsSorted.length}
+                pageSize={TRIP_PAGE_SIZE}
+              />
             </div>
             <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -744,7 +1016,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {partyTripRows.map(row => (
+                  {tripSlice.map(row => (
                     <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
                       <td className="px-4 py-3">#{row.id}</td>
                       <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
@@ -764,7 +1036,7 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
                     <td className="px-4 py-3">{formatCurrency(row.totalValue)}</td>
                     </tr>
                   ))}
-                  {partyTripRows.length === 0 && (
+                  {partyTripRowsSorted.length === 0 && (
                     <tr>
                       <td colSpan={tripColCount} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
                     </tr>
@@ -817,6 +1089,8 @@ const PaymentReconciliation: React.FC<PaymentReconciliationProps> = ({
       )}
     </div>
   );
-};
+});
+
+PaymentReconciliation.displayName = 'PaymentReconciliation';
 
 export default PaymentReconciliation;

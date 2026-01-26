@@ -137,6 +137,8 @@ export interface DailyExpense {
     amount: number;
     category?: string;
     subCategory?: string;
+    paymentReceiptUploads?: TripUploadPayload | null;
+    bankAccountUploads?: TripUploadPayload | null;
     remarks: string;
     availableBalance: number;
     closingBalance: number;
