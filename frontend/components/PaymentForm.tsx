@@ -460,7 +460,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         </div>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
         <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
           <input
             type="checkbox"
@@ -470,8 +470,25 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           />
           Optional Fields
         </label>
-        {showOptional && (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="flex items-center gap-3">
+          {!hideSecondary && (
+            <button
+              type="button"
+              onClick={onSecondary || onClose}
+              className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
+            >
+              {isViewMode ? 'Close' : (secondaryLabel || 'Cancel')}
+            </button>
+          )}
+          {!isViewMode && (
+            <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none">
+              {submitLabel}
+            </button>
+          )}
+        </div>
+      </div>
+      {showOptional && (
+        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <div>
             <label htmlFor="head-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Head Account</label>
             <input
@@ -579,9 +596,8 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               />
             )}
           </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <datalist id="account-list">
         {accountOptions.map(value => (
@@ -609,22 +625,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         <option value="Maintenance" />
       </datalist>
 
-      <div className="pt-4 flex justify-end space-x-3">
-        {!hideSecondary && (
-          <button
-            type="button"
-            onClick={onSecondary || onClose}
-            className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
-          >
-            {isViewMode ? 'Close' : (secondaryLabel || 'Cancel')}
-          </button>
-        )}
-        {!isViewMode && (
-          <button type="submit" className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none">
-            {submitLabel}
-          </button>
-        )}
-      </div>
     </form>
   );
 };

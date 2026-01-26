@@ -114,7 +114,6 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   const [paymentReceiptFiles, setPaymentReceiptFiles] = useState<TripUploadFile[]>([]);
   const [bankAccountFiles, setBankAccountFiles] = useState<TripUploadFile[]>([]);
   const [expenseBreakdown, setExpenseBreakdown] = useState('');
-  const [amountManuallyEdited, setAmountManuallyEdited] = useState(false);
 
   const safeExpenses = Array.isArray(expenses) ? expenses : [];
   const allDestinations = useMemo(() => Array.from(new Set(safeExpenses.map(e => e.to))), [safeExpenses]);
@@ -221,12 +220,12 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className="p-8 space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="sm:col-span-3 flex justify-around p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-          <div className="text-center">
+        <div className="sm:col-span-3 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center dark:border-gray-700 dark:bg-gray-900/40">
             <p className="text-sm text-gray-500 dark:text-gray-400">Available Balance</p>
             <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(availableBalance)}</p>
           </div>
-          <div className="text-center">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center dark:border-gray-700 dark:bg-gray-900/40">
             <p className="text-sm text-gray-500 dark:text-gray-400">Closing Balance</p>
             <p className={`text-2xl font-bold ${isLowBalance ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'}`}>
               {formatCurrency(closingBalance)}
@@ -271,27 +270,13 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
             onChange={e => {
               const value = e.target.value;
               setExpenseBreakdown(value);
-              if (!amountManuallyEdited) {
-                const total = getBreakdownTotal(value);
-                setFormData(p => ({ ...p, amount: total }));
-              }
+              const total = getBreakdownTotal(value);
+              setFormData(p => ({ ...p, amount: total }));
             }}
             isReadOnly={isViewMode}
           />
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
             <span>Breakdown total: {formatCurrency(breakdownTotal)}</span>
-            {!isViewMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAmountManuallyEdited(false);
-                  setFormData(p => ({ ...p, amount: breakdownTotal }));
-                }}
-                className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-              >
-                Use breakdown total
-              </button>
-            )}
           </div>
         </div>
 
@@ -303,7 +288,6 @@ const DailyExpenseForm: React.FC<DailyExpenseFormProps> = ({
           step="0.01"
           value={formData.amount}
           onChange={e => {
-            setAmountManuallyEdited(true);
             setFormData(p => ({ ...p, amount: e.target.value === '' ? '' : parseFloat(e.target.value) }));
           }}
           isReadOnly={isViewMode}

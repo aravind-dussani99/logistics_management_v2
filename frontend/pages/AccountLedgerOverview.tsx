@@ -402,17 +402,17 @@ const AccountLedgerOverview: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => setActiveTab('abstract')}
-            className={`rounded-md px-4 py-2 text-sm font-semibold ${activeTab === 'abstract' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
-          >
-            Abstract
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveTab('history')}
             className={`rounded-md px-4 py-2 text-sm font-semibold ${activeTab === 'history' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
           >
             Historical Abstract
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('abstract')}
+            className={`rounded-md px-4 py-2 text-sm font-semibold ${activeTab === 'abstract' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
+          >
+            Abstract
           </button>
           <button
             type="button"

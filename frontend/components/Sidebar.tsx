@@ -41,7 +41,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/royalty-stock', icon: 'cube-outline', name: 'Royalty Stock', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
         // Advances deprecated
         { to: '/report', icon: 'document-text-outline', name: 'Report', roles: [Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT] },
-        { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
       ],
     },
     {
@@ -96,7 +95,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
     { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
     { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
-    { to: '/payment-reconciliation', icon: 'clipboard-outline', name: 'Payment Reconciliation' },
   ];
 
   const supervisorItems = isDropOffSupervisor
