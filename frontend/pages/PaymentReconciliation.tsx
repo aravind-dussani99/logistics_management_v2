@@ -939,14 +939,16 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                       <tr>
+                        <th className="px-4 py-3 text-left">S. No.</th>
                         <th className="px-4 py-3 text-left">From</th>
                         <th className="px-4 py-3 text-left">Transactions</th>
                         <th className="px-4 py-3 text-left">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {accountCreditSummary.map(item => (
+                      {accountCreditSummary.map((item, index) => (
                         <tr key={item.name} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">{index + 1}</td>
                           <td className="px-4 py-3">{item.name}</td>
                           <td className="px-4 py-3">{item.count}</td>
                           <td className="px-4 py-3">{formatCurrency(item.total)}</td>
@@ -954,7 +956,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                       ))}
                       {accountCreditSummary.length === 0 && (
                         <tr>
-                          <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500">No credits found for this selection.</td>
+                          <td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-500">No credits found for this selection.</td>
                         </tr>
                       )}
                     </tbody>
@@ -969,14 +971,16 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                       <tr>
+                        <th className="px-4 py-3 text-left">S. No.</th>
                         <th className="px-4 py-3 text-left">To</th>
                         <th className="px-4 py-3 text-left">Transactions</th>
                         <th className="px-4 py-3 text-left">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {accountDebitSummary.map(item => (
+                      {accountDebitSummary.map((item, index) => (
                         <tr key={item.name} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">{index + 1}</td>
                           <td className="px-4 py-3">{item.name}</td>
                           <td className="px-4 py-3">{item.count}</td>
                           <td className="px-4 py-3">{formatCurrency(item.total)}</td>
@@ -984,7 +988,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                       ))}
                       {accountDebitSummary.length === 0 && (
                         <tr>
-                          <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500">No debits found for this selection.</td>
+                          <td colSpan={4} className="px-4 py-6 text-center text-sm text-gray-500">No debits found for this selection.</td>
                         </tr>
                       )}
                     </tbody>
@@ -1027,6 +1031,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                   <tr>
+                    <th className="px-4 py-3 text-left">S. No.</th>
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Type</th>
                     <th className="px-4 py-3 text-left">From</th>
@@ -1039,7 +1044,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                 <tbody>
                   {(() => {
                     let runningBalance = 0;
-                    return paymentSlice.map(payment => {
+                    return paymentSlice.map((payment, index) => {
                     const { match, displayFrom, displayTo } = isAccountSelection ? getAccountDisplay(payment) : { match: null, displayFrom: payment.fromAccount || '-', displayTo: payment.toAccount || '-' };
                     const amountValue = Number(payment.amount || 0);
                     let delta = 0;
@@ -1056,6 +1061,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                     runningBalance = closingBalance;
                     return (
                       <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="px-4 py-3">{paymentSliceStart + index + 1}</td>
                         <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                         <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                         <td className="px-4 py-3">{displayFrom}</td>
@@ -1069,7 +1075,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   })()}
                   {partyTransactionRows.length === 0 && (
                     <tr>
-                      <td colSpan={partyHasTrips ? 5 : 7} className="px-4 py-6 text-center text-sm text-gray-500">
+                      <td colSpan={partyHasTrips ? 6 : 8} className="px-4 py-6 text-center text-sm text-gray-500">
                         No transactions found for this selection.
                       </td>
                     </tr>
@@ -1089,6 +1095,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                       <tr>
+                        <th className="px-4 py-3 text-left">S. No.</th>
                         <th className="px-4 py-3 text-left">Date</th>
                         <th className="px-4 py-3 text-left">Type</th>
                         <th className="px-4 py-3 text-left">From</th>
@@ -1101,7 +1108,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                     <tbody>
                       {(() => {
                         let runningBalance = 0;
-                        return accountCreditRows.map(payment => {
+                        return accountCreditRows.map((payment, index) => {
                           const { displayFrom, displayTo } = getAccountDisplay(payment);
                           const amountValue = Number(payment.amount || 0);
                           const openingBalance = runningBalance;
@@ -1109,6 +1116,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                           runningBalance = closingBalance;
                           return (
                             <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">{index + 1}</td>
                               <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                               <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                               <td className="px-4 py-3">{displayFrom}</td>
@@ -1122,7 +1130,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                       })()}
                       {accountCreditRows.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
+                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
                             No credits found for this selection.
                           </td>
                         </tr>
@@ -1139,6 +1147,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                       <tr>
+                        <th className="px-4 py-3 text-left">S. No.</th>
                         <th className="px-4 py-3 text-left">Date</th>
                         <th className="px-4 py-3 text-left">Type</th>
                         <th className="px-4 py-3 text-left">From</th>
@@ -1151,7 +1160,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                     <tbody>
                       {(() => {
                         let runningBalance = 0;
-                        return accountDebitRows.map(payment => {
+                        return accountDebitRows.map((payment, index) => {
                           const { displayFrom, displayTo } = getAccountDisplay(payment);
                           const amountValue = Number(payment.amount || 0);
                           const openingBalance = runningBalance;
@@ -1159,6 +1168,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                           runningBalance = closingBalance;
                           return (
                             <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">{index + 1}</td>
                               <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                               <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                               <td className="px-4 py-3">{displayFrom}</td>
@@ -1172,7 +1182,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                       })()}
                       {accountDebitRows.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
+                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
                             No debits found for this selection.
                           </td>
                         </tr>
@@ -1217,6 +1227,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
             <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                   <tr>
+                    <th className="px-4 py-3 text-left">S. No.</th>
                     <th className="px-4 py-3 text-left">Trip #</th>
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Invoice/DC</th>
@@ -1236,8 +1247,9 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   </tr>
                 </thead>
                 <tbody>
-                  {tripSlice.map(row => (
+                  {tripSlice.map((row, index) => (
                     <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="px-4 py-3">{tripSliceStart + index + 1}</td>
                       <td className="px-4 py-3">#{row.id}</td>
                       <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
                       <td className="px-4 py-3">{row.invoice || '-'}</td>
@@ -1258,7 +1270,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   ))}
                   {partyTripRowsSorted.length === 0 && (
                     <tr>
-                      <td colSpan={tripColCount} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
+                      <td colSpan={tripColCount + 1} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
                     </tr>
                   )}
                 </tbody>
@@ -1278,6 +1290,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                 <tr>
+                  <th className="px-4 py-3 text-left">S. No.</th>
                   <th className="px-4 py-3 text-left">Date</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">From</th>
@@ -1287,8 +1300,9 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                 </tr>
               </thead>
               <tbody>
-                {headPaymentRows.map(payment => (
+                {headPaymentRows.map((payment, index) => (
                   <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="px-4 py-3">{index + 1}</td>
                     <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                     <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                     <td className="px-4 py-3">{payment.fromAccount || '-'}</td>
@@ -1299,7 +1313,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                 ))}
                 {headPaymentRows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">No payments found for this head account.</td>
+                    <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">No payments found for this head account.</td>
                   </tr>
                 )}
               </tbody>

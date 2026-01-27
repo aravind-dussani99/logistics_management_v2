@@ -831,7 +831,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now
-                showFilters={['date']}
+                showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
                 showAddAction={false}
             />
             <main className="pt-6">
