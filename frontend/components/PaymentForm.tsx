@@ -381,17 +381,25 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           />
         </div>
         <div>
-          <label htmlFor="payment-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transaction Type *</label>
-          <select
-            id="payment-type"
-            value={type}
-            onChange={(e) => setType(e.target.value as PaymentType)}
-            disabled={isViewMode}
-            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-          >
-            <option value={PaymentType.PAYMENT}>Payment Out</option>
-            <option value={PaymentType.RECEIPT}>Payment In</option>
-          </select>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transaction Type *</label>
+          <div className="mt-1 inline-flex w-full rounded-full border border-gray-300 bg-white p-1 shadow-sm dark:border-gray-600 dark:bg-gray-900">
+            <button
+              type="button"
+              onClick={() => setType(PaymentType.PAYMENT)}
+              disabled={isViewMode}
+              className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${type === PaymentType.PAYMENT ? 'bg-primary text-white shadow' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'}`}
+            >
+              Payment Out
+            </button>
+            <button
+              type="button"
+              onClick={() => setType(PaymentType.RECEIPT)}
+              disabled={isViewMode}
+              className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition ${type === PaymentType.RECEIPT ? 'bg-primary text-white shadow' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'}`}
+            >
+              Payment In
+            </button>
+          </div>
         </div>
         <div>
           <label htmlFor="from-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{fromLabel} *</label>

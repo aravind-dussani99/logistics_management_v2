@@ -493,6 +493,62 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
   const paymentSlice = partyTransactionRows.slice(paymentSliceStart, paymentSliceStart + PAYMENT_PAGE_SIZE);
   const tripSlice = partyTripRowsSorted.slice(tripSliceStart, tripSliceStart + TRIP_PAGE_SIZE);
 
+  const getAccountDisplay = useCallback((payment: (typeof payments)[number]) => {
+    const match = resolveAccountMatch(payment, selectedPartyKey);
+    const counterparty = payment.ratePartyName || '-';
+    const rawFrom = payment.fromAccount || '';
+    const rawTo = payment.toAccount || '';
+    const displayFrom = match?.viaCounterparty && match.fromMatch && !rawFrom
+      ? selectedParty
+      : (rawFrom || counterparty || '-');
+    const displayTo = match?.viaCounterparty && match.toMatch && !rawTo
+      ? selectedParty
+      : (rawTo || counterparty || '-');
+    return { match, displayFrom, displayTo };
+  }, [resolveAccountMatch, selectedPartyKey, selectedParty]);
+
+  const accountCreditRows = useMemo(() => {
+    if (!isAccountSelection) return [];
+    return accountStatementRows
+      .filter(payment => resolveAccountMatch(payment, selectedPartyKey)?.toMatch)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [accountStatementRows, isAccountSelection, resolveAccountMatch, selectedPartyKey]);
+
+  const accountDebitRows = useMemo(() => {
+    if (!isAccountSelection) return [];
+    return accountStatementRows
+      .filter(payment => resolveAccountMatch(payment, selectedPartyKey)?.fromMatch)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [accountStatementRows, isAccountSelection, resolveAccountMatch, selectedPartyKey]);
+
+  const accountCreditSummary = useMemo(() => {
+    if (!isAccountSelection) return [];
+    const map = new Map<string, { name: string; count: number; total: number }>();
+    accountCreditRows.forEach(payment => {
+      const { displayFrom } = getAccountDisplay(payment);
+      const key = displayFrom || '-';
+      const entry = map.get(key) || { name: key, count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += Number(payment.amount || 0);
+      map.set(key, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [accountCreditRows, isAccountSelection, getAccountDisplay]);
+
+  const accountDebitSummary = useMemo(() => {
+    if (!isAccountSelection) return [];
+    const map = new Map<string, { name: string; count: number; total: number }>();
+    accountDebitRows.forEach(payment => {
+      const { displayTo } = getAccountDisplay(payment);
+      const key = displayTo || '-';
+      const entry = map.get(key) || { name: key, count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += Number(payment.amount || 0);
+      map.set(key, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [accountDebitRows, isAccountSelection, getAccountDisplay]);
+
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
     const key = normalizeName(selectedHeadAccount);
@@ -873,6 +929,71 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
 
       {mode === 'party' && selectedParty && (
         <div className="space-y-6">
+          {isAccountSelection && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                  Credits Summary
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                      <tr>
+                        <th className="px-4 py-3 text-left">From</th>
+                        <th className="px-4 py-3 text-left">Transactions</th>
+                        <th className="px-4 py-3 text-left">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accountCreditSummary.map(item => (
+                        <tr key={item.name} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">{item.name}</td>
+                          <td className="px-4 py-3">{item.count}</td>
+                          <td className="px-4 py-3">{formatCurrency(item.total)}</td>
+                        </tr>
+                      ))}
+                      {accountCreditSummary.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500">No credits found for this selection.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                  Debits Summary
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                      <tr>
+                        <th className="px-4 py-3 text-left">To</th>
+                        <th className="px-4 py-3 text-left">Transactions</th>
+                        <th className="px-4 py-3 text-left">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accountDebitSummary.map(item => (
+                        <tr key={item.name} className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">{item.name}</td>
+                          <td className="px-4 py-3">{item.count}</td>
+                          <td className="px-4 py-3">{formatCurrency(item.total)}</td>
+                        </tr>
+                      ))}
+                      {accountDebitSummary.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-500">No debits found for this selection.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+          {!isAccountSelection && (
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
               <span>{partyHasTrips ? 'Payments' : 'Transactions'}</span>
@@ -919,13 +1040,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   {(() => {
                     let runningBalance = 0;
                     return paymentSlice.map(payment => {
-                    const match = isAccountSelection ? resolveAccountMatch(payment, selectedPartyKey) : null;
-                    const displayFrom = match?.viaCounterparty && match.fromMatch && !payment.fromAccount
-                      ? selectedParty
-                      : (payment.fromAccount || '-');
-                    const displayTo = match?.viaCounterparty && match.toMatch && !payment.toAccount
-                      ? selectedParty
-                      : (payment.toAccount || '-');
+                    const { match, displayFrom, displayTo } = isAccountSelection ? getAccountDisplay(payment) : { match: null, displayFrom: payment.fromAccount || '-', displayTo: payment.toAccount || '-' };
                     const amountValue = Number(payment.amount || 0);
                     let delta = 0;
                     if (!partyHasTrips) {
@@ -963,6 +1078,111 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
               </table>
             </div>
           </div>
+          )}
+          {isAccountSelection && (
+            <div className="space-y-6">
+              <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                  Credits Statement
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Type</th>
+                        <th className="px-4 py-3 text-left">From</th>
+                        <th className="px-4 py-3 text-left">To</th>
+                        <th className="px-4 py-3 text-left">Amount</th>
+                        <th className="px-4 py-3 text-left">Opening Balance</th>
+                        <th className="px-4 py-3 text-left">Closing Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        let runningBalance = 0;
+                        return accountCreditRows.map(payment => {
+                          const { displayFrom, displayTo } = getAccountDisplay(payment);
+                          const amountValue = Number(payment.amount || 0);
+                          const openingBalance = runningBalance;
+                          const closingBalance = openingBalance + amountValue;
+                          runningBalance = closingBalance;
+                          return (
+                            <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
+                              <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
+                              <td className="px-4 py-3">{displayFrom}</td>
+                              <td className="px-4 py-3">{displayTo}</td>
+                              <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
+                              <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>
+                              <td className="px-4 py-3">{formatCurrency(closingBalance)}</td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                      {accountCreditRows.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
+                            No credits found for this selection.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                  Debits Statement
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Type</th>
+                        <th className="px-4 py-3 text-left">From</th>
+                        <th className="px-4 py-3 text-left">To</th>
+                        <th className="px-4 py-3 text-left">Amount</th>
+                        <th className="px-4 py-3 text-left">Opening Balance</th>
+                        <th className="px-4 py-3 text-left">Closing Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        let runningBalance = 0;
+                        return accountDebitRows.map(payment => {
+                          const { displayFrom, displayTo } = getAccountDisplay(payment);
+                          const amountValue = Number(payment.amount || 0);
+                          const openingBalance = runningBalance;
+                          const closingBalance = openingBalance - amountValue;
+                          runningBalance = closingBalance;
+                          return (
+                            <tr key={payment.id} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
+                              <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
+                              <td className="px-4 py-3">{displayFrom}</td>
+                              <td className="px-4 py-3">{displayTo}</td>
+                              <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
+                              <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>
+                              <td className="px-4 py-3">{formatCurrency(closingBalance)}</td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                      {accountDebitRows.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
+                            No debits found for this selection.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
           {partyHasTrips && (
             <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">

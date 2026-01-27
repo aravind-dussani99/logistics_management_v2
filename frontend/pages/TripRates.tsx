@@ -510,7 +510,7 @@ const TripRateLedger: React.FC = () => {
   }, [trips, optimisticTripUpdates]);
 
   const filteredTrips = useMemo(() => {
-    return displayTrips.filter(trip => {
+    const filtered = displayTrips.filter(trip => {
       const tripDate = (trip.date || '').split('T')[0];
       if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
@@ -520,6 +520,11 @@ const TripRateLedger: React.FC = () => {
       if (filters.material && trip.material !== filters.material) return false;
       if (filters.royalty && trip.royaltyOwnerName !== filters.royalty) return false;
       return true;
+    });
+    return filtered.sort((a, b) => {
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return a.id - b.id;
     });
   }, [displayTrips, filters]);
 

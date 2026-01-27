@@ -163,17 +163,25 @@ const Bills: React.FC = () => {
     });
   }, [displayTrips, filters]);
 
-  const awaitingTrips = useMemo(() => filteredTrips.filter(trip => {
+  const sortedTrips = useMemo(() => {
+    return [...filteredTrips].sort((a, b) => {
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return a.id - b.id;
+    });
+  }, [filteredTrips]);
+
+  const awaitingTrips = useMemo(() => sortedTrips.filter(trip => {
     const hasRate = Number(trip.vendorCustomerRatePerTon || 0) > 0;
     const hasName = Boolean((trip.actualVendorCustomerName || '').trim());
     return !hasRate || !hasName;
-  }), [filteredTrips]);
+  }), [sortedTrips]);
 
-  const appliedTrips = useMemo(() => filteredTrips.filter(trip => {
+  const appliedTrips = useMemo(() => sortedTrips.filter(trip => {
     const hasRate = Number(trip.vendorCustomerRatePerTon || 0) > 0;
     const hasName = Boolean((trip.actualVendorCustomerName || '').trim());
     return hasRate && hasName;
-  }), [filteredTrips]);
+  }), [sortedTrips]);
 
   const awaitingTotal = awaitingTrips.length;
   const appliedTotal = appliedTrips.length;

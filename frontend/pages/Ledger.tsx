@@ -67,7 +67,7 @@ const Ledger: React.FC = () => {
         });
 
         return { 
-            filteredAndSortedEntries: filtered.reverse(),
+            filteredAndSortedEntries: filtered,
             totalInflow: currentInflow,
             totalOutflow: currentOutflow,
         };
