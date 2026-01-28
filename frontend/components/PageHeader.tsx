@@ -8,8 +8,8 @@ import SupervisorTripForm from './SupervisorTripForm';
 interface PageHeaderProps {
     title: string;
     subtitle?: string;
-    showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
-    showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty')[];
+    showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
+    showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
     filters: Filters;
     onFilterChange: (filters: Filters) => void;
     filterData: {
@@ -175,6 +175,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         }
         setDraftFilters(prev => ({ ...prev, [key]: value }));
     };
+    const updateInlineFilter = (key: keyof Filters, value: string) => {
+        if (useDraftFilters) {
+            updateDraft(key, value);
+        } else {
+            onFilterChange({ ...filters, [key]: value });
+        }
+    };
     const applyDraftFilters = () => {
         if (!useDraftFilters) return;
         const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -206,10 +213,163 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     <h1 className="text-3xl font-semibold text-gray-800 dark:text-white flex-shrink-0">{title}</h1>
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
                 </div>
-                {(showFilters.includes('singleDate') || showFilters.includes('date')) && (
-                    <div className="hidden lg:flex items-end gap-2 flex-grow min-w-0 justify-end">
+                {(showFilters.length > 0) && (
+                    <div className="hidden lg:flex flex-wrap items-end gap-2 flex-grow min-w-0 justify-end">
+                        {showFilters.includes('vehicle') && (
+                            <div className="min-w-[160px] max-w-[220px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Vehicle</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).vehicle || ''}
+                                    onChange={e => updateInlineFilter('vehicle', e.target.value)}
+                                >
+                                    <option value="">All Vehicles</option>
+                                    {vehicles.map(vehicle => (
+                                        <option key={`header-vehicle-${vehicle.id || vehicle.vehicleNumber}`} value={vehicle.vehicleNumber}>
+                                            {vehicle.vehicleNumber}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('vendor') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).vendor || ''}
+                                    onChange={e => updateInlineFilter('vendor', e.target.value)}
+                                >
+                                    <option value="">All Vendors</option>
+                                    {uniqueVendors.map(vendor => (
+                                        <option key={`header-vendor-${vendor}`} value={vendor}>
+                                            {vendor}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('material') && (
+                            <div className="min-w-[160px] max-w-[220px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Material</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).material || ''}
+                                    onChange={e => updateInlineFilter('material', e.target.value)}
+                                >
+                                    <option value="">All Materials</option>
+                                    {uniqueMaterials.map(material => (
+                                        <option key={`header-material-${material}`} value={material}>
+                                            {material}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('transportOwner') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Transport & Owner</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).transportOwner || ''}
+                                    onChange={e => updateInlineFilter('transportOwner', e.target.value)}
+                                >
+                                    <option value="">All Transport Owners</option>
+                                    {transportOwners.map(owner => (
+                                        <option key={`header-transport-${owner.id || owner.name}`} value={owner.name}>
+                                            {owner.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('mine') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Mine & Quarry</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).mine || ''}
+                                    onChange={e => updateInlineFilter('mine', e.target.value)}
+                                >
+                                    <option value="">All Mines/Quarries</option>
+                                    {uniqueMines.map(mine => (
+                                        <option key={`header-mine-${mine}`} value={mine}>
+                                            {mine}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('royalty') && (
+                            <div className="min-w-[160px] max-w-[220px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Royalty</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).royalty || ''}
+                                    onChange={e => updateInlineFilter('royalty', e.target.value)}
+                                >
+                                    <option value="">All Royalty</option>
+                                    {royaltyOwners.map(owner => (
+                                        <option key={`header-royalty-${owner.id || owner.name}`} value={owner.name}>
+                                            {owner.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('transporter') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Transporter</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).transporter || ''}
+                                    onChange={e => updateInlineFilter('transporter', e.target.value)}
+                                >
+                                    <option value="">All Transporters</option>
+                                    {uniqueTransporters.map(transporter => (
+                                        <option key={`header-transporter-${transporter}`} value={transporter}>
+                                            {transporter}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('customer') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Customer</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).customer || ''}
+                                    onChange={e => updateInlineFilter('customer', e.target.value)}
+                                >
+                                    <option value="">All Customers</option>
+                                    {uniqueVendors.map(customer => (
+                                        <option key={`header-customer-${customer}`} value={customer}>
+                                            {customer}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {showFilters.includes('quarry') && (
+                            <div className="min-w-[180px] max-w-[260px] flex-1">
+                                <label className="text-xs text-gray-500 dark:text-gray-400">Quarry</label>
+                                <select
+                                    className={baseInputClass}
+                                    value={(useDraftFilters ? draftFilters : filters).quarry || ''}
+                                    onChange={e => updateInlineFilter('quarry', e.target.value)}
+                                >
+                                    <option value="">All Quarries</option>
+                                    {quarries.map(quarry => (
+                                        <option key={`header-quarry-${quarry.id || quarry.name}`} value={quarry.name}>
+                                            {quarry.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         {showFilters.includes('singleDate') && (
-                            <div>
+                            <div className="min-w-[150px] max-w-[200px]">
                                 <label className="text-xs text-gray-500 dark:text-gray-400">Date</label>
                                 <input
                                     type="date"
@@ -225,7 +385,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                         )}
                         {showFilters.includes('date') && !showFilters.includes('singleDate') && (
                             <>
-                                <div>
+                                <div className="min-w-[150px] max-w-[200px]">
                                     <label className="text-xs text-gray-500 dark:text-gray-400">Date From</label>
                                     <input
                                         type="date"
@@ -238,7 +398,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                                         onChange={e => useDraftFilters ? updateDraft('dateFrom', e.target.value) : onFilterChange({ ...filters, dateFrom: e.target.value })}
                                     />
                                 </div>
-                                <div>
+                                <div className="min-w-[150px] max-w-[200px]">
                                     <label className="text-xs text-gray-500 dark:text-gray-400">Date To</label>
                                     <input
                                         type="date"

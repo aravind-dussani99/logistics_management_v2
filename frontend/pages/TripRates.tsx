@@ -605,8 +605,8 @@ const TripRateLedger: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={filterData}
-        showFilters={['singleDate', 'vehicle', 'vendor']}
-        showMoreFilters={['material', 'mine', 'transportOwner', 'royalty']}
+        showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
+        showMoreFilters={['mine', 'transportOwner', 'royalty']}
         useDraftFilters
         showAddAction={false}
       />
