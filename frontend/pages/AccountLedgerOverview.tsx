@@ -8,7 +8,7 @@ import { DailyExpense, Payment, PaymentType, RatePartyType, Trip } from '../type
 
 type RatePartySummary = {
   key: string;
-  type: RatePartyType | 'account';
+  type: RatePartyType | 'account' | 'mixed';
   name: string;
   trips: Trip[];
   totalTons: number;
@@ -17,12 +17,13 @@ type RatePartySummary = {
   balance: number;
 };
 
-const RATE_PARTY_LABELS: Record<RatePartyType | 'account', string> = {
+const RATE_PARTY_LABELS: Record<RatePartyType | 'account' | 'mixed', string> = {
   'vendor-customer': 'Vendor & Customer',
   'mine-quarry': 'Mine & Quarry',
   'royalty-owner': 'Royalty Owner',
   'transport-owner': 'Transport & Owner',
   account: 'Account',
+  mixed: 'Multiple',
 };
 
 const getMtdRange = () => {
@@ -230,8 +231,40 @@ const AccountLedgerOverview: React.FC = () => {
     return allSummaries.filter(item => Math.abs(item.balance) > 0.01);
   }, [buildSummaries, trips, expenses, payments]);
 
-  const filteredSummaries = summaries;
-  const visibleSummaries = activeTab === 'history' ? historicalSummaries : filteredSummaries;
+  const mergeSummariesByName = useCallback((items: RatePartySummary[]) => {
+    const bucket = new Map<string, { summary: RatePartySummary; types: Set<RatePartySummary['type']> }>();
+    items.forEach(item => {
+      const key = item.name.trim().toLowerCase();
+      const existing = bucket.get(key);
+      if (!existing) {
+        bucket.set(key, {
+          summary: {
+            ...item,
+            key: `merged:${item.name}`,
+            type: item.type,
+            trips: [...item.trips],
+          },
+          types: new Set([item.type]),
+        });
+        return;
+      }
+      existing.summary.trips = [...existing.summary.trips, ...item.trips];
+      existing.summary.totalTons += item.totalTons;
+      existing.summary.grossAmount += item.grossAmount;
+      existing.summary.paidAmount += item.paidAmount;
+      existing.summary.balance += item.balance;
+      existing.types.add(item.type);
+    });
+    const merged = Array.from(bucket.values()).map(({ summary, types }) => {
+      const typeLabel = types.size > 1 ? 'mixed' : Array.from(types)[0];
+      return { ...summary, type: typeLabel };
+    });
+    return merged.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  }, []);
+
+  const filteredSummaries = useMemo(() => mergeSummariesByName(summaries), [mergeSummariesByName, summaries]);
+  const historicalMergedSummaries = useMemo(() => mergeSummariesByName(historicalSummaries), [mergeSummariesByName, historicalSummaries]);
+  const visibleSummaries = activeTab === 'history' ? historicalMergedSummaries : filteredSummaries;
 
   const getActionLabel = (summary: RatePartySummary) => {
     const balance = summary.balance;
@@ -250,7 +283,7 @@ const AccountLedgerOverview: React.FC = () => {
   };
 
   const exportCsv = () => {
-    const exportItems = activeTab === 'history' ? historicalSummaries : filteredSummaries;
+    const exportItems = activeTab === 'history' ? historicalMergedSummaries : filteredSummaries;
     const header = ['Type', 'Name/Account', 'Trips', 'Net Tons', 'Total Amount', 'Paid', 'Balance', 'Action'];
     const rows = exportItems.map(item => [
       RATE_PARTY_LABELS[item.type],
@@ -331,7 +364,7 @@ const AccountLedgerOverview: React.FC = () => {
       return;
     }
     if (activeTab === 'history') {
-      exportPdf(historicalSummaries);
+      exportPdf(historicalMergedSummaries);
       return;
     }
     if (activeTab === 'party') {
@@ -386,6 +419,18 @@ const AccountLedgerOverview: React.FC = () => {
     popup.print();
   };
 
+  const applyRelativeRange = (days: number) => {
+    const today = new Date();
+    const from = new Date();
+    from.setDate(today.getDate() - days + 1);
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    setFilters(prev => ({
+      ...prev,
+      dateFrom: formatDate(from),
+      dateTo: formatDate(today),
+    }));
+  };
+
   return (
     <div>
       <PageHeader
@@ -429,6 +474,15 @@ const AccountLedgerOverview: React.FC = () => {
             Head Account
           </button>
         </div>
+
+        {(activeTab === 'party' || activeTab === 'head') && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Quick Range:</span>
+            <button type="button" onClick={() => applyRelativeRange(30)} className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800">Last 30 Days</button>
+            <button type="button" onClick={() => applyRelativeRange(60)} className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800">Last 60 Days</button>
+            <button type="button" onClick={() => applyRelativeRange(90)} className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800">Last Quarter</button>
+          </div>
+        )}
 
         {activeTab === 'abstract' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
