@@ -22,7 +22,6 @@ env:
   FRONTEND_API_BASE_URL: ""
   CORS_ORIGIN_PROD: ""
   CORS_ORIGIN_DEV: http://34.8.224.124
-  FRONTEND_BUCKET_PROD: ""
   FRONTEND_BUCKET_DEV: logitrack-frontend
   CONFIG_BUCKET_PROD: ""
   CONFIG_BUCKET_DEV: logitrack-frontend
