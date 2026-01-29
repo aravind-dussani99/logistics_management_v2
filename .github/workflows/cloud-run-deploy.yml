@@ -28,7 +28,7 @@ env:
   ATTACHMENTS_BUCKET_PROD: ""
   ATTACHMENTS_BUCKET_DEV: logitrack-attachments
   IMAGE_NAME_BACKEND: logitrack-api
-  IMAGE_NAME_BACKEND_PR: logitrack-api-pr
+  IMAGE_NAME_BACKEND_PR: logitrack-api
   CLOUDSQL_INSTANCE_CONNECTION: seismic-box-476911-v9:asia-south2:logitrack-cloudsql-v2-instance
   DB_PROXY_PORT: "5432"
 
@@ -233,7 +233,8 @@ jobs:
   docker-build-frontend-pr:
     runs-on: ubuntu-latest
     needs: [build-frontend-pr]
-    if: github.event_name == 'pull_request'
+    if: |
+      github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -243,7 +244,8 @@ jobs:
   docker-build-backend-pr:
     runs-on: ubuntu-latest
     needs: [build-backend-pr]
-    if: github.event_name == 'pull_request'
+    if: |
+      github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -253,7 +255,8 @@ jobs:
   build-push-deploy-backend:
     runs-on: ubuntu-latest
     needs: [lint-frontend, lint-backend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
       backend_url: ${{ steps.capture-backend-url.outputs.backend_url }}
     steps:
@@ -383,6 +386,37 @@ jobs:
       - name: Configure Docker auth for GAR
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
+      - name: Detect backend changes (dev)
+        id: backend-changes-dev
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --prune --depth=200 origin "${BASE_SHA}"
+          fi
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep -E '^backend/|^backend\\.Dockerfile|^backend/Dockerfile' || true)
+          if [ -n "${CHANGED}" ]; then
+            echo "backend_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check existing backend image (dev)
+        id: backend-image-dev
+        run: |
+          IMAGE_INFO=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}" --format="value(IMAGE,DIGEST)" --limit=1 --sort-by=~UPDATE_TIME)
+          IMAGE_URI=""
+          IMAGE_DIGEST=""
+          if [ -n "${IMAGE_INFO}" ]; then
+            read -r IMAGE_URI IMAGE_DIGEST <<< "${IMAGE_INFO}"
+          fi
+          if [ -n "${IMAGE_URI}" ] && [ -n "${IMAGE_DIGEST}" ]; then
+            IMAGE_WITH_DIGEST="${IMAGE_URI}@${IMAGE_DIGEST}"
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "latest_image=${IMAGE_WITH_DIGEST}" >> $GITHUB_OUTPUT
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Ensure GAR repository
         run: |
           if ! gcloud artifacts repositories describe "${GAR_REPOSITORY}" --location "${REGION}" >/dev/null 2>&1; then
@@ -430,11 +464,11 @@ jobs:
           url = os.environ.get("DATABASE_URL", "")
           parsed = urlparse(url)
           if not parsed.hostname:
-            print("DATABASE_URL_PROD_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
+            print("DATABASE_URL_DEV_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
             sys.exit(1)
           qs = parse_qs(parsed.query)
           if "host" not in qs:
-            print("DATABASE_URL_PROD_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
+            print("DATABASE_URL_DEV_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
             sys.exit(1)
           PY
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
@@ -460,7 +494,8 @@ jobs:
   build-deploy-frontend:
     runs-on: ubuntu-latest
     needs: [lint-frontend, lint-backend, build-push-deploy-backend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
