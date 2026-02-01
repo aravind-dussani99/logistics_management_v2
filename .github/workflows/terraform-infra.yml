@@ -16,7 +16,7 @@ env:
   TF_STATE_PREFIX: logitrack/terraform
   GCP_PROJECT_ID: project-bb4eb5da-9778-471e-aa6
   GCP_REGION: asia-south2
-  WIF_PROVIDER: "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
   TF_SA_EMAIL: "logitrack-tf-github-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com"
 
 jobs:
