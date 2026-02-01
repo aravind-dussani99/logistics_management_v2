@@ -18,6 +18,14 @@ env:
   GCP_REGION: asia-south2
   WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
   TF_SA_EMAIL: "logitrack-tf-github-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com"
+  TF_VAR_project_id: project-bb4eb5da-9778-471e-aa6
+  TF_VAR_region: asia-south2
+  TF_VAR_gar_push_service_account_name: logitrack-gar-push
+  TF_VAR_gar_repository: logitrack-v2
+  TF_VAR_ci_service_account_name: logitrack-ci-deploy
+  TF_VAR_backend_service_name: logitrack-backend-service
+  TF_VAR_backend_image: us-docker.pkg.dev/cloudrun/container/hello
+  TF_VAR_frontend_bucket_name: logitrack-frontend
 
 jobs:
   terraform:
@@ -55,15 +63,7 @@ jobs:
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform plan \
-            -var="project_id=${GCP_PROJECT_ID}" \
-            -var="region=${GCP_REGION}" \
-            -var="gar_repository=logitrack-v2" \
-            -var="backend_service_name=logitrack-backend-service" \
-            -var="backend_image=us-docker.pkg.dev/cloudrun/container/hello" \
-            -var="frontend_bucket_name=logitrack-frontend" \
-            -var="ci_service_account_name=logitrack-ci-deploy" \
-            -out=tfplan
+          terraform plan -out=tfplan
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}

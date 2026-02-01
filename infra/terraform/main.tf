@@ -1,19 +1,7 @@
-# Enable required APIs
-
-resource "google_project_service" "run" {
-  service = "run.googleapis.com"
-}
-
-resource "google_project_service" "artifact_registry" {
-  service = "artifactregistry.googleapis.com"
-}
-
-resource "google_project_service" "storage" {
-  service = "storage.googleapis.com"
-}
+# Enable required APIs (managed manually outside Terraform)
 
 resource "google_service_account" "gar_push" {
-  account_id   = var.ci_service_account_name
+  account_id   = var.gar_push_service_account_name
   display_name = "logitrack-gar-push"
 }
 
@@ -29,7 +17,6 @@ resource "google_artifact_registry_repository" "docker" {
   repository_id = var.gar_repository
   format        = "DOCKER"
   description   = "LogiTrack Docker images"
-  depends_on    = [google_project_service.artifact_registry]
 }
 
 # CI service account (build/push/deploy)
@@ -76,10 +63,24 @@ resource "google_storage_bucket" "logitrack" {
   location                    = var.region
   uniform_bucket_level_access = true
   force_destroy               = false
-  depends_on                  = [google_project_service.storage]
 
   autoclass {
     enabled = true
+  }
+
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age                = 15
+      num_newer_versions = 2
+      with_state         = "ARCHIVED"
+    }
   }
 }
 

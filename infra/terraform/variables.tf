@@ -14,6 +14,11 @@ variable "gar_repository" {
   type        = string
 }
 
+variable "gar_push_service_account_name" {
+  description = "Service account name for CI deployments"
+  type        = string
+}
+
 variable "backend_service_name" {
   description = "Cloud Run service name for backend"
   type        = string

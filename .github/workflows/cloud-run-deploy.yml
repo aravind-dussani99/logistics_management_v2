@@ -13,22 +13,17 @@ permissions:
   pull-requests: write
 
 env:
-  PROJECT_ID: seismic-box-476911-v9
+  PROJECT_ID: project-bb4eb5da-9778-471e-aa6
   REGION: asia-south2
   GAR_REPOSITORY: logitrack-v2
   BACKEND_SERVICE_NAME: logitrack-backend-service
-  BACKEND_SERVICE_NAME_DEV: logitrack-backend-service
-  LOGITRACK_SA: logitrack-sa@seismic-box-476911-v9.iam.gserviceaccount.com
-  FRONTEND_API_BASE_URL: ""
-  CORS_ORIGIN_PROD: ""
+  LOGITRACK_SA_GAR_PUSH: logitrack-gar-push@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
+  LOGITRACK_SA_CD_DEPLOY: logitrack-ci-deploy@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
   CORS_ORIGIN_DEV: http://34.8.224.124
-  FRONTEND_BUCKET_DEV: logitrack-frontend
-  CONFIG_BUCKET_PROD: ""
-  CONFIG_BUCKET_DEV: logitrack-frontend
-  ATTACHMENTS_BUCKET_PROD: ""
-  ATTACHMENTS_BUCKET_DEV: logitrack-attachments
+  FRONTEND_BUCKET: logitrack-frontend
+  CONFIG_BUCKET: logitrack-frontend
+  ATTACHMENTS_BUCKET: logitrack-attachments
   IMAGE_NAME_BACKEND: logitrack-api
-  IMAGE_NAME_BACKEND_PR: logitrack-api
   CLOUDSQL_INSTANCE_CONNECTION: seismic-box-476911-v9:asia-south2:logitrack-cloudsql-v2-instance
   DB_PROXY_PORT: "5432"
 
