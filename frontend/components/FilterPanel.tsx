@@ -31,30 +31,57 @@ interface FilterPanelProps {
         materials?: { id?: string; name: string }[];
     };
     visibleFields?: FilterField[];
+    draftFilters?: Filters;
+    onDraftChange?: (next: Filters) => void;
+    onApply?: () => void;
+    showActions?: boolean;
 }
 
 const defaultVisibleFields: FilterField[] = ['date', 'vehicle', 'transporter', 'customer', 'quarry', 'royalty'];
 
-const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, visibleFields = defaultVisibleFields }) => {
+const FilterPanel: React.FC<FilterPanelProps> = ({
+    filters,
+    setFilters,
+    data,
+    visibleFields = defaultVisibleFields,
+    draftFilters,
+    onDraftChange,
+    onApply,
+    showActions = true,
+}) => {
     const { vehicles, transportOwners, customers, quarries, royaltyOwners, mineQuarries = [], materials = [] } = data;
     const uniqueTransporters = Array.from(new Set((transportOwners || []).map(item => item.name))).filter(Boolean);
     const uniqueVendors = Array.from(new Set(customers.map(item => item.name))).filter(Boolean);
     const uniqueMines = Array.from(new Set(mineQuarries.map(item => item.name))).filter(Boolean);
     const uniqueMaterials = Array.from(new Set(materials.map(item => item.name))).filter(Boolean);
 
-    const [draftFilters, setDraftFilters] = useState<Filters>(filters);
+    const [localDraftFilters, setLocalDraftFilters] = useState<Filters>(filters);
+    const usingExternalDraft = Boolean(draftFilters && onDraftChange);
+    const activeDraft = usingExternalDraft ? (draftFilters as Filters) : localDraftFilters;
 
     useEffect(() => {
-        setDraftFilters(filters);
-    }, [filters]);
+        if (!usingExternalDraft) {
+            setLocalDraftFilters(filters);
+        }
+    }, [filters, usingExternalDraft]);
 
     const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     const handleFilterChange = (key: keyof Filters, value: string) => {
         if (hasSingleDate && key === 'dateFrom') {
-            setDraftFilters(prev => ({ ...prev, dateFrom: value, dateTo: value }));
+            const next = { ...activeDraft, dateFrom: value, dateTo: value };
+            if (usingExternalDraft) {
+                onDraftChange?.(next);
+            } else {
+                setLocalDraftFilters(next);
+            }
             return;
         }
-        setDraftFilters(prev => ({ ...prev, [key]: value }));
+        const next = { ...activeDraft, [key]: value };
+        if (usingExternalDraft) {
+            onDraftChange?.(next);
+        } else {
+            setLocalDraftFilters(next);
+        }
     };
 
     const resetFilters = () => {
@@ -63,12 +90,16 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
         const formatDate = (date: Date) => date.toISOString().split('T')[0];
         const nextDate = formatDate(today);
         const nextFilters = hasSingleDate ? { dateFrom: nextDate, dateTo: nextDate } : { dateFrom: formatDate(startOfMonth), dateTo: nextDate };
-        setDraftFilters(nextFilters);
+        if (usingExternalDraft) {
+            onDraftChange?.(nextFilters);
+        } else {
+            setLocalDraftFilters(nextFilters);
+        }
         setFilters(nextFilters);
     };
 
     const applyFilters = () => {
-        const nextFilters = { ...draftFilters };
+        const nextFilters = { ...activeDraft };
         if ((nextFilters.dateFrom && !isCompleteDate(nextFilters.dateFrom))
           || (nextFilters.dateTo && !isCompleteDate(nextFilters.dateTo))) {
             return;
@@ -76,7 +107,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
         if (hasSingleDate && nextFilters.dateFrom) {
             nextFilters.dateTo = nextFilters.dateFrom;
         }
-        setFilters(nextFilters);
+        if (usingExternalDraft) {
+            onDraftChange?.(nextFilters);
+            onApply?.();
+        } else {
+            setFilters(nextFilters);
+        }
     };
 
     const baseInputClass = "mt-1 block w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm";
@@ -114,7 +150,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                             onClick={openDatePicker}
                             onFocus={openDatePicker}
                             className={dateInputClass}
-                            value={draftFilters.dateFrom || ''}
+                            value={activeDraft.dateFrom || ''}
                             onChange={e => handleFilterChange('dateFrom', e.target.value)}
                         />
                         <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -137,7 +173,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                             onClick={openDatePicker}
                             onFocus={openDatePicker}
                             className={dateInputClass}
-                            value={draftFilters.dateFrom || ''}
+                            value={activeDraft.dateFrom || ''}
                             onChange={e => handleFilterChange('dateFrom', e.target.value)}
                         />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -156,7 +192,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
                             onClick={openDatePicker}
                             onFocus={openDatePicker}
                             className={dateInputClass}
-                            value={draftFilters.dateTo || ''}
+                            value={activeDraft.dateTo || ''}
                             onChange={e => handleFilterChange('dateTo', e.target.value)}
                         />
                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -170,7 +206,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('vehicle') && (
                 <div className="min-w-0">
                     <label htmlFor="vehicle" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Vehicle</label>
-                    <select id="vehicle" className={baseInputClass} value={draftFilters.vehicle || ''} onChange={e => handleFilterChange('vehicle', e.target.value)}>
+                    <select id="vehicle" className={baseInputClass} value={activeDraft.vehicle || ''} onChange={e => handleFilterChange('vehicle', e.target.value)}>
                         <option value="">All Vehicles</option>
                         {vehicles.map(v => <option key={`vehicle-${v.id || v.vehicleNumber}`} value={v.vehicleNumber}>{v.vehicleNumber}</option>)}
                     </select>
@@ -179,7 +215,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('transporter') && (
                 <div className="min-w-0">
                     <label htmlFor="transporter" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transporter</label>
-                    <select id="transporter" className={baseInputClass} value={draftFilters.transporter || ''} onChange={e => handleFilterChange('transporter', e.target.value)}>
+                    <select id="transporter" className={baseInputClass} value={activeDraft.transporter || ''} onChange={e => handleFilterChange('transporter', e.target.value)}>
                         <option value="">All Transporters</option>
                         {uniqueTransporters.map(t => <option key={`transporter-${t}`} value={t}>{t}</option>)}
                     </select>
@@ -188,7 +224,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('customer') && (
                 <div className="min-w-0">
                     <label htmlFor="customer" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer</label>
-                    <select id="customer" className={baseInputClass} value={draftFilters.customer || ''} onChange={e => handleFilterChange('customer', e.target.value)}>
+                    <select id="customer" className={baseInputClass} value={activeDraft.customer || ''} onChange={e => handleFilterChange('customer', e.target.value)}>
                         <option value="">All Customers</option>
                         {uniqueVendors.map(c => <option key={`customer-${c}`} value={c}>{c}</option>)}
                     </select>
@@ -197,7 +233,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('quarry') && (
                 <div className="min-w-0">
                     <label htmlFor="quarry" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quarry</label>
-                    <select id="quarry" className={baseInputClass} value={draftFilters.quarry || ''} onChange={e => handleFilterChange('quarry', e.target.value)}>
+                    <select id="quarry" className={baseInputClass} value={activeDraft.quarry || ''} onChange={e => handleFilterChange('quarry', e.target.value)}>
                         <option value="">All Quarries</option>
                         {quarries.map(q => <option key={`quarry-${q.id || q.name}`} value={q.name}>{q.name}</option>)}
                     </select>
@@ -206,7 +242,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('vendor') && (
                 <div className="min-w-0">
                     <label htmlFor="vendor" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Vendor & Customer Name</label>
-                    <select id="vendor" className={baseInputClass} value={draftFilters.vendor || ''} onChange={e => handleFilterChange('vendor', e.target.value)}>
+                    <select id="vendor" className={baseInputClass} value={activeDraft.vendor || ''} onChange={e => handleFilterChange('vendor', e.target.value)}>
                         <option value="">All Vendors</option>
                         {uniqueVendors.map(vendor => <option key={`vendor-${vendor}`} value={vendor}>{vendor}</option>)}
                     </select>
@@ -215,7 +251,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('transportOwner') && (
                 <div className="min-w-0">
                     <label htmlFor="transportOwner" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Transport & Owner Name</label>
-                    <select id="transportOwner" className={baseInputClass} value={draftFilters.transportOwner || ''} onChange={e => handleFilterChange('transportOwner', e.target.value)}>
+                    <select id="transportOwner" className={baseInputClass} value={activeDraft.transportOwner || ''} onChange={e => handleFilterChange('transportOwner', e.target.value)}>
                         <option value="">All Transport Owners</option>
                         {transportOwners.map(owner => <option key={`transportOwner-${owner.id || owner.name}`} value={owner.name}>{owner.name}</option>)}
                     </select>
@@ -224,7 +260,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('mine') && (
                 <div className="min-w-0">
                     <label htmlFor="mine" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Mine & Quarry Name</label>
-                    <select id="mine" className={baseInputClass} value={draftFilters.mine || ''} onChange={e => handleFilterChange('mine', e.target.value)}>
+                    <select id="mine" className={baseInputClass} value={activeDraft.mine || ''} onChange={e => handleFilterChange('mine', e.target.value)}>
                         <option value="">All Mines/Quarries</option>
                         {uniqueMines.map(mine => <option key={`mine-${mine}`} value={mine}>{mine}</option>)}
                     </select>
@@ -233,7 +269,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('material') && (
                 <div className="min-w-0">
                     <label htmlFor="material" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Material Type</label>
-                    <select id="material" className={baseInputClass} value={draftFilters.material || ''} onChange={e => handleFilterChange('material', e.target.value)}>
+                    <select id="material" className={baseInputClass} value={activeDraft.material || ''} onChange={e => handleFilterChange('material', e.target.value)}>
                         <option value="">All Materials</option>
                         {uniqueMaterials.map(material => <option key={`material-${material}`} value={material}>{material}</option>)}
                     </select>
@@ -242,7 +278,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             {fields.has('royalty') && (
                 <div className="min-w-0">
                     <label htmlFor="royalty" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Royalty</label>
-                    <select id="royalty" className={baseInputClass} value={draftFilters.royalty || ''} onChange={e => handleFilterChange('royalty', e.target.value)}>
+                    <select id="royalty" className={baseInputClass} value={activeDraft.royalty || ''} onChange={e => handleFilterChange('royalty', e.target.value)}>
                         <option value="">All Royalty</option>
                         {royaltyOwners.map(r => <option key={`royalty-${r.id || r.name}`} value={r.name}>{r.name}</option>)}
                     </select>
@@ -250,10 +286,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, setFilters, data, vi
             )}
             </div>
             
-            <div className="pt-4 flex items-center gap-2">
-                <button onClick={applyFilters} className="flex-1 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">Apply Filters</button>
-                <button onClick={resetFilters} className="flex-1 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">Reset</button>
-            </div>
+            {showActions && (
+                <div className="pt-4 flex items-center gap-2">
+                    <button onClick={applyFilters} className="flex-1 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark">Apply Filters</button>
+                    <button onClick={resetFilters} className="flex-1 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">Reset</button>
+                </div>
+            )}
         </div>
     );
 };

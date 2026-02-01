@@ -1,0 +1,82 @@
+name: Terraform Infra
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TF_WORKING_DIR: infra/terraform
+  TF_STATE_BUCKET: logitrack-tf-state-gcs-backend
+  TF_STATE_PREFIX: logitrack/terraform
+  GCP_PROJECT_ID: project-bb4eb5da-9778-471e-aa6
+  GCP_REGION: asia-south2
+  WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  TF_SA_EMAIL: "logitrack-tf-github-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com"
+  TF_VAR_project_id: project-bb4eb5da-9778-471e-aa6
+  TF_VAR_region: asia-south2
+  TF_VAR_gar_push_service_account_name: logitrack-gar-push
+  TF_VAR_gar_repository: logitrack-v2
+  TF_VAR_ci_service_account_name: logitrack-ci-deploy
+  TF_VAR_backend_service_name: logitrack-backend-service
+  TF_VAR_backend_image: us-docker.pkg.dev/cloudrun/container/hello
+  TF_VAR_frontend_bucket_name: logitrack-frontend-0123
+  TF_VAR_cloudsql_instance_name: logitrack-cloudsql-v2-instance
+  TF_VAR_cloudsql_db_name: logitrack_dev
+  TF_VAR_cloudsql_user: logitrack_cloudsql_v2_user
+  TF_VAR_cloudsql_password: ${{ secrets.CLOUDSQL_PASSWORD }}
+  TF_VAR_cloudsql_migration_sa_name: logitrack-cloudsql-migrate-sa
+  TF_VAR_wif_pool_id: my-wif-pool
+  TF_VAR_github_owner: aravind-dussani99
+  TF_VAR_github_repo: logistics_management_v2
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.TF_SA_EMAIL }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check -diff
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="prefix=${TF_STATE_PREFIX}"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # - name: Terraform Destroy
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
+      #   run: terraform destroy -auto-approve

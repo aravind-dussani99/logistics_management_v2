@@ -3,13 +3,6 @@ name: GCP Maintenance
 on:
   workflow_dispatch:
     inputs:
-      target_env:
-        type: choice
-        description: "Which database to target"
-        options:
-          - dev
-          - prod
-        default: dev
       create_sql_instance:
         type: boolean
         default: false
@@ -32,13 +25,14 @@ permissions:
   id-token: write
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  REGION: ${{ vars.GCP_REGION }}
-  SQL_INSTANCE: ${{ vars.CLOUDSQL_INSTANCE }}
-  SQL_DB: ${{ vars.CLOUDSQL_DB }}
-  SQL_USER: ${{ vars.CLOUDSQL_USER }}
-  DATABASE_URL_DEV: ${{ secrets.DATABASE_URL_DEV }}
-  DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+  PROJECT_ID: project-bb4eb5da-9778-471e-aa6
+  REGION: asia-south2
+  SQL_INSTANCE: logitrack-cloudsql-v2-instance
+  SQL_DB: logitrack_dev
+  SQL_USER: logitrack_cloudsql_v2_user
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  LOGITRACK_CLOUD_SQL_SA: logitrack-cloudsql-migrate-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
 
 jobs:
   maintenance:
@@ -50,8 +44,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.LOGITRACK_CLOUD_SQL_SA }}
-          service_account: ${{ vars.LOGITRACK_CLOUD_SQL_SA_SA }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.LOGITRACK_CLOUD_SQL_SA }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -97,10 +91,10 @@ jobs:
       - name: Run Prisma migrations
         if: ${{ inputs.run_prisma_migrate }}
         env:
-          DATABASE_URL: ${{ inputs.target_env == 'prod' && env.DATABASE_URL_PROD || env.DATABASE_URL_DEV }}
+          DATABASE_URL: ${{ env.DATABASE_URL }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_DEV or DATABASE_URL_PROD secret is required" >&2
+            echo "DATABASE_URL secret is required" >&2
             exit 1
           fi
           cd backend
