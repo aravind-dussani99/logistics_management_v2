@@ -13,7 +13,7 @@
 output "ci_service_account_email" {
   value = google_service_account.ci.email
 }
-output "ci_service_account_email" {
+output "gar_push_service_account_email" {
   value = google_service_account.gar_push.email
 }
 output "gar_repository" {
