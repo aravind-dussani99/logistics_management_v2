@@ -4,6 +4,12 @@ resource "google_project_service" "run" {
   service = "run.googleapis.com"
 }
 
+resource "google_project_service" "compute" {
+  service = "compute.googleapis.com"
+}
+
+data "google_project" "current" {}
+
 # CI service account (build/push/deploy)
 resource "google_service_account" "ci_deploy" {
   depends_on   = [google_project_service.run]
@@ -62,16 +68,12 @@ resource "google_cloud_run_v2_service_iam_binding" "backend_noauth" {
   members  = ["allUsers"]
 }
 
-resource "google_project_service" "compute" {
-  service = "compute.googleapis.com"
-}
-
 # Cloud CDN via backend bucket + HTTP LB
 resource "google_compute_backend_bucket" "frontend" {
   name        = var.cdn_name
   bucket_name = var.frontend_bucket_name
   enable_cdn  = true
-  depends_on  = [google_project_service.compute]
+  depends_on  = [google_project_service.compute, google_storage_bucket_iam_member.frontend_compute_reader]
 }
 
 resource "google_compute_url_map" "frontend" {
@@ -85,7 +87,8 @@ resource "google_compute_target_http_proxy" "frontend" {
 }
 
 resource "google_compute_global_address" "frontend" {
-  name = "${var.cdn_name}-ip"
+  name       = "${var.cdn_name}-ip"
+  depends_on = [google_project_service.compute]
 }
 
 resource "google_compute_global_forwarding_rule" "frontend" {
@@ -93,4 +96,11 @@ resource "google_compute_global_forwarding_rule" "frontend" {
   ip_address = google_compute_global_address.frontend.address
   port_range = "80"
   target     = google_compute_target_http_proxy.frontend.id
+}
+
+resource "google_storage_bucket_iam_member" "frontend_compute_reader" {
+  bucket     = var.frontend_bucket_name
+  role       = "roles/storage.objectViewer"
+  member     = "serviceAccount:service-${data.google_project.current.number}@compute-system.iam.gserviceaccount.com"
+  depends_on = [google_storage_bucket.logitrack]
 }
