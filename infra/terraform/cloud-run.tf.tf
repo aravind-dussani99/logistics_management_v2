@@ -35,6 +35,12 @@ resource "google_project_iam_member" "ci_sa_user" {
   member  = "serviceAccount:${google_service_account.ci_deploy.email}"
 }
 
+resource "google_project_iam_member" "ci_gar_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.ci_deploy.email}"
+}
+
 # Backend Cloud Run service
 resource "google_cloud_run_v2_service" "backend" {
   name     = var.backend_service_name
