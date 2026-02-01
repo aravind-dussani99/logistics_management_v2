@@ -1,26 +1,12 @@
 # Enable required APIs (managed manually outside Terraform)
 
-resource "google_service_account" "gar_push" {
-  account_id   = var.gar_push_service_account_name
-  display_name = "logitrack-gar-push"
-}
-
-resource "google_project_iam_member" "gar_artifact_writer" {
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${google_service_account.gar_push.email}"
-}
-
-# Artifact Registry repository
-resource "google_artifact_registry_repository" "docker" {
-  location      = var.region
-  repository_id = var.gar_repository
-  format        = "DOCKER"
-  description   = "LogiTrack Docker images"
+resource "google_project_service" "run" {
+  service = "run.googleapis.com"
 }
 
 # CI service account (build/push/deploy)
-resource "google_service_account" "ci" {
+resource "google_service_account" "ci_deploy" {
+  depends_on   = [google_project_service.run]
   account_id   = var.ci_service_account_name
   display_name = "logitrack-ci-deploy"
 }
@@ -28,69 +14,19 @@ resource "google_service_account" "ci" {
 resource "google_project_iam_member" "ci_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
-  member  = "serviceAccount:${google_service_account.ci.email}"
+  member  = "serviceAccount:${google_service_account.ci_deploy.email}"
 }
 
 resource "google_project_iam_member" "ci_storage_admin" {
   project = var.project_id
   role    = "roles/storage.admin"
-  member  = "serviceAccount:${google_service_account.ci.email}"
+  member  = "serviceAccount:${google_service_account.ci_deploy.email}"
 }
 
 resource "google_project_iam_member" "ci_sa_user" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.ci.email}"
-}
-
-# Buckets
-locals {
-  logitrack_buckets = {
-    "logitrack-attachments"              = { public = false }
-    "logitrack-attachments-prod"         = { public = false }
-    "logitrack-attachments-prod-replica" = { public = false }
-    "logitrack-backend"                  = { public = false }
-    "logitrack-frontend"                 = { public = true }
-    "logitrack-frontend-prod"            = { public = true }
-    "logitrack-frontend-replica"         = { public = false }
-    "logitrack-frontend-replica-prod"    = { public = false }
-  }
-}
-
-resource "google_storage_bucket" "logitrack" {
-  for_each                    = local.logitrack_buckets
-  name                        = each.key
-  location                    = var.region
-  uniform_bucket_level_access = true
-  force_destroy               = false
-
-  autoclass {
-    enabled = true
-  }
-
-  versioning {
-    enabled = true
-  }
-
-  lifecycle_rule {
-    action {
-      type = "Delete"
-    }
-    condition {
-      age                = 15
-      num_newer_versions = 2
-      with_state         = "ARCHIVED"
-    }
-  }
-}
-
-resource "google_storage_bucket_iam_member" "logitrack_public" {
-  for_each = {
-    for name, cfg in local.logitrack_buckets : name => cfg if cfg.public
-  }
-  bucket = google_storage_bucket.logitrack[each.key].name
-  role   = "roles/storage.objectViewer"
-  member = "allUsers"
+  member  = "serviceAccount:${google_service_account.ci_deploy.email}"
 }
 
 # # Backend Cloud Run service

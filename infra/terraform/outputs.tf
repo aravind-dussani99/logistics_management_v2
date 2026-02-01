@@ -11,11 +11,23 @@
 # }
 
 output "ci_service_account_email" {
-  value = google_service_account.ci.email
+  value = google_service_account.ci_deploy.email
 }
 output "gar_push_service_account_email" {
-  value = google_service_account.gar_push.email
+  value = google_service_account.gar_push_sa.email
 }
 output "gar_repository" {
   value = google_artifact_registry_repository.docker.repository_id
+}
+
+output "logitrack_replica_buckets" {
+  value = {
+    for name, bucket in google_storage_bucket.logitrack_replica : name => bucket.name
+  }
+}
+
+output "logitrack_buckets" {
+  value = {
+    for name, bucket in google_storage_bucket.logitrack : name => bucket.name
+  }
 }
