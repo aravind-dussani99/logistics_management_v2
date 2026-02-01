@@ -1,18 +1,15 @@
 # Enable required APIs
 
 resource "google_project_service" "run" {
-  service    = "run.googleapis.com"
-  depends_on = [google_project_service.serviceusage]
+  service = "run.googleapis.com"
 }
 
 resource "google_project_service" "artifact_registry" {
-  service    = "artifactregistry.googleapis.com"
-  depends_on = [google_project_service.serviceusage]
+  service = "artifactregistry.googleapis.com"
 }
 
 resource "google_project_service" "storage" {
-  service    = "storage.googleapis.com"
-  depends_on = [google_project_service.serviceusage]
+  service = "storage.googleapis.com"
 }
 
 resource "google_service_account" "gar_push" {
