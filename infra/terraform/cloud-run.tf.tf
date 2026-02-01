@@ -8,8 +8,6 @@ resource "google_project_service" "compute" {
   service = "compute.googleapis.com"
 }
 
-data "google_project" "current" {}
-
 # CI service account (build/push/deploy)
 resource "google_service_account" "ci_deploy" {
   depends_on   = [google_project_service.run]
@@ -39,6 +37,12 @@ resource "google_project_iam_member" "ci_gar_reader" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${google_service_account.ci_deploy.email}"
+}
+
+resource "google_service_account_iam_member" "ci_deploy_wif" {
+  service_account_id = google_service_account.ci_deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_owner}/${var.github_repo}"
 }
 
 # Backend Cloud Run service

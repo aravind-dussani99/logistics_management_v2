@@ -20,6 +20,10 @@ output "gar_repository" {
   value = google_artifact_registry_repository.docker.repository_id
 }
 
+output "cloudsql_migration_sa_email" {
+  value = google_service_account.cloudsql_migrate_sa.email
+}
+
 output "logitrack_replica_buckets" {
   value = {
     for name, bucket in google_storage_bucket.logitrack_replica : name => bucket.name

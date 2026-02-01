@@ -19,13 +19,18 @@ env:
   BACKEND_SERVICE_NAME: logitrack-backend-service
   LOGITRACK_SA_GAR_PUSH: logitrack-gar-push@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
   LOGITRACK_SA_CD_DEPLOY: logitrack-ci-deploy@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
-  CORS_ORIGIN: http://34.8.224.124
-  FRONTEND_BUCKET: logitrack-frontend
-  CONFIG_BUCKET: logitrack-frontend
-  ATTACHMENTS_BUCKET: logitrack-attachments
-  IMAGE_NAME_BACKEND: logitrack-api
-  CLOUDSQL_INSTANCE_CONNECTION: seismic-box-476911-v9:asia-south2:logitrack-cloudsql-v2-instance
+  CORS_ORIGIN: http://35.190.121.116
+  FRONTEND_BUCKET: logitrack-frontend-0123
+  CONFIG_BUCKET: logitrack-frontend-0123
+  ATTACHMENTS_BUCKET: logitrack-attachments-0123
+  IMAGE_NAME_BACKEND: logitrack-backend-image
+  CLOUDSQL_INSTANCE: "logitrack-cloudsql-v2-instance"
+  CLOUDSQL_DB: "logitrack_dev"
+  CLOUDSQL_INSTANCE_CONNECTION: project-bb4eb5da-9778-471e-aa6:asia-south2:logitrack-cloudsql-v2-instance
   DB_PROXY_PORT: "5432"
+  CLOUDSQL_USER: "logitrack_cloudsql_v2_user"
+  WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  LOGITRACK_CLOUD_SQL_SA: logitrack-cloudsql-migrate-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
 
 jobs:
   detect-destructive-migrations:
@@ -277,8 +282,8 @@ jobs:
       - name: Authenticate to Google Cloud (Cloud SQL)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.LOGITRACK_CLOUD_SQL_SA }}
-          service_account: ${{ vars.LOGITRACK_CLOUD_SQL_SA_SA }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.LOGITRACK_CLOUD_SQL_SA }}
 
       - name: Start Cloud SQL Proxy (main)
         env:
@@ -372,7 +377,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.LOGITRACK_SA_KEY }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
 
       - name: Setup gcloud
@@ -521,7 +526,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.LOGITRACK_SA_KEY }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
 
       - name: Setup gcloud

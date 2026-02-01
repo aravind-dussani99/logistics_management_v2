@@ -72,6 +72,11 @@ variable "cloudsql_password" {
   sensitive   = true
 }
 
+variable "cloudsql_migration_sa_name" {
+  description = "Service account name for Cloud SQL migrations"
+  type        = string
+}
+
 variable "cloudsql_database_version" {
   description = "Cloud SQL database version"
   type        = string
@@ -82,4 +87,19 @@ variable "cloudsql_tier" {
   description = "Cloud SQL instance tier"
   type        = string
   default     = "db-f1-micro"
+}
+
+variable "wif_pool_id" {
+  description = "Workload Identity Pool ID"
+  type        = string
+}
+
+variable "github_owner" {
+  description = "GitHub org/user"
+  type        = string
+}
+
+variable "github_repo" {
+  description = "GitHub repo name"
+  type        = string
 }

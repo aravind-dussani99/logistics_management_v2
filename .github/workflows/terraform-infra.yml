@@ -30,6 +30,10 @@ env:
   TF_VAR_cloudsql_db_name: logitrack_dev
   TF_VAR_cloudsql_user: logitrack_cloudsql_v2_user
   TF_VAR_cloudsql_password: ${{ secrets.CLOUDSQL_PASSWORD }}
+  TF_VAR_cloudsql_migration_sa_name: logitrack-cloudsql-migrate-sa
+  TF_VAR_wif_pool_id: my-wif-pool
+  TF_VAR_github_owner: aravind-dussani99
+  TF_VAR_github_repo: logistics_management_v2
 
 jobs:
   terraform:

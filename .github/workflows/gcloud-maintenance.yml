@@ -31,6 +31,8 @@ env:
   SQL_DB: logitrack_dev
   SQL_USER: logitrack_cloudsql_v2_user
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  LOGITRACK_CLOUD_SQL_SA: logitrack-cloudsql-migrate-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
 
 jobs:
   maintenance:
@@ -42,8 +44,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.LOGITRACK_CLOUD_SQL_SA }}
-          service_account: ${{ vars.LOGITRACK_CLOUD_SQL_SA_SA }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.LOGITRACK_CLOUD_SQL_SA }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
