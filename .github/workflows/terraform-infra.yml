@@ -1,0 +1,74 @@
+name: Terraform Infra
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  TF_WORKING_DIR: infra/terraform
+  TF_STATE_BUCKET: logitrack-tf-state-gcs-backend
+  TF_STATE_PREFIX: logitrack/terraform
+  GCP_PROJECT_ID: project-bb4eb5da-9778-471e-aa6
+  GCP_REGION: asia-south2
+  WIF_PROVIDER: "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
+  TF_SA_EMAIL: "logitrack-tf-github-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com"
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.TF_SA_EMAIL }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check -diff
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="prefix=${TF_STATE_PREFIX}"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan \
+            -var="project_id=${GCP_PROJECT_ID}" \
+            -var="region=${GCP_REGION}" \
+            -var="gar_repository=logitrack-v2" \
+            -var="backend_service_name=logitrack-backend-service" \
+            -var="backend_image=us-docker.pkg.dev/cloudrun/container/hello" \
+            -var="frontend_bucket_name=logitrack-frontend" \
+            -var="ci_service_account_name=logitrack-ci-deploy" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # - name: Terraform Destroy
+      #   working-directory: ${{ env.TF_WORKING_DIR }}
+      #   run: terraform destroy -auto-approve

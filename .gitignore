@@ -28,3 +28,10 @@ uploads/
 
 # Local samples
 sample-accounts-ledger-files/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+terraform.tfvars
