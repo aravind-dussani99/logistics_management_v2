@@ -19,7 +19,7 @@ env:
   BACKEND_SERVICE_NAME: logitrack-backend-service
   LOGITRACK_SA_GAR_PUSH: logitrack-gar-push@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
   LOGITRACK_SA_CD_DEPLOY: logitrack-ci-deploy@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
-  CORS_ORIGIN_DEV: http://34.8.224.124
+  CORS_ORIGIN: http://34.8.224.124
   FRONTEND_BUCKET: logitrack-frontend
   CONFIG_BUCKET: logitrack-frontend
   ATTACHMENTS_BUCKET: logitrack-attachments
@@ -311,10 +311,10 @@ jobs:
           exit 1
       - name: Check DB connectivity (main)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_DEV secret is required for main migrations" >&2
+            echo "DATABASE_URL secret is required for main migrations" >&2
             exit 1
           fi
           python3 - <<'PY'
@@ -355,10 +355,10 @@ jobs:
       - name: Run Prisma migrations (main)
         working-directory: backend
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_DEV secret is required for main migrations" >&2
+            echo "DATABASE_URL secret is required for main migrations" >&2
             exit 1
           fi
           if [ -z "${CLOUDSQL_INSTANCE_CONNECTION}" ]; then
@@ -373,7 +373,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.LOGITRACK_SA_KEY }}
-          service_account: ${{ vars.LOGITRACK_SA }}
+          service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -381,8 +381,8 @@ jobs:
       - name: Configure Docker auth for GAR
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      - name: Detect backend changes (dev)
-        id: backend-changes-dev
+      - name: Detect backend changes (main)
+        id: backend-changes-main
         run: |
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
@@ -395,8 +395,8 @@ jobs:
             echo "backend_changed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check existing backend image (dev)
-        id: backend-image-dev
+      - name: Check existing backend image (main)
+        id: backend-image-main
         run: |
           IMAGE_INFO=$(gcloud artifacts docker images list "${REGION}-docker.pkg.dev/${PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME_BACKEND}" --format="value(IMAGE,DIGEST)" --limit=1 --sort-by=~UPDATE_TIME)
           IMAGE_URI=""
@@ -436,15 +436,15 @@ jobs:
 
       - name: Deploy Backend to Cloud Run
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV_CLOUDRUN }}
-          ADMIN_RESET_TOKEN: ${{ secrets.ADMIN_RESET_TOKEN_DEV }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_CLOUDRUN }}
+          ADMIN_RESET_TOKEN: ${{ secrets.ADMIN_RESET_TOKEN }}
         run: |
           if [ -z "${DATABASE_URL}" ]; then
-            echo "DATABASE_URL_DEV_CLOUDRUN secret is required for main deployments" >&2
+            echo "DATABASE_URL_CLOUDRUN secret is required for main deployments" >&2
             exit 1
           fi
           if [ -z "${ADMIN_RESET_TOKEN}" ]; then
-            echo "ADMIN_RESET_TOKEN_DEV secret is required for main deployments" >&2
+            echo "ADMIN_RESET_TOKEN secret is required for main deployments" >&2
             exit 1
           fi
           if [ -z "${LOGITRACK_SA}" ]; then
@@ -459,11 +459,11 @@ jobs:
           url = os.environ.get("DATABASE_URL", "")
           parsed = urlparse(url)
           if not parsed.hostname:
-            print("DATABASE_URL_DEV_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
+            print("DATABASE_URL_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
             sys.exit(1)
           qs = parse_qs(parsed.query)
           if "host" not in qs:
-            print("DATABASE_URL_DEV_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
+            print("DATABASE_URL_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
             sys.exit(1)
           PY
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
@@ -471,10 +471,10 @@ jobs:
             --region "${REGION}" \
             --project "${PROJECT_ID}" \
             --platform managed \
-            --service-account "${LOGITRACK_SA}" \
+            --service-account "${LOGITRACK_SA_CD_DEPLOY}" \
             --port 8080 \
             --add-cloudsql-instances "${CLOUDSQL_INSTANCE_CONNECTION}" \
-            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN_DEV},CONFIG_BUCKET=${CONFIG_BUCKET_DEV},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET_DEV},DATABASE_URL=${DATABASE_URL},ADMIN_RESET_TOKEN=${ADMIN_RESET_TOKEN}" \
+            --set-env-vars "CORS_ORIGIN=${CORS_ORIGIN},CONFIG_BUCKET=${CONFIG_BUCKET},ATTACHMENTS_BUCKET=${ATTACHMENTS_BUCKET},DATABASE_URL=${DATABASE_URL},ADMIN_RESET_TOKEN=${ADMIN_RESET_TOKEN}" \
             --allow-unauthenticated
 
       - name: Capture Backend URL (main)
@@ -522,7 +522,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.LOGITRACK_SA_KEY }}
-          service_account: ${{ vars.LOGITRACK_SA }}
+          service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -537,8 +537,8 @@ jobs:
           printf '{\n  "apiBaseUrl": "%s"\n}\n' "${BACKEND_URL}" > frontend/dist/config.json
 
       - name: Upload Frontend to GCS
-        if: env.FRONTEND_BUCKET_DEV != ''
+        if: env.FRONTEND_BUCKET != ''
         run: |
-          gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET_DEV}"
-          gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET_DEV}/assets/**" || true
-          gsutil -m setmeta -h "Cache-Control:no-cache, max-age=0" "gs://${FRONTEND_BUCKET_DEV}/index.html" "gs://${FRONTEND_BUCKET_DEV}/config.json" || true
+          gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET}"
+          gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET}/assets/**" || true
+          gsutil -m setmeta -h "Cache-Control:no-cache, max-age=0" "gs://${FRONTEND_BUCKET}/index.html" "gs://${FRONTEND_BUCKET}/config.json" || true

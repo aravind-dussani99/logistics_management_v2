@@ -50,3 +50,36 @@ variable "ci_service_account_name" {
   description = "Service account name for CI deployments"
   type        = string
 }
+
+variable "cloudsql_instance_name" {
+  description = "Cloud SQL instance name"
+  type        = string
+}
+
+variable "cloudsql_db_name" {
+  description = "Cloud SQL database name"
+  type        = string
+}
+
+variable "cloudsql_user" {
+  description = "Cloud SQL user"
+  type        = string
+}
+
+variable "cloudsql_password" {
+  description = "Cloud SQL user password"
+  type        = string
+  sensitive   = true
+}
+
+variable "cloudsql_database_version" {
+  description = "Cloud SQL database version"
+  type        = string
+  default     = "POSTGRES_15"
+}
+
+variable "cloudsql_tier" {
+  description = "Cloud SQL instance tier"
+  type        = string
+  default     = "db-f1-micro"
+}

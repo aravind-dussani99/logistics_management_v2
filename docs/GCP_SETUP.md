@@ -9,7 +9,7 @@ This guide covers architecture choices, required GCP services, manual setup step
 - **Pros**: Simple CI/CD, consistent runtime, easy to secure behind IAM later.
 - **Cons**: Higher cost for static assets, slower cold-starts for static content.
 
-### Option B: GCS + Cloud CDN for Frontend, Cloud Run for Backend (recommended for production)
+### Option B: GCS + Cloud CDN for Frontend, Cloud Run for Backend
 - **When**: High-traffic static UI, best performance and cost.
 - **Pros**: Global caching, very low cost, fast.
 - **Cons**: Two deployment targets (GCS and Cloud Run).
@@ -165,10 +165,8 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 **Secrets**
 - `LOGITRACK_SA_KEY`: JSON key for `logitrack-sa` (Cloud Run/GAR)
 - `LOGITRACK_CLOUD_SQL_SA`: JSON key for `logitrack-cloud-sql-sa`
-- `DATABASE_URL_DEV`: dev database connection string
-- `DATABASE_URL_PROD`: prod database connection string
-- `DATABASE_URL_DEV_CLOUDRUN`: dev DB string using Cloud SQL socket
-- `DATABASE_URL_PROD_CLOUDRUN`: prod DB string using Cloud SQL socket
+- `DATABASE_URL`: database connection string for migrations
+- `DATABASE_URL_CLOUDRUN`: DB string using Cloud SQL socket
 
 **Variables**
 - `GCP_PROJECT_ID`
@@ -182,9 +180,9 @@ gsutil mb -l us-central1 gs://YOUR_BUCKET_NAME
 - `FRONTEND_API_BASE_URL` (e.g. backend URL)
 - `CORS_ORIGIN` (frontend URL)
 - `FRONTEND_BUCKET`
-- `CLOUD_RUN_SERVICE_DEV`
-- `FRONTEND_BUCKET_DEV` (can be same as prod for now)
-- `CORS_ORIGIN_DEV`
+- `CLOUD_RUN_SERVICE`
+- `FRONTEND_BUCKET`
+- `CORS_ORIGIN`
 - `CONFIG_BUCKET` (optional, defaults to frontend bucket)
 - `CLOUDSQL_INSTANCE_CONNECTION` (project:region:instance)
 - `DB_PROXY_PORT` (optional, default 5432)

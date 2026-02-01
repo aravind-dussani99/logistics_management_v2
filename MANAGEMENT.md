@@ -2,7 +2,7 @@
 
 ## GCP Project Migration (New Project)
 
-Use this guide to move LogiTrack to a new Google Cloud project for testing/development.
+Use this guide to move LogiTrack to a new Google Cloud project.
 
 ### Migration Checklist
 - [ ] Create/confirm the new GCP project ID and billing is active.
@@ -54,7 +54,7 @@ Export the JSON key for the CI deploy service account and save it for GitHub Sec
 
 ### 3) Create Cloud SQL (Postgres)
 - Create a Postgres instance (example: `logitrack-cloudsql-v2-instance`).
-- Create database (example: `logitrack_dev`).
+- Create database (example: `logitrack`).
 - Create user (example: `logitrack_cloudsql_v2_user`).
 - Note the **instance connection name**: `PROJECT:REGION:INSTANCE`.
 
@@ -73,10 +73,10 @@ Update `.github/workflows/cloud-run-deploy.yml` env values for the new project:
 - `GAR_REPOSITORY`
 - `BACKEND_SERVICE_NAME`
 - `LOGITRACK_SA` (runtime service account email)
-- `CORS_ORIGIN_DEV`
-- `FRONTEND_BUCKET_DEV`
-- `CONFIG_BUCKET_DEV`
-- `ATTACHMENTS_BUCKET_DEV`
+- `CORS_ORIGIN`
+- `FRONTEND_BUCKET`
+- `CONFIG_BUCKET`
+- `ATTACHMENTS_BUCKET`
 - `CLOUDSQL_INSTANCE_CONNECTION`
 - `DB_PROXY_PORT` (if different)
 
@@ -84,9 +84,9 @@ Update `.github/workflows/cloud-run-deploy.yml` env values for the new project:
 Set these in GitHub **Secrets**:
 - `LOGITRACK_SA_KEY`: JSON key for the CI deploy service account
 - `LOGITRACK_CLOUD_SQL_SA`: JSON key for the Cloud SQL proxy/ops service account (if separate)
-- `DATABASE_URL_DEV`: local/proxy URL (used for migrations in CI)
-- `DATABASE_URL_DEV_CLOUDRUN`: Cloud Run URL format with `host=/cloudsql/INSTANCE` in query params
-- `ADMIN_RESET_TOKEN_DEV`: admin reset token for runtime
+- `DATABASE_URL`: local/proxy URL (used for migrations in CI)
+- `DATABASE_URL_CLOUDRUN`: Cloud Run URL format with `host=/cloudsql/INSTANCE` in query params
+- `ADMIN_RESET_TOKEN`: admin reset token for runtime
 - `CLOUDSQL_PASSWORD`: only needed by maintenance workflow
 
 ### 8) Verify CI/CD

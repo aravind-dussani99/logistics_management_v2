@@ -26,6 +26,10 @@ env:
   TF_VAR_backend_service_name: logitrack-backend-service
   TF_VAR_backend_image: us-docker.pkg.dev/cloudrun/container/hello
   TF_VAR_frontend_bucket_name: logitrack-frontend
+  TF_VAR_cloudsql_instance_name: logitrack-cloudsql-v2-instance
+  TF_VAR_cloudsql_db_name: logitrack_dev
+  TF_VAR_cloudsql_user: logitrack_cloudsql_v2_user
+  TF_VAR_cloudsql_password: ${{ secrets.CLOUDSQL_PASSWORD }}
 
 jobs:
   terraform:
