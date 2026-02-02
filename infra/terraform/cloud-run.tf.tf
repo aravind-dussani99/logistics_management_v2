@@ -39,6 +39,12 @@ resource "google_project_iam_member" "ci_gar_reader" {
   member  = "serviceAccount:${google_service_account.ci_deploy.email}"
 }
 
+resource "google_project_iam_member" "ci_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.ci_deploy.email}"
+}
+
 resource "google_service_account_iam_member" "ci_deploy_wif" {
   service_account_id = google_service_account.ci_deploy.name
   role               = "roles/iam.workloadIdentityUser"
