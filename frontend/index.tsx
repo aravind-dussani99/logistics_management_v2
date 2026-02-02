@@ -26,6 +26,7 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+// CI touch: no-op comment to trigger pipeline.
 
 loadConfig().finally(() => {
   root.render(
