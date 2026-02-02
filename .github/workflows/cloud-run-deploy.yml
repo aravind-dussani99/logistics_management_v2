@@ -24,11 +24,8 @@ env:
   CONFIG_BUCKET: logitrack-frontend-0123
   ATTACHMENTS_BUCKET: logitrack-attachments-0123
   IMAGE_NAME_BACKEND: logitrack-backend-image
-  CLOUDSQL_INSTANCE: "logitrack-cloudsql-v2-instance"
-  CLOUDSQL_DB: "logitrack_dev"
   CLOUDSQL_INSTANCE_CONNECTION: project-bb4eb5da-9778-471e-aa6:asia-south2:logitrack-cloudsql-v2-instance
   DB_PROXY_PORT: "5432"
-  CLOUDSQL_USER: "logitrack_cloudsql_v2_user"
   WIF_PROVIDER: "projects/805122844612/locations/global/workloadIdentityPools/my-wif-pool/providers/github-provider"
   LOGITRACK_CLOUD_SQL_SA: logitrack-cloudsql-migrate-sa@project-bb4eb5da-9778-471e-aa6.iam.gserviceaccount.com
 
@@ -254,7 +251,7 @@ jobs:
 
   build-push-deploy-backend:
     runs-on: ubuntu-latest
-    needs: [lint-frontend, lint-backend]
+    needs: [lint-frontend, lint-backend, build-frontend-pr, build-backend-pr, docker-build-frontend-pr, docker-build-backend-pr]
     if: |
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
@@ -378,7 +375,7 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
+          service_account: ${{ env.LOGITRACK_SA_GAR_PUSH }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -438,6 +435,15 @@ jobs:
             echo "IMAGE_URI is empty. Backend image build did not run." >&2
             exit 1
           fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.LOGITRACK_SA_CD_DEPLOY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy Backend to Cloud Run
         env:
