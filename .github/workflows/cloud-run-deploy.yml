@@ -462,8 +462,8 @@ jobs:
             echo "ADMIN_RESET_TOKEN secret is required for main deployments" >&2
             exit 1
           fi
-          if [ -z "${LOGITRACK_SA}" ]; then
-            echo "LOGITRACK_SA is required to set the Cloud Run runtime service account" >&2
+          if [ -z "${LOGITRACK_SA_CD_DEPLOY}" ]; then
+            echo "LOGITRACK_SA_CD_DEPLOY is required to set the Cloud Run runtime service account" >&2
             exit 1
           fi
           python3 - <<'PY'
