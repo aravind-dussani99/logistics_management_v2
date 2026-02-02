@@ -473,12 +473,9 @@ jobs:
 
           url = os.environ.get("DATABASE_URL", "")
           parsed = urlparse(url)
-          if not parsed.hostname:
-            print("DATABASE_URL_CLOUDRUN is missing a host. Use localhost for Prisma compatibility.")
-            sys.exit(1)
           qs = parse_qs(parsed.query)
-          if "host" not in qs:
-            print("DATABASE_URL_CLOUDRUN is missing host=/cloudsql/INSTANCE in query params.")
+          if not parsed.hostname and "host" not in qs:
+            print("DATABASE_URL_CLOUDRUN must include host=/cloudsql/INSTANCE in query params when hostname is empty.")
             sys.exit(1)
           PY
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
