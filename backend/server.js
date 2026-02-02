@@ -13,6 +13,7 @@ const prisma = new PrismaClient();
 const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const storage = new Storage();
 const CONFIG_BUCKET = process.env.CONFIG_BUCKET || '';
+// CI touch: no-op comment to trigger pipeline.
 const ATTACHMENTS_BUCKET = process.env.ATTACHMENTS_BUCKET || '';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const __filename = fileURLToPath(import.meta.url);
