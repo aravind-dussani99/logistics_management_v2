@@ -6,7 +6,7 @@ locals {
   }
 
   logitrack_buckets = {
-    "logitrack-attachments-0123" = { public = false }
+    "logitrack-attachments-0123" = { public = true }
     "logitrack-frontend-0123"    = { public = true }
   }
 }
