@@ -655,67 +655,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             <InputField label="Gross Weight (Tons)" id="grossWeight" type="number" step="0.01" value={formData.grossWeight} onChange={handleInputChange} />
                             <InputField label="Net Weight (Tons)" id="netWeight" type="number" step="0.01" value={formData.netWeight ?? ''} onChange={handleInputChange} />
                         </div>
-                        {isPrivileged && (
-                            <div className="mt-8">
-                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Add Rate (Optional)</h4>
-                                <div className="mt-3 flex items-center gap-2">
-                                    <input
-                                        id="rateOverrideEnabled"
-                                        type="checkbox"
-                                        checked={rateOverrideEnabled}
-                                        onChange={(event) => setRateOverrideEnabled(event.target.checked)}
-                                    />
-                                    <label htmlFor="rateOverrideEnabled" className="text-sm text-gray-700 dark:text-gray-300">Override rate for this trip</label>
-                                    {rateError && <span className="text-xs text-red-500">{rateError}</span>}
-                                </div>
-                                {rateOverrideEnabled && (
-                                    <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
-                                        <InputField label="Material Type" id="rateOverrideMaterialType" type="select" value={rateOverride.materialTypeId} onChange={(event) => handleRateOverrideChange('materialTypeId', event.target.value)}>
-                                            <option value="">Select Material</option>
-                                            {materialTypeDefinitions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Rate Party Type" id="rateOverrideRatePartyType" type="select" value={rateOverride.ratePartyType} onChange={(event) => {
-                                            const nextType = event.target.value as TripRateOverride['ratePartyType'];
-                                            setRateOverride(prev => ({ ...prev, ratePartyType: nextType, ratePartyId: '' }));
-                                        }}>
-                                            <option value="transport-owner">Transport Owner</option>
-                                            <option value="mine-quarry">Mine/Quarry</option>
-                                            <option value="vendor-customer">Vendor/Customer</option>
-                                            <option value="royalty-owner">Royalty Owner</option>
-                                        </InputField>
-                                        <InputField label="Rate Party" id="rateOverrideRateParty" type="select" value={rateOverride.ratePartyId} onChange={(event) => handleRateOverrideChange('ratePartyId', event.target.value)}>
-                                            <option value="">Select Rate Party</option>
-                                            {ratePartyOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Pickup Location" id="rateOverridePickup" type="select" value={rateOverride.pickupLocationId} onChange={(event) => handleRateOverrideChange('pickupLocationId', event.target.value)}>
-                                            <option value="">Select Pickup</option>
-                                            {pickupSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Drop-off Location" id="rateOverrideDropOff" type="select" value={rateOverride.dropOffLocationId} onChange={(event) => handleRateOverrideChange('dropOffLocationId', event.target.value)}>
-                                            <option value="">Select Drop-off</option>
-                                            {dropOffSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Total Km" id="rateOverrideTotalKm" type="number" step="0.01" value={rateOverride.totalKm} onChange={(event) => handleRateOverrideChange('totalKm', Number(event.target.value))} />
-                                        <InputField label="Rate per Km" id="rateOverrideRatePerKm" type="number" step="0.01" value={rateOverride.ratePerKm} onChange={(event) => handleRateOverrideChange('ratePerKm', Number(event.target.value))} />
-                                        <InputField label="Rate per Ton" id="rateOverrideRatePerTon" type="number" step="0.01" value={rateOverride.ratePerTon} onChange={(event) => handleRateOverrideChange('ratePerTon', Number(event.target.value))} />
-                                        <div className="col-span-1 flex items-center gap-2 pt-6">
-                                            <input
-                                                id="rateOverrideGstChargeable"
-                                                type="checkbox"
-                                                checked={rateOverride.gstChargeable}
-                                                onChange={(event) => handleRateOverrideChange('gstChargeable', event.target.checked)}
-                                            />
-                                            <label htmlFor="rateOverrideGstChargeable" className="text-sm text-gray-700 dark:text-gray-300">GST Chargeable</label>
-                                        </div>
-                                        <InputField label="GST %" id="rateOverrideGstPercentage" type="number" step="0.01" value={rateOverride.gstPercentage} onChange={(event) => handleRateOverrideChange('gstPercentage', Number(event.target.value))} />
-                                        <InputField label="GST Amount" id="rateOverrideGstAmount" type="number" step="0.01" value={rateOverride.gstAmount} onChange={(event) => handleRateOverrideChange('gstAmount', Number(event.target.value))} />
-                                        <InputField label="Total Rate per Ton" id="rateOverrideTotalRate" type="number" step="0.01" value={rateOverride.totalRatePerTon} onChange={(event) => handleRateOverrideChange('totalRatePerTon', Number(event.target.value))} />
-                                        <InputField label="Effective From" id="rateOverrideEffectiveFrom" type="date" value={rateOverride.effectiveFrom} onChange={(event) => handleRateOverrideChange('effectiveFrom', event.target.value)} />
-                                        <InputField label="Effective To" id="rateOverrideEffectiveTo" type="date" value={rateOverride.effectiveTo} onChange={(event) => handleRateOverrideChange('effectiveTo', event.target.value)} />
-                                        <InputField label="Remarks" id="rateOverrideRemarks" type="text" value={rateOverride.remarks} onChange={(event) => handleRateOverrideChange('remarks', event.target.value)} />
-                                    </div>
-                                )}
-                            </div>
+                        {isPrivileged && rateError && (
+                            <div className="mt-4 text-xs text-red-500">{rateError}</div>
                         )}
                     </div>
                 )}
@@ -892,67 +833,8 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                             <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} isReadOnly={entryReadOnly} multiple />
                             <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={receivedReadOnly} multiple />
                         </div>
-                        {!entryReadOnly && isPrivileged && (
-                            <div className="mt-8">
-                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Add Rate (Optional)</h4>
-                                <div className="mt-3 flex items-center gap-2">
-                                    <input
-                                        id="rateOverrideEnabledEdit"
-                                        type="checkbox"
-                                        checked={rateOverrideEnabled}
-                                        onChange={(event) => setRateOverrideEnabled(event.target.checked)}
-                                    />
-                                    <label htmlFor="rateOverrideEnabledEdit" className="text-sm text-gray-700 dark:text-gray-300">Override rate for this trip</label>
-                                    {rateError && <span className="text-xs text-red-500">{rateError}</span>}
-                                </div>
-                                {rateOverrideEnabled && (
-                                    <div className="mt-4 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
-                                        <InputField label="Material Type" id="rateOverrideMaterialTypeEdit" type="select" value={rateOverride.materialTypeId} onChange={(event) => handleRateOverrideChange('materialTypeId', event.target.value)}>
-                                            <option value="">Select Material</option>
-                                            {materialTypeDefinitions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Rate Party Type" id="rateOverrideRatePartyTypeEdit" type="select" value={rateOverride.ratePartyType} onChange={(event) => {
-                                            const nextType = event.target.value as TripRateOverride['ratePartyType'];
-                                            setRateOverride(prev => ({ ...prev, ratePartyType: nextType, ratePartyId: '' }));
-                                        }}>
-                                            <option value="transport-owner">Transport Owner</option>
-                                            <option value="mine-quarry">Mine/Quarry</option>
-                                            <option value="vendor-customer">Vendor/Customer</option>
-                                            <option value="royalty-owner">Royalty Owner</option>
-                                        </InputField>
-                                        <InputField label="Rate Party" id="rateOverrideRatePartyEdit" type="select" value={rateOverride.ratePartyId} onChange={(event) => handleRateOverrideChange('ratePartyId', event.target.value)}>
-                                            <option value="">Select Rate Party</option>
-                                            {ratePartyOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Pickup Location" id="rateOverridePickupEdit" type="select" value={rateOverride.pickupLocationId} onChange={(event) => handleRateOverrideChange('pickupLocationId', event.target.value)}>
-                                            <option value="">Select Pickup</option>
-                                            {pickupSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Drop-off Location" id="rateOverrideDropOffEdit" type="select" value={rateOverride.dropOffLocationId} onChange={(event) => handleRateOverrideChange('dropOffLocationId', event.target.value)}>
-                                            <option value="">Select Drop-off</option>
-                                            {dropOffSites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
-                                        </InputField>
-                                        <InputField label="Total Km" id="rateOverrideTotalKmEdit" type="number" step="0.01" value={rateOverride.totalKm} onChange={(event) => handleRateOverrideChange('totalKm', Number(event.target.value))} />
-                                        <InputField label="Rate per Km" id="rateOverrideRatePerKmEdit" type="number" step="0.01" value={rateOverride.ratePerKm} onChange={(event) => handleRateOverrideChange('ratePerKm', Number(event.target.value))} />
-                                        <InputField label="Rate per Ton" id="rateOverrideRatePerTonEdit" type="number" step="0.01" value={rateOverride.ratePerTon} onChange={(event) => handleRateOverrideChange('ratePerTon', Number(event.target.value))} />
-                                        <div className="col-span-1 flex items-center gap-2 pt-6">
-                                            <input
-                                                id="rateOverrideGstChargeableEdit"
-                                                type="checkbox"
-                                                checked={rateOverride.gstChargeable}
-                                                onChange={(event) => handleRateOverrideChange('gstChargeable', event.target.checked)}
-                                            />
-                                            <label htmlFor="rateOverrideGstChargeableEdit" className="text-sm text-gray-700 dark:text-gray-300">GST Chargeable</label>
-                                        </div>
-                                        <InputField label="GST %" id="rateOverrideGstPercentageEdit" type="number" step="0.01" value={rateOverride.gstPercentage} onChange={(event) => handleRateOverrideChange('gstPercentage', Number(event.target.value))} />
-                                        <InputField label="GST Amount" id="rateOverrideGstAmountEdit" type="number" step="0.01" value={rateOverride.gstAmount} onChange={(event) => handleRateOverrideChange('gstAmount', Number(event.target.value))} />
-                                        <InputField label="Total Rate per Ton" id="rateOverrideTotalRateEdit" type="number" step="0.01" value={rateOverride.totalRatePerTon} onChange={(event) => handleRateOverrideChange('totalRatePerTon', Number(event.target.value))} />
-                                        <InputField label="Effective From" id="rateOverrideEffectiveFromEdit" type="date" value={rateOverride.effectiveFrom} onChange={(event) => handleRateOverrideChange('effectiveFrom', event.target.value)} />
-                                        <InputField label="Effective To" id="rateOverrideEffectiveToEdit" type="date" value={rateOverride.effectiveTo} onChange={(event) => handleRateOverrideChange('effectiveTo', event.target.value)} />
-                                        <InputField label="Remarks" id="rateOverrideRemarksEdit" type="text" value={rateOverride.remarks} onChange={(event) => handleRateOverrideChange('remarks', event.target.value)} />
-                                    </div>
-                                )}
-                            </div>
+                        {!entryReadOnly && isPrivileged && rateError && (
+                            <div className="mt-4 text-xs text-red-500">{rateError}</div>
                         )}
                         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             {renderUploadList('E-Way Bill', files.ewayBillUpload)}
