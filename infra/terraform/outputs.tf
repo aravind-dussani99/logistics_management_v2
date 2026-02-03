@@ -52,6 +52,14 @@ output "frontend_cdn_ip" {
   value = google_compute_global_address.frontend.address
 }
 
+output "frontend_url" {
+  value = "http://${google_compute_global_address.frontend.address}"
+}
+
+output "frontend_login_url" {
+  value = "http://${google_compute_global_address.frontend.address}/index.html#/login"
+}
+
 output "cloudsql_instance_connection_name" {
   value = google_sql_database_instance.primary.connection_name
 }

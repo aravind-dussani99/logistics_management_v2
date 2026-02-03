@@ -93,8 +93,30 @@ resource "google_compute_backend_bucket" "frontend" {
 }
 
 resource "google_compute_url_map" "frontend" {
-  name            = "${var.cdn_name}-url-map"
+  name = "${var.cdn_name}-url-map"
+
   default_service = google_compute_backend_bucket.frontend.id
+
+  host_rule {
+    hosts        = ["*"]
+    path_matcher = "frontend-matcher"
+  }
+
+  path_matcher {
+    name            = "frontend-matcher"
+    default_service = google_compute_backend_bucket.frontend.id
+
+    path_rule {
+      paths   = ["/assets/*", "/config.json", "/index.html"]
+      service = google_compute_backend_bucket.frontend.id
+    }
+
+    default_route_action {
+      url_rewrite {
+        path_prefix_rewrite = "/index.html"
+      }
+    }
+  }
 }
 
 resource "google_compute_target_http_proxy" "frontend" {
