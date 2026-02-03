@@ -23,6 +23,7 @@ env:
   FRONTEND_BUCKET: logitrack-frontend-0123
   CONFIG_BUCKET: logitrack-frontend-0123
   ATTACHMENTS_BUCKET: logitrack-attachments-0123
+  FRONTEND_CDN_IP: 35.190.121.116
   IMAGE_NAME_BACKEND: logitrack-backend-image
   CLOUDSQL_INSTANCE_CONNECTION: project-bb4eb5da-9778-471e-aa6:asia-south2:logitrack-cloudsql-v2-instance
   DB_PROXY_PORT: "5432"
@@ -554,3 +555,10 @@ jobs:
           gsutil -m rsync -r -d frontend/dist "gs://${FRONTEND_BUCKET}"
           gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://${FRONTEND_BUCKET}/assets/**" || true
           gsutil -m setmeta -h "Cache-Control:no-cache, max-age=0" "gs://${FRONTEND_BUCKET}/index.html" "gs://${FRONTEND_BUCKET}/config.json" || true
+
+      - name: Print frontend URL
+        run: |
+          if [ -n "${FRONTEND_CDN_IP}" ]; then
+            echo "Frontend URL: http://${FRONTEND_CDN_IP}"
+            echo "Login URL: http://${FRONTEND_CDN_IP}/index.html#/login"
+          fi
