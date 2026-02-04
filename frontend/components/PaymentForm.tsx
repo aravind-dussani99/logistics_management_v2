@@ -46,6 +46,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   const [bankAccountFiles, setBankAccountFiles] = useState<TripUploadFile[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [showOptional, setShowOptional] = useState(isViewMode);
+  const [previewFile, setPreviewFile] = useState<TripUploadFile | null>(null);
   const isReceipt = type === PaymentType.RECEIPT;
   const fromLabel = isReceipt ? 'From Name' : 'From';
   const toLabel = isReceipt ? 'To Account' : 'To';
@@ -299,24 +300,52 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     setFiles(entries);
   };
 
+  const isImageFile = (file: TripUploadFile) => {
+    const name = file.name.toLowerCase();
+    return name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif') || name.endsWith('.webp');
+  };
+
+  const isPreviewable = (file: TripUploadFile) => Boolean(file.url);
+
   const renderUploadList = (label: string, list: TripUploadFile[]) => {
-    if (!list.length) return null;
     return (
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</p>
-        <div className="grid gap-2">
-          {list.map((file, idx) => (
-            <a
-              key={`${file.name}-${idx}`}
-              href={file.url || '#'}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-primary hover:underline"
-            >
-              {file.name}
-            </a>
-          ))}
-        </div>
+      <div className="rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-3">
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">{label}</div>
+        {list.length === 0 ? (
+          <div className="mt-2 text-sm text-gray-400">Not uploaded</div>
+        ) : (
+          <ul className="mt-2 space-y-2 text-sm">
+            {list.map((file, idx) => (
+              <li key={`${file.name}-${idx}`} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {isImageFile(file) ? (
+                    <img
+                      src={file.url}
+                      alt={file.name}
+                      className="h-10 w-10 rounded-md object-cover border border-gray-200 dark:border-gray-600"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-md flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-xs text-gray-500">
+                      DOC
+                    </div>
+                  )}
+                  <span className="truncate text-gray-700 dark:text-gray-200">{file.name}</span>
+                </div>
+                {isPreviewable(file) ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFile(file)}
+                    className="text-primary hover:underline"
+                  >
+                    View
+                  </button>
+                ) : (
+                  <span className="text-gray-400 text-xs">No preview</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   };
@@ -409,7 +438,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             value={fromAccount}
             onChange={(e) => setFromAccount(e.target.value)}
             disabled={isViewMode}
-            list="account-list"
+            list={fromAccount ? "account-list" : undefined}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
           />
           {resolvedFromBalance !== undefined && (
@@ -424,7 +453,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             value={ratePartyName}
             onChange={(e) => setRatePartyName(e.target.value)}
             disabled={isViewMode}
-            list="rate-party-list"
+            list={ratePartyName ? "rate-party-list" : undefined}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
           />
           {resolvedRatePartyBalance !== undefined && (
@@ -502,36 +531,36 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             <input
               id="head-account"
               type="text"
-              value={headAccount}
-              onChange={(e) => setHeadAccount(e.target.value)}
-              disabled={isViewMode}
-              list="account-list"
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-            />
+            value={headAccount}
+            onChange={(e) => setHeadAccount(e.target.value)}
+            disabled={isViewMode}
+            list={headAccount ? "account-list" : undefined}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
           </div>
           <div>
             <label htmlFor="via" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Via</label>
             <input
               id="via"
               type="text"
-              value={via}
-              onChange={(e) => setVia(e.target.value)}
-              disabled={isViewMode}
-              list="via-list"
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-            />
+            value={via}
+            onChange={(e) => setVia(e.target.value)}
+            disabled={isViewMode}
+            list={via ? "via-list" : undefined}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
           </div>
           <div>
             <label htmlFor="to-account" className="block text-sm font-medium text-gray-700 dark:text-gray-300">To Account</label>
             <input
               id="to-account"
               type="text"
-              value={toAccount}
-              onChange={(e) => setToAccount(e.target.value)}
-              disabled={isViewMode}
-              list="account-list"
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-            />
+            value={toAccount}
+            onChange={(e) => setToAccount(e.target.value)}
+            disabled={isViewMode}
+            list={toAccount ? "account-list" : undefined}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
             {resolvedToBalance !== undefined && (
               <p className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">Balance: {formatCurrency(resolvedToBalance)}</p>
             )}
@@ -541,25 +570,25 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             <input
               id="trip-id"
               type="text"
-              value={tripId}
-              onChange={(e) => setTripId(e.target.value)}
-              disabled={isViewMode}
-              list="trip-id-list"
-              placeholder="Search trip number..."
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-            />
+            value={tripId}
+            onChange={(e) => setTripId(e.target.value)}
+            disabled={isViewMode}
+            list={tripId ? "trip-id-list" : undefined}
+            placeholder="Search trip number..."
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
           </div>
           <div>
             <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
             <input
               id="category"
               type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={isViewMode}
-              list="category-list"
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-            />
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={isViewMode}
+            list={category ? "category-list" : undefined}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
           </div>
           <div>
             <label htmlFor="sub-category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sub-Category</label>
@@ -633,6 +662,42 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         <option value="Maintenance" />
       </datalist>
 
+      {previewFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{previewFile.name}</div>
+              <button
+                type="button"
+                onClick={() => setPreviewFile(null)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-4">
+              {isImageFile(previewFile) ? (
+                <img src={previewFile.url} alt={previewFile.name} className="max-h-[70vh] w-full object-contain rounded-md" />
+              ) : (
+                <iframe
+                  title={previewFile.name}
+                  src={previewFile.url}
+                  className="w-full h-[70vh] rounded-md border border-gray-200 dark:border-gray-700"
+                />
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewFile(null)}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 };

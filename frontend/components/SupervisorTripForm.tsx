@@ -556,11 +556,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">Enter New Trip</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                             <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} required />
-                            <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace || ''} onChange={handleInputChange} />
+                            <InputField label="Pickup Place" id="pickupPlace" type="text" list={formData.pickupPlace ? "pickupPlace-options" : undefined} value={formData.pickupPlace || ''} onChange={handleInputChange} />
                             <datalist id="pickupPlace-options">
                                 {pickupSites.map(site => <option key={site.id} value={site.name} />)}
                             </datalist>
-                            <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace || ''} onChange={handleInputChange} />
+                            <InputField label="Drop-off Place" id="dropOffPlace" type="text" list={formData.dropOffPlace ? "dropOffPlace-options" : undefined} value={formData.dropOffPlace || ''} onChange={handleInputChange} />
                             <datalist id="dropOffPlace-options">
                                 {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
                             </datalist>
@@ -573,7 +573,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     value={formData.customer || ''}
                                     onChange={handleInputChange}
                                     required
-                                    list="vendor-customer-options"
+                                    list={formData.customer ? "vendor-customer-options" : undefined}
                                 />
                                 <datalist id="vendor-customer-options">
                                     {vendorCustomers.map(item => (
@@ -589,7 +589,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     value={formData.quarryName || ''}
                                     onChange={handleInputChange}
                                     required
-                                    list="mine-quarry-options"
+                                    list={formData.quarryName ? "mine-quarry-options" : undefined}
                                 />
                                 <datalist id="mine-quarry-options">
                                     {mineQuarries.map(item => (
@@ -597,7 +597,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     ))}
                                 </datalist>
                             </div>
-                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} required list="material-type-options" />
+                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} required list={formData.material ? "material-type-options" : undefined} />
                             <datalist id="material-type-options">
                                 {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
                             </datalist>
@@ -608,7 +608,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     type="text"
                                     value={formData.royaltyOwnerName || ''}
                                     onChange={handleInputChange}
-                                    list="royalty-owner-options"
+                                    list={formData.royaltyOwnerName ? "royalty-owner-options" : undefined}
                                 />
                                 <datalist id="royalty-owner-options">
                                     {royaltyOwnerProfiles.map(item => (
@@ -626,7 +626,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     type="text"
                                     value={formData.vehicleNumber || ''}
                                     onChange={handleInputChange}
-                                    list="vehicle-options"
+                                    list={formData.vehicleNumber ? "vehicle-options" : undefined}
                                 />
                                 <datalist id="vehicle-options">
                                     {vehicles.map(item => (
@@ -641,7 +641,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     type="text"
                                     value={formData.transporterName || ''}
                                     onChange={handleInputChange}
-                                    list="transport-owner-options"
+                                    list={formData.transporterName ? "transport-owner-options" : undefined}
                                 />
                                 <datalist id="transport-owner-options">
                                     {transportOwnerProfiles.map(item => (
@@ -703,11 +703,11 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                         <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">{mode === 'edit' ? 'Edit' : 'View'} Trip #{trip?.id}</h3>
                         <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
                              <InputField label="Date" id="date" type="date" value={formData.date} onChange={handleInputChange} isReadOnly={entryReadOnly} required />
-                             <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options-edit" value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                             <InputField label="Pickup Place" id="pickupPlace" type="text" list={formData.pickupPlace ? "pickupPlace-options-edit" : undefined} value={formData.pickupPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
                              <datalist id="pickupPlace-options-edit">
                                  {pickupSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
-                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options-edit" value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
+                             <InputField label="Drop-off Place" id="dropOffPlace" type="text" list={formData.dropOffPlace ? "dropOffPlace-options-edit" : undefined} value={formData.dropOffPlace || ''} onChange={handleInputChange} isReadOnly={entryReadOnly} />
                              <datalist id="dropOffPlace-options-edit">
                                  {dropOffSites.map(site => <option key={site.id} value={site.name} />)}
                              </datalist>
@@ -723,7 +723,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                         value={formData.customer || ''}
                                         onChange={handleInputChange}
                                         required
-                                        list="vendor-customer-options-edit"
+                                        list={formData.customer ? "vendor-customer-options-edit" : undefined}
                                     />
                                     <datalist id="vendor-customer-options-edit">
                                         {vendorCustomers.map(item => (
@@ -743,7 +743,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                         value={formData.quarryName || ''}
                                         onChange={handleInputChange}
                                         required
-                                        list="mine-quarry-options-edit"
+                                        list={formData.quarryName ? "mine-quarry-options-edit" : undefined}
                                     />
                                     <datalist id="mine-quarry-options-edit">
                                         {mineQuarries.map(item => (
@@ -752,7 +752,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                     </datalist>
                                 </div>
                             )}
-                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} isReadOnly={entryReadOnly} required list="material-type-options-edit" />
+                            <InputField label="Material Type" id="material" type="text" value={formData.material} onChange={handleInputChange} isReadOnly={entryReadOnly} required list={formData.material ? "material-type-options-edit" : undefined} />
                             <datalist id="material-type-options-edit">
                                 {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
                             </datalist>
@@ -766,7 +766,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                         type="text"
                                         value={formData.royaltyOwnerName || ''}
                                         onChange={handleInputChange}
-                                        list="royalty-owner-options-edit"
+                                        list={formData.royaltyOwnerName ? "royalty-owner-options-edit" : undefined}
                                     />
                                     <datalist id="royalty-owner-options-edit">
                                         {royaltyOwnerProfiles.map(item => (
@@ -788,7 +788,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                         type="text"
                                         value={formData.vehicleNumber || ''}
                                         onChange={handleInputChange}
-                                        list="vehicle-options-edit"
+                                        list={formData.vehicleNumber ? "vehicle-options-edit" : undefined}
                                     />
                                     <datalist id="vehicle-options-edit">
                                         {vehicles.map(item => (
@@ -807,7 +807,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                         type="text"
                                         value={formData.transporterName || ''}
                                         onChange={handleInputChange}
-                                        list="transport-owner-options-edit"
+                                        list={formData.transporterName ? "transport-owner-options-edit" : undefined}
                                     />
                                     <datalist id="transport-owner-options-edit">
                                         {transportOwnerProfiles.map(item => (

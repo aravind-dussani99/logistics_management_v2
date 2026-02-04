@@ -8,6 +8,7 @@ import SupervisorTripForm from './SupervisorTripForm';
 interface PageHeaderProps {
     title: string;
     subtitle?: string;
+    headerContent?: React.ReactNode;
     showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
     showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
     filters: Filters;
@@ -44,6 +45,7 @@ const supervisorActions = [
 const PageHeader: React.FC<PageHeaderProps> = ({
     title,
     subtitle,
+    headerContent,
     showFilters = [],
     showMoreFilters = [],
     filters,
@@ -476,6 +478,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     ))}
                 </div>
             </div>
+            {headerContent && (
+                <div className="mt-3">
+                    {headerContent}
+                </div>
+            )}
         </header>
     );
 };

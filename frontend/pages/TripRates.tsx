@@ -329,6 +329,8 @@ const TripRateLedger: React.FC = () => {
     refreshKey,
   } = useData();
   const [filters, setFilters] = useState<Filters>(getDefaultDate());
+  const [draftFilters, setDraftFilters] = useState<Filters>(getDefaultDate());
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
@@ -364,6 +366,20 @@ const TripRateLedger: React.FC = () => {
     loadSiteLocations,
     refreshKey,
   ]);
+
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
+  useEffect(() => {
+    if (filters.dateFrom && filters.dateTo) return;
+    const today = new Date();
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    const dateValue = formatDate(today);
+    const next = { dateFrom: dateValue, dateTo: dateValue };
+    setFilters(next);
+    setDraftFilters(next);
+  }, [filters.dateFrom, filters.dateTo]);
 
   const handleFilterChange = (nextFilters: Filters) => {
     setFilters(nextFilters);
@@ -504,6 +520,72 @@ const TripRateLedger: React.FC = () => {
     materialTypeDefinitions,
   ]);
 
+  const uniqueVehicles = useMemo(
+    () => Array.from(new Set(filterData.vehicles.map(item => item.vehicleNumber))).filter(Boolean),
+    [filterData.vehicles],
+  );
+  const uniqueVendors = useMemo(
+    () => Array.from(new Set(filterData.customers.map(item => item.name))).filter(Boolean),
+    [filterData.customers],
+  );
+  const uniqueMines = useMemo(
+    () => Array.from(new Set(filterData.mineQuarries.map(item => item.name))).filter(Boolean),
+    [filterData.mineQuarries],
+  );
+  const uniqueMaterials = useMemo(
+    () => Array.from(new Set(filterData.materials.map(item => item.name))).filter(Boolean),
+    [filterData.materials],
+  );
+  const uniqueTransportOwners = useMemo(
+    () => Array.from(new Set(filterData.transportOwners.map(item => item.name))).filter(Boolean),
+    [filterData.transportOwners],
+  );
+  const uniqueRoyalties = useMemo(
+    () => Array.from(new Set(filterData.royaltyOwners.map(item => item.name))).filter(Boolean),
+    [filterData.royaltyOwners],
+  );
+
+  const allowDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.ctrlKey || event.metaKey) return;
+    const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (allowed.includes(event.key)) return;
+    if (/^[0-9-]$/.test(event.key)) return;
+    event.preventDefault();
+  };
+  const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+    }
+  };
+  const updateDraft = (key: keyof Filters, value: string) => {
+    if (key === 'dateFrom') {
+      setDraftFilters(prev => ({ ...prev, dateFrom: value, dateTo: value }));
+      return;
+    }
+    setDraftFilters(prev => ({ ...prev, [key]: value }));
+  };
+  const applyDraftFilters = () => {
+    const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+    if ((draftFilters.dateFrom && !isCompleteDate(draftFilters.dateFrom))
+      || (draftFilters.dateTo && !isCompleteDate(draftFilters.dateTo))) {
+      return;
+    }
+    const next = { ...draftFilters };
+    if (next.dateFrom) {
+      next.dateTo = next.dateFrom;
+    }
+    handleFilterChange(next);
+  };
+  const resetDraftFilters = () => {
+    const today = new Date();
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    const nextDate = formatDate(today);
+    const nextFilters = { dateFrom: nextDate, dateTo: nextDate };
+    setDraftFilters(nextFilters);
+    handleFilterChange(nextFilters);
+  };
+
   const displayTrips = useMemo(() => {
     if (Object.keys(optimisticTripUpdates).length === 0) return trips;
     return trips.map(trip => ({ ...trip, ...optimisticTripUpdates[trip.id] }));
@@ -605,10 +687,151 @@ const TripRateLedger: React.FC = () => {
         filters={filters}
         onFilterChange={handleFilterChange}
         filterData={filterData}
-        showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
-        showMoreFilters={['mine', 'transportOwner', 'royalty']}
-        useDraftFilters
+        showFilters={[]}
+        showMoreFilters={[]}
         showAddAction={false}
+        headerContent={(
+          <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Filters</div>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(prev => !prev)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+              >
+                <ion-icon name={filtersOpen ? 'chevron-up-outline' : 'chevron-down-outline'}></ion-icon>
+                {filtersOpen ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {filtersOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="min-w-[140px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Date</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      onFocus={openDatePicker}
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateFrom || ''}
+                      onChange={e => updateDraft('dateFrom', e.target.value)}
+                    />
+                  </div>
+                  <div className="min-w-[150px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Vehicle</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.vehicle || ''}
+                      onChange={e => updateDraft('vehicle', e.target.value)}
+                    >
+                      <option value="">All Vehicles</option>
+                      {uniqueVehicles.map(vehicle => (
+                        <option key={`triprate-vehicle-${vehicle}`} value={vehicle}>
+                          {vehicle}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="min-w-[170px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.vendor || ''}
+                      onChange={e => updateDraft('vendor', e.target.value)}
+                    >
+                      <option value="">All Vendors</option>
+                      {uniqueVendors.map(vendor => (
+                        <option key={`triprate-vendor-${vendor}`} value={vendor}>
+                          {vendor}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Material</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.material || ''}
+                      onChange={e => updateDraft('material', e.target.value)}
+                    >
+                      <option value="">All Materials</option>
+                      {uniqueMaterials.map(material => (
+                        <option key={`triprate-material-${material}`} value={material}>
+                          {material}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                  <div className="min-w-[170px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Mine & Quarry</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.mine || ''}
+                      onChange={e => updateDraft('mine', e.target.value)}
+                    >
+                      <option value="">All Mines/Quarries</option>
+                      {uniqueMines.map(mine => (
+                        <option key={`triprate-mine-${mine}`} value={mine}>
+                          {mine}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="min-w-[190px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Transport & Owner</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.transportOwner || ''}
+                      onChange={e => updateDraft('transportOwner', e.target.value)}
+                    >
+                      <option value="">All Transport Owners</option>
+                      {uniqueTransportOwners.map(owner => (
+                        <option key={`triprate-transport-${owner}`} value={owner}>
+                          {owner}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Royalty</label>
+                    <select
+                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.royalty || ''}
+                      onChange={e => updateDraft('royalty', e.target.value)}
+                    >
+                      <option value="">All Royalty</option>
+                      {uniqueRoyalties.map(owner => (
+                        <option key={`triprate-royalty-${owner}`} value={owner}>
+                          {owner}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={applyDraftFilters}
+                      className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                    >
+                      Apply Filters
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetDraftFilters}
+                      className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       />
       <div className="space-y-6">
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow-md px-4 py-3 flex flex-wrap gap-2">

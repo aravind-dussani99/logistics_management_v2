@@ -866,7 +866,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   type="text"
                   value={selectedParty}
                   onChange={(event) => setSelectedParty(event.target.value)}
-                  list="recon-party-list"
+                  list={selectedParty ? "recon-party-list" : undefined}
                   className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800"
                   placeholder="Select or type a name or account"
                 />
@@ -906,7 +906,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   type="text"
                   value={selectedHeadAccount}
                   onChange={(event) => setSelectedHeadAccount(event.target.value)}
-                  list="recon-head-list"
+                  list={selectedHeadAccount ? "recon-head-list" : undefined}
                   className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800"
                   placeholder="Select or type a head account"
                 />

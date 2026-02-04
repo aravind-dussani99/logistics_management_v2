@@ -11,19 +11,22 @@ import { formatCurrency, formatDateDisplay } from '../utils';
 
 const ITEMS_PER_PAGE = 10;
 
-const getMtdRange = () => {
+const getDefaultDateSelection = () => {
     const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const formatDate = (date: Date) => date.toISOString().split('T')[0];
     return {
-      dateFrom: formatDate(startOfMonth),
-      dateTo: formatDate(today)
+        year: today.getFullYear(),
+        month: today.getMonth() + 1,
+        dates: Array.from({ length: today.getDate() }, (_, idx) => idx + 1),
     };
 };
 
 const Ledger: React.FC = () => {
     const { ledgerEntries, updateLedgerEntry, deleteLedgerEntry, refreshKey, loadLedgerEntries, loadAccounts } = useData();
-    const [filters, setFilters] = useState<Filters>(getMtdRange());
+    const [filters, setFilters] = useState<Filters>({});
+    const defaultSelection = getDefaultDateSelection();
+    const [selectedYear, setSelectedYear] = useState<number>(defaultSelection.year);
+    const [selectedMonths, setSelectedMonths] = useState<number[]>([defaultSelection.month]);
+    const [selectedDates, setSelectedDates] = useState<number[]>(defaultSelection.dates);
     const [currentPage, setCurrentPage] = useState(1);
     const { openModal, closeModal, confirm } = useUI();
 
@@ -58,7 +61,14 @@ const Ledger: React.FC = () => {
         let currentInflow = 0;
         let currentOutflow = 0;
         const filtered = entriesWithBalance.filter(entry => {
-            const isInPeriod = (!filters.dateFrom || entry.date >= filters.dateFrom) && (!filters.dateTo || entry.date <= filters.dateTo);
+            const entryDate = new Date(entry.date);
+            const entryYear = entryDate.getFullYear();
+            const entryMonth = entryDate.getMonth() + 1;
+            const entryDay = entryDate.getDate();
+            const yearMatch = selectedYear ? entryYear === selectedYear : true;
+            const monthMatch = selectedMonths.length ? selectedMonths.includes(entryMonth) : true;
+            const dateMatch = selectedDates.length ? selectedDates.includes(entryDay) : true;
+            const isInPeriod = yearMatch && monthMatch && dateMatch;
             if (isInPeriod) {
                 if (entry.type === 'CREDIT') currentInflow += entry.amount;
                 else currentOutflow += entry.amount;
@@ -71,7 +81,7 @@ const Ledger: React.FC = () => {
             totalInflow: currentInflow,
             totalOutflow: currentOutflow,
         };
-    }, [ledgerEntries, filters, refreshKey]);
+    }, [ledgerEntries, selectedYear, selectedMonths, selectedDates, refreshKey]);
 
     const totalPages = Math.ceil(filteredAndSortedEntries.length / ITEMS_PER_PAGE);
     const paginatedEntries = useMemo(() => {
@@ -86,15 +96,73 @@ const Ledger: React.FC = () => {
         <div className="relative">
             <PageHeader
                 title="Main Accounts Ledger"
-                subtitle="Showing recent transactions. Select a smaller date range for faster searching."
+                subtitle="Showing recent transactions."
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
-                showFilters={['date']}
+                showFilters={[]}
                 pageAction={{ label: 'Add Entry', action: handleAddEntry }}
             />
             
             <main className="pt-6 space-y-6">
+                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md px-4 py-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Year</label>
+                            <select
+                                value={selectedYear}
+                                onChange={e => {
+                                    setSelectedYear(Number(e.target.value));
+                                    setCurrentPage(1);
+                                }}
+                                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                            >
+                                {Array.from(new Set(ledgerEntries.map(entry => new Date(entry.date).getFullYear())))
+                                    .concat([defaultSelection.year])
+                                    .filter((value, index, self) => self.indexOf(value) === index)
+                                    .sort((a, b) => b - a)
+                                    .map(year => (
+                                        <option key={year} value={year}>{year}</option>
+                                    ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Month (Multi)</label>
+                            <select
+                                multiple
+                                value={selectedMonths.map(String)}
+                                onChange={e => {
+                                    const next = Array.from(e.target.selectedOptions).map(option => Number(option.value));
+                                    setSelectedMonths(next);
+                                    setCurrentPage(1);
+                                }}
+                                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                            >
+                                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((label, index) => (
+                                    <option key={label} value={index + 1}>{label}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Date (Multi)</label>
+                            <select
+                                multiple
+                                value={selectedDates.map(String)}
+                                onChange={e => {
+                                    const next = Array.from(e.target.selectedOptions).map(option => Number(option.value));
+                                    setSelectedDates(next);
+                                    setCurrentPage(1);
+                                }}
+                                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                            >
+                                {Array.from({ length: 31 }, (_, idx) => idx + 1).map(day => (
+                                    <option key={day} value={day}>{day}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                 </div>
+
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <StatCard title="Total Inflow (Credit)" value={formatCurrency(totalInflow)} icon="arrow-down-circle-outline" color="bg-green-500" />
                     <StatCard title="Total Outflow (Debit)" value={formatCurrency(totalOutflow)} icon="arrow-up-circle-outline" color="bg-red-500" />

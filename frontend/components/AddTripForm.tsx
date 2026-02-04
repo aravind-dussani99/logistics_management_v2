@@ -449,13 +449,13 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                     <h3 className="text-xl font-semibold leading-6 text-gray-900 dark:text-white">1. Enter Details</h3>
                     <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
                         <InputField label="Date" id="date" type="date" required error={errors.date} value={formData.date} onChange={handleInputChange}/>
-                        <InputField label="Pickup Place" id="pickupPlace" type="text" list="pickupPlace-options" value={formData.pickupPlace} onChange={handleInputChange}/>
+                        <InputField label="Pickup Place" id="pickupPlace" type="text" list={formData.pickupPlace ? "pickupPlace-options" : undefined} value={formData.pickupPlace} onChange={handleInputChange}/>
                         <datalist id="pickupPlace-options">
                             {pickupSites.map(site => (
                                 <option key={site.id} value={site.name} />
                             ))}
                         </datalist>
-                        <InputField label="Drop-off Place" id="dropOffPlace" type="text" list="dropOffPlace-options" value={formData.dropOffPlace} onChange={handleInputChange}/>
+                        <InputField label="Drop-off Place" id="dropOffPlace" type="text" list={formData.dropOffPlace ? "dropOffPlace-options" : undefined} value={formData.dropOffPlace} onChange={handleInputChange}/>
                         <datalist id="dropOffPlace-options">
                             {dropOffSites.map(site => (
                                 <option key={site.id} value={site.name} />
@@ -584,7 +584,7 @@ const AddTripForm: React.FC<AddTripFormProps> = ({ onClose }) => {
                                 )}
                             </>
                         )}
-                        <InputField label="Material Type" id="material" type="text" required error={errors.material} value={formData.material} onChange={handleInputChange} list="material-type-options" />
+                        <InputField label="Material Type" id="material" type="text" required error={errors.material} value={formData.material} onChange={handleInputChange} list={formData.material ? "material-type-options" : undefined} />
                         <datalist id="material-type-options">
                              {materialTypeDefinitions.map(item => <option key={item.id} value={item.name} />)}
                         </datalist>

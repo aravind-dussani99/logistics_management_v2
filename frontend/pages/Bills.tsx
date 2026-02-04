@@ -330,7 +330,7 @@ const Bills: React.FC = () => {
                 value={bulkNameInput}
                 onChange={event => setBulkNameInput(event.target.value)}
                 placeholder="Bulk customer"
-                list="bill-vendor-options"
+                list={bulkNameInput ? "bill-vendor-options" : undefined}
                 className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
               />
               <input
@@ -440,7 +440,7 @@ const Bills: React.FC = () => {
                               value={name}
                               onChange={event => updateBillInput(trip.id, 'name', event.target.value)}
                               className="w-52 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                              list="bill-vendor-options"
+                              list={name ? "bill-vendor-options" : undefined}
                               placeholder="Actual vendor/customer"
                             />
                           </td>
