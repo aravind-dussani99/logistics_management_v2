@@ -128,6 +128,8 @@ const Bills: React.FC = () => {
   } = useData();
   const { openModal, closeModal, alert } = useUI();
   const [filters, setFilters] = useState<Filters>(getDefaultDate());
+  const [draftFilters, setDraftFilters] = useState<Filters>(getDefaultDate());
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [selectedTrips, setSelectedTrips] = useState<Set<number>>(new Set());
   const [bulkRateInput, setBulkRateInput] = useState('');
   const [bulkNameInput, setBulkNameInput] = useState('');
@@ -142,8 +144,63 @@ const Bills: React.FC = () => {
     loadVehicleMasters();
   }, [loadTrips, loadVendorCustomers, loadVehicleMasters, refreshKey]);
 
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
+  useEffect(() => {
+    if (filters.dateFrom && filters.dateTo) return;
+    const today = new Date();
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    const dateValue = formatDate(today);
+    const next = { dateFrom: dateValue, dateTo: dateValue };
+    setFilters(next);
+    setDraftFilters(next);
+  }, [filters.dateFrom, filters.dateTo]);
+
   const handleFilterChange = (nextFilters: Filters) => {
     setFilters(nextFilters);
+  };
+
+  const allowDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.ctrlKey || event.metaKey) return;
+    const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (allowed.includes(event.key)) return;
+    if (/^[0-9-]$/.test(event.key)) return;
+    event.preventDefault();
+  };
+  const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+    }
+  };
+  const updateDraft = (key: keyof Filters, value: string) => {
+    if (key === 'dateFrom') {
+      setDraftFilters(prev => ({ ...prev, dateFrom: value, dateTo: value }));
+      return;
+    }
+    setDraftFilters(prev => ({ ...prev, [key]: value }));
+  };
+  const applyDraftFilters = () => {
+    const isCompleteDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+    if ((draftFilters.dateFrom && !isCompleteDate(draftFilters.dateFrom))
+      || (draftFilters.dateTo && !isCompleteDate(draftFilters.dateTo))) {
+      return;
+    }
+    const next = { ...draftFilters };
+    if (next.dateFrom) {
+      next.dateTo = next.dateFrom;
+    }
+    handleFilterChange(next);
+  };
+  const resetDraftFilters = () => {
+    const today = new Date();
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    const nextDate = formatDate(today);
+    const nextFilters = { dateFrom: nextDate, dateTo: nextDate };
+    setDraftFilters(nextFilters);
+    handleFilterChange(nextFilters);
   };
 
   const displayTrips = useMemo(() => {
@@ -159,9 +216,24 @@ const Bills: React.FC = () => {
         const customerName = trip.actualVendorCustomerName || trip.customer || '';
         if (customerName !== filters.vendor) return false;
       }
+      if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
+      if (filters.material && trip.material !== filters.material) return false;
       return true;
     });
   }, [displayTrips, filters]);
+
+  const uniqueVendors = useMemo(
+    () => Array.from(new Set(vendorCustomers.map(item => item.name))).filter(Boolean),
+    [vendorCustomers],
+  );
+  const uniqueVehicles = useMemo(
+    () => Array.from(new Set(vehicleMasters.map(item => item.vehicleNumber))).filter(Boolean),
+    [vehicleMasters],
+  );
+  const uniqueMaterials = useMemo(
+    () => Array.from(new Set(displayTrips.map(item => item.material || ''))).filter(Boolean),
+    [displayTrips],
+  );
 
   const sortedTrips = useMemo(() => {
     return [...filteredTrips].sort((a, b) => {
@@ -311,8 +383,111 @@ const Bills: React.FC = () => {
           quarries: [],
           royaltyOwners: [],
         }}
-        showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
+        showFilters={[]}
+        showMoreFilters={[]}
         showAddAction={false}
+        headerRight={(
+          <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
+            {filtersOpen ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      onFocus={openDatePicker}
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateFrom || ''}
+                      onChange={e => updateDraft('dateFrom', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
+                    <select
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.vehicle || ''}
+                      onChange={e => updateDraft('vehicle', e.target.value)}
+                    >
+                      <option value="">All Vehicles</option>
+                      {uniqueVehicles.map(vehicle => (
+                        <option key={`bills-vehicle-${vehicle}`} value={vehicle}>
+                          {vehicle}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                    <select
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.vendor || ''}
+                      onChange={e => updateDraft('vendor', e.target.value)}
+                    >
+                      <option value="">All Vendors</option>
+                      {uniqueVendors.map(vendor => (
+                        <option key={`bills-vendor-${vendor}`} value={vendor}>
+                          {vendor}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
+                    <select
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.material || ''}
+                      onChange={e => updateDraft('material', e.target.value)}
+                    >
+                      <option value="">All Materials</option>
+                      {uniqueMaterials.map(material => (
+                        <option key={`bills-material-${material}`} value={material}>
+                          {material}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={applyDraftFilters}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetDraftFilters}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen(false)}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  <ion-icon name="chevron-down-outline"></ion-icon>
+                  Show Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       />
 
       <div className="space-y-6">
@@ -330,7 +505,7 @@ const Bills: React.FC = () => {
                 value={bulkNameInput}
                 onChange={event => setBulkNameInput(event.target.value)}
                 placeholder="Bulk customer"
-                list="bill-vendor-options"
+                list={bulkNameInput ? "bill-vendor-options" : undefined}
                 className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
               />
               <input
@@ -440,7 +615,7 @@ const Bills: React.FC = () => {
                               value={name}
                               onChange={event => updateBillInput(trip.id, 'name', event.target.value)}
                               className="w-52 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                              list="bill-vendor-options"
+                              list={name ? "bill-vendor-options" : undefined}
                               placeholder="Actual vendor/customer"
                             />
                           </td>

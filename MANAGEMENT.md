@@ -110,3 +110,8 @@ Planned modules/resources (placeholders):
 - `google_service_account` (runtime + CI)
 - `google_service_account_key` (CI)
 - `google_project_iam_member` (roles bindings)
+
+---
+
+## Roadmap (v2 changes)
+- The app uses `HashRouter` (see `frontend/App.tsx`), which keeps routing after `#` so static hosting works without server rewrites. If you want clean URLs, switch to `BrowserRouter` and add SPA rewrites on the hosting/CDN.

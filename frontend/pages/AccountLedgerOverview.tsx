@@ -40,6 +40,8 @@ const AccountLedgerOverview: React.FC = () => {
   const { trips, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [filters, setFilters] = useState<Filters>(getMtdRange());
+  const [draftFilters, setDraftFilters] = useState<Filters>(getMtdRange());
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'abstract' | 'history' | 'party' | 'head'>('history');
   const partyExportRef = useRef<PaymentReconciliationHandle | null>(null);
   const headExportRef = useRef<PaymentReconciliationHandle | null>(null);
@@ -58,6 +60,35 @@ const AccountLedgerOverview: React.FC = () => {
         setExpenses([]);
       });
   }, [loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
+
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
+  const allowDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.ctrlKey || event.metaKey) return;
+    const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (allowed.includes(event.key)) return;
+    if (/^[0-9-]$/.test(event.key)) return;
+    event.preventDefault();
+  };
+  const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+    }
+  };
+  const updateDraft = (key: keyof Filters, value: string) => {
+    setDraftFilters(prev => ({ ...prev, [key]: value }));
+  };
+  const applyDraftFilters = () => {
+    setFilters(draftFilters);
+  };
+  const resetDraftFilters = () => {
+    const resetRange = getMtdRange();
+    setDraftFilters(resetRange);
+    setFilters(resetRange);
+  };
 
   const partyIdLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -439,9 +470,80 @@ const AccountLedgerOverview: React.FC = () => {
         filters={filters}
         onFilterChange={setFilters}
         filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
-        showFilters={activeTab === 'history' ? [] : ['date']}
+        showFilters={[]}
+        showMoreFilters={[]}
         pageAction={{ label: 'Export CSV', action: exportCsv }}
         secondaryAction={{ label: 'Export PDF', action: exportCurrentTabPdf }}
+        headerRight={activeTab === 'history' ? undefined : (
+          <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
+            {filtersOpen ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      onFocus={openDatePicker}
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateFrom || ''}
+                      onChange={e => updateDraft('dateFrom', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date To</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      onFocus={openDatePicker}
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateTo || ''}
+                      onChange={e => updateDraft('dateTo', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={applyDraftFilters}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetDraftFilters}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen(false)}
+                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  <ion-icon name="chevron-down-outline"></ion-icon>
+                  Show Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       />
       <main className="pt-6 space-y-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 flex flex-wrap gap-3">

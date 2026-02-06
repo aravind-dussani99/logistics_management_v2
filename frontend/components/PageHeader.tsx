@@ -8,6 +8,8 @@ import SupervisorTripForm from './SupervisorTripForm';
 interface PageHeaderProps {
     title: string;
     subtitle?: string;
+    headerContent?: React.ReactNode;
+    headerRight?: React.ReactNode;
     showFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
     showMoreFilters?: ('date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material')[];
     filters: Filters;
@@ -44,6 +46,8 @@ const supervisorActions = [
 const PageHeader: React.FC<PageHeaderProps> = ({
     title,
     subtitle,
+    headerContent,
+    headerRight,
     showFilters = [],
     showMoreFilters = [],
     filters,
@@ -208,11 +212,16 @@ const PageHeader: React.FC<PageHeaderProps> = ({
 
     return (
         <header className="sticky top-0 bg-light dark:bg-dark py-2 z-10 border-b border-gray-200 dark:border-gray-700 -mx-6 px-6">
-            <div className="flex justify-between items-center gap-4">
-                <div>
+            <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                <div className="min-w-0">
                     <h1 className="text-3xl font-semibold text-gray-800 dark:text-white flex-shrink-0">{title}</h1>
                     {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
                 </div>
+                {headerRight && (
+                    <div className="w-full lg:w-auto lg:ml-auto">
+                        {headerRight}
+                    </div>
+                )}
                 {(showFilters.length > 0) && (
                     <div className="hidden lg:flex flex-wrap items-end gap-2 flex-grow min-w-0 justify-end">
                         {showFilters.includes('vehicle') && (
@@ -476,6 +485,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     ))}
                 </div>
             </div>
+            {headerContent && (
+                <div className="mt-3">
+                    {headerContent}
+                </div>
+            )}
         </header>
     );
 };

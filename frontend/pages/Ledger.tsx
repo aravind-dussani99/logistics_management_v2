@@ -11,19 +11,37 @@ import { formatCurrency, formatDateDisplay } from '../utils';
 
 const ITEMS_PER_PAGE = 10;
 
-const getMtdRange = () => {
+const getDefaultDateSelection = () => {
+    const today = new Date();
+    return {
+        year: today.getFullYear(),
+        month: today.getMonth() + 1,
+        dates: Array.from({ length: today.getDate() }, (_, idx) => idx + 1),
+    };
+};
+
+const getDefaultDateRange = () => {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const formatDate = (date: Date) => date.toISOString().split('T')[0];
     return {
-      dateFrom: formatDate(startOfMonth),
-      dateTo: formatDate(today)
+        dateFrom: formatDate(startOfMonth),
+        dateTo: formatDate(today),
     };
 };
 
 const Ledger: React.FC = () => {
     const { ledgerEntries, updateLedgerEntry, deleteLedgerEntry, refreshKey, loadLedgerEntries, loadAccounts } = useData();
-    const [filters, setFilters] = useState<Filters>(getMtdRange());
+    const [filters, setFilters] = useState<Filters>(getDefaultDateRange());
+    const [draftFilters, setDraftFilters] = useState<Filters>(getDefaultDateRange());
+    const defaultSelection = getDefaultDateSelection();
+    const [selectedYear, setSelectedYear] = useState<number>(defaultSelection.year);
+    const [selectedMonths, setSelectedMonths] = useState<number[]>([defaultSelection.month]);
+    const [selectedDates, setSelectedDates] = useState<number[]>(defaultSelection.dates);
+    const [draftYear, setDraftYear] = useState<number>(defaultSelection.year);
+    const [draftMonths, setDraftMonths] = useState<number[]>([defaultSelection.month]);
+    const [draftDates, setDraftDates] = useState<number[]>(defaultSelection.dates);
+    const [filtersOpen, setFiltersOpen] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const { openModal, closeModal, confirm } = useUI();
 
@@ -31,6 +49,47 @@ const Ledger: React.FC = () => {
         loadLedgerEntries();
         loadAccounts();
     }, [loadLedgerEntries, loadAccounts, refreshKey]);
+
+    useEffect(() => {
+        setDraftFilters(filters);
+    }, [filters]);
+
+    const allowDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.ctrlKey || event.metaKey) return;
+        const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (allowed.includes(event.key)) return;
+        if (/^[0-9-]$/.test(event.key)) return;
+        event.preventDefault();
+    };
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+        }
+    };
+    const updateDraft = (key: keyof Filters, value: string) => {
+        setDraftFilters(prev => ({ ...prev, [key]: value }));
+    };
+    const applyDraftFilters = () => {
+        setFilters(draftFilters);
+        setSelectedYear(draftYear);
+        setSelectedMonths(draftMonths);
+        setSelectedDates(draftDates);
+        setCurrentPage(1);
+    };
+    const resetDraftFilters = () => {
+        const resetSelection = getDefaultDateSelection();
+        const resetRange = getDefaultDateRange();
+        setDraftFilters(resetRange);
+        setFilters(resetRange);
+        setDraftYear(resetSelection.year);
+        setDraftMonths([resetSelection.month]);
+        setDraftDates(resetSelection.dates);
+        setSelectedYear(resetSelection.year);
+        setSelectedMonths([resetSelection.month]);
+        setSelectedDates(resetSelection.dates);
+        setCurrentPage(1);
+    };
 
     const handleAddEntry = () => {
         openModal('Add New Ledger Entry', <AddLedgerEntryForm onClose={closeModal} />);
@@ -57,8 +116,25 @@ const Ledger: React.FC = () => {
 
         let currentInflow = 0;
         let currentOutflow = 0;
+        const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+        const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
+        const rangeActive = Boolean(fromDate || toDate);
+
         const filtered = entriesWithBalance.filter(entry => {
-            const isInPeriod = (!filters.dateFrom || entry.date >= filters.dateFrom) && (!filters.dateTo || entry.date <= filters.dateTo);
+            const entryDate = new Date(entry.date);
+            let isInPeriod = true;
+            if (rangeActive) {
+                if (fromDate && entryDate < fromDate) isInPeriod = false;
+                if (toDate && entryDate > toDate) isInPeriod = false;
+            } else {
+                const entryYear = entryDate.getFullYear();
+                const entryMonth = entryDate.getMonth() + 1;
+                const entryDay = entryDate.getDate();
+                const yearMatch = selectedYear ? entryYear === selectedYear : true;
+                const monthMatch = selectedMonths.length ? selectedMonths.includes(entryMonth) : true;
+                const dateMatch = selectedDates.length ? selectedDates.includes(entryDay) : true;
+                isInPeriod = yearMatch && monthMatch && dateMatch;
+            }
             if (isInPeriod) {
                 if (entry.type === 'CREDIT') currentInflow += entry.amount;
                 else currentOutflow += entry.amount;
@@ -71,7 +147,7 @@ const Ledger: React.FC = () => {
             totalInflow: currentInflow,
             totalOutflow: currentOutflow,
         };
-    }, [ledgerEntries, filters, refreshKey]);
+    }, [ledgerEntries, selectedYear, selectedMonths, selectedDates, filters, refreshKey]);
 
     const totalPages = Math.ceil(filteredAndSortedEntries.length / ITEMS_PER_PAGE);
     const paginatedEntries = useMemo(() => {
@@ -86,15 +162,130 @@ const Ledger: React.FC = () => {
         <div className="relative">
             <PageHeader
                 title="Main Accounts Ledger"
-                subtitle="Showing recent transactions. Select a smaller date range for faster searching."
+                subtitle="Showing recent transactions."
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
-                showFilters={['date']}
+                showFilters={[]}
                 pageAction={{ label: 'Add Entry', action: handleAddEntry }}
+                headerRight={(
+                    <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
+                        {filtersOpen ? (
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
+                                        <input
+                                            type="date"
+                                            inputMode="numeric"
+                                            onKeyDown={allowDateTyping}
+                                            onClick={openDatePicker}
+                                            onFocus={openDatePicker}
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.dateFrom || ''}
+                                            onChange={e => updateDraft('dateFrom', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Date To</label>
+                                        <input
+                                            type="date"
+                                            inputMode="numeric"
+                                            onKeyDown={allowDateTyping}
+                                            onClick={openDatePicker}
+                                            onFocus={openDatePicker}
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.dateTo || ''}
+                                            onChange={e => updateDraft('dateTo', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Year</label>
+                                        <select
+                                            value={draftYear}
+                                            onChange={e => setDraftYear(Number(e.target.value))}
+                                            className="w-full h-8 text-xs px-2 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                                        >
+                                            {Array.from(new Set(ledgerEntries.map(entry => new Date(entry.date).getFullYear())))
+                                                .concat([defaultSelection.year])
+                                                .filter((value, index, self) => self.indexOf(value) === index)
+                                                .sort((a, b) => b - a)
+                                                .map(year => (
+                                                    <option key={year} value={year}>{year}</option>
+                                                ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Month (Multi)</label>
+                                        <select
+                                            multiple
+                                            value={draftMonths.map(String)}
+                                            onChange={e => setDraftMonths(Array.from(e.target.selectedOptions).map(option => Number(option.value)))}
+                                            className="w-full h-20 text-xs px-2 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                                        >
+                                            {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((label, index) => (
+                                                <option key={label} value={index + 1}>{label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Date (Multi)</label>
+                                        <select
+                                            multiple
+                                            value={draftDates.map(String)}
+                                            onChange={e => setDraftDates(Array.from(e.target.selectedOptions).map(option => Number(option.value)))}
+                                            className="w-full h-20 text-xs px-2 rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+                                        >
+                                            {Array.from({ length: 31 }, (_, idx) => idx + 1).map(day => (
+                                                <option key={day} value={day}>{day}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-wrap justify-end gap-2 lg:col-span-3">
+                                        <button
+                                            type="button"
+                                            onClick={applyDraftFilters}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                                        >
+                                            Apply
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={resetDraftFilters}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >
+                                            Reset
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFiltersOpen(false)}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >
+                                            Hide
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setFiltersOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    <ion-icon name="chevron-down-outline"></ion-icon>
+                                    Show Filters
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             />
             
             <main className="pt-6 space-y-6">
+
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <StatCard title="Total Inflow (Credit)" value={formatCurrency(totalInflow)} icon="arrow-down-circle-outline" color="bg-green-500" />
                     <StatCard title="Total Outflow (Debit)" value={formatCurrency(totalOutflow)} icon="arrow-up-circle-outline" color="bg-red-500" />

@@ -44,6 +44,7 @@ import SupervisorDailyExpensesForm from './pages/Supervisor/DailyExpensesForm';
 import SupervisorSiteExpenses from './pages/Supervisor/SiteExpenses';
 import SupervisorAdvancesForm from './pages/Supervisor/AdvancesForm';
 import TripImport from './pages/TripImport';
+import PaymentImport from './pages/PaymentImport';
 import TripFeed from './pages/TripFeed';
 import Accounting from './pages/Accounting';
 import Capital from './pages/Capital';
@@ -111,6 +112,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/trip-import" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
           <TripImport />
+        </ProtectedRoute>
+      } />
+      <Route path="/payment-import" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <PaymentImport />
         </ProtectedRoute>
       } />
       <Route path="/trip-feed" element={

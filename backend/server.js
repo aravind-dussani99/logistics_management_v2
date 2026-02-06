@@ -124,10 +124,19 @@ const logTripActivity = async ({ tripId, action, message, user, attachments }) =
 app.use(express.json({ limit: '20mb' }));
 app.use((req, res, next) => {
   const allowedOriginRaw = process.env.CORS_ORIGIN || '*';
-  const normalizedAllowed = allowedOriginRaw === '*' ? '*' : allowedOriginRaw.replace(/\/$/, '');
   const requestOrigin = req.headers.origin ? req.headers.origin.replace(/\/$/, '') : '';
-  const allowOrigin = normalizedAllowed === '*' ? '*' : (requestOrigin && requestOrigin === normalizedAllowed ? requestOrigin : normalizedAllowed);
-  res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  const allowedOrigins = allowedOriginRaw
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+    .map(origin => origin.replace(/\/$/, ''));
+  const allowAll = allowedOrigins.includes('*');
+  const isAllowedOrigin = requestOrigin && allowedOrigins.includes(requestOrigin);
+  const allowOrigin = allowAll ? (requestOrigin || '*') : (isAllowedOrigin ? requestOrigin : '');
+  if (allowOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') {

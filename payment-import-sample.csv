@@ -1,0 +1,4 @@
+date,transaction type,from account,to name,amount,remarks,to account,via,head account,category,sub-category,trip id
+2026-02-01,RECEIPT,IndusInd Bank,One Mine,20000,Customer receipt,One Mine,NEFT,Receipts,Customer,Invoice,101
+2026-02-02,PAYMENT,IndusInd Bank,Sri Rama Lorry Transport,35000,Transport payment,SRLT Account,RTGS,Payments,Transport,Settlement,102
+2026-02-03,RECEIPT,IndusInd Bank,Raghavendra Minerals,24500,Advance received,Raghavendra Account,UPI,Receipts,Customer,Advance,
