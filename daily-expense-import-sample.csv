@@ -1,0 +1,4 @@
+date,transaction type,from account,to name,amount,remarks,to account,via,head account,category,sub-category,trip id
+2026-02-01,DEBIT,Site Manager,Tea Vendor,350,Snacks and tea,Vendor Account,Cash,Site Expenses,Food,Snacks,
+2026-02-01,DEBIT,Site Manager,Petrol Pump,1200,Fuel top-up,Pump Account,Cash,Site Expenses,Fuel,Diesel,
+2026-02-02,CREDIT,Site Manager,Owner,5000,Top up received,Owner Account,NEFT,Top Up,Transfer,Incoming,

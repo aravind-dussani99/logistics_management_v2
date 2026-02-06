@@ -27,6 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/management-ledger', icon: 'document-text-outline', name: 'Management Ledger', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/reports', icon: 'download-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/payment-import', icon: 'cloud-upload-outline', name: 'Payment Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER] },
         { to: '/trip-records', icon: 'folder-open-outline', name: 'Trip Records', roles: [Role.ADMIN] },
       ],
@@ -94,6 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/financials', icon: 'analytics-outline', name: 'Logistics Accounts Overview' },
     { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
     { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
+    { to: '/payment-import', icon: 'cloud-upload-outline', name: 'Payment Import' },
     { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
   ];
 

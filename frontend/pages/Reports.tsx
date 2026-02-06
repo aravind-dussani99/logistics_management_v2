@@ -23,6 +23,16 @@ import { notificationApi } from '../services/notificationApi';
 type ReportType = 'trips' | 'payments' | 'expenses' | 'trip-rates' | 'bills';
 const ITEMS_PER_PAGE = 10;
 
+const getDefaultDateRange = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+    return {
+        dateFrom: formatDate(startOfMonth),
+        dateTo: formatDate(today),
+    };
+};
+
 const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports' }) => {
     const location = useLocation();
     const { currentUser } = useAuth();
@@ -33,7 +43,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
     const isSiteManager = currentUser?.role === Role.SITE_MANAGER;
     const [reportType, setReportType] = useState<ReportType>('trips');
-    const [filters, setFilters] = useState<Filters>({});
+    const [filters, setFilters] = useState<Filters>(getDefaultDateRange());
+    const [draftFilters, setDraftFilters] = useState<Filters>(getDefaultDateRange());
+    const [filtersOpen, setFiltersOpen] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [allExpenses, setAllExpenses] = useState<DailyExpense[]>([]);
     const [isPrinting, setIsPrinting] = useState(false);
@@ -90,6 +102,37 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             window.removeEventListener('afterprint', afterPrint);
         };
     }, []);
+
+    useEffect(() => {
+        setDraftFilters(filters);
+    }, [filters]);
+
+    const allowDateTyping = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.ctrlKey || event.metaKey) return;
+        const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (allowed.includes(event.key)) return;
+        if (/^[0-9-]$/.test(event.key)) return;
+        event.preventDefault();
+    };
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+        const input = event.currentTarget;
+        if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
+            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+        }
+    };
+    const updateDraft = (key: keyof Filters, value: string) => {
+        setDraftFilters(prev => ({ ...prev, [key]: value }));
+    };
+    const applyDraftFilters = () => {
+        setFilters(draftFilters);
+        setCurrentPage(1);
+    };
+    const resetDraftFilters = () => {
+        const resetRange = getDefaultDateRange();
+        setDraftFilters(resetRange);
+        setFilters(resetRange);
+        setCurrentPage(1);
+    };
 
     useEffect(() => {
         const params = new URLSearchParams(location.search);
@@ -227,6 +270,14 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             const itemDate = item?.date ? new Date(item.date) : null;
             if (fromDate && itemDate && itemDate < fromDate) return false;
             if (toDate && itemDate && itemDate > toDate) return false;
+            if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'bills') {
+                if (filters.vehicle && item.vehicleNumber !== filters.vehicle) return false;
+                if (filters.material && item.material !== filters.material) return false;
+                if (filters.vendor) {
+                    const vendorName = item.actualVendorCustomerName || item.customer || '';
+                    if (vendorName !== filters.vendor) return false;
+                }
+            }
             return true;
         }).sort((a, b) => {
             if (a?.id === 'opening') return -1;
@@ -238,6 +289,19 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             return aId - bId;
         });
     }, [reportType, filters, trips, payments, allExpenses, currentUser]);
+
+    const uniqueVendors = useMemo(() => {
+        const names = trips.map(item => item.actualVendorCustomerName || item.customer || '').filter(Boolean);
+        return Array.from(new Set(names));
+    }, [trips]);
+    const uniqueVehicles = useMemo(() => {
+        const names = trips.map(item => item.vehicleNumber || '').filter(Boolean);
+        return Array.from(new Set(names));
+    }, [trips]);
+    const uniqueMaterials = useMemo(() => {
+        const names = trips.map(item => item.material || '').filter(Boolean);
+        return Array.from(new Set(names));
+    }, [trips]);
 
     const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
     const paginatedData = useMemo(() => {
@@ -831,8 +895,126 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 filters={filters}
                 onFilterChange={setFilters}
                 filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }} // Simplified for now
-                showFilters={['singleDate', 'vehicle', 'vendor', 'material']}
+                showFilters={[]}
+                showMoreFilters={[]}
                 showAddAction={false}
+                headerRight={(
+                    <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
+                        {filtersOpen ? (
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
+                                        <input
+                                            type="date"
+                                            inputMode="numeric"
+                                            onKeyDown={allowDateTyping}
+                                            onClick={openDatePicker}
+                                            onFocus={openDatePicker}
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.dateFrom || ''}
+                                            onChange={e => updateDraft('dateFrom', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Date To</label>
+                                        <input
+                                            type="date"
+                                            inputMode="numeric"
+                                            onKeyDown={allowDateTyping}
+                                            onClick={openDatePicker}
+                                            onFocus={openDatePicker}
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.dateTo || ''}
+                                            onChange={e => updateDraft('dateTo', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
+                                        <select
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.vehicle || ''}
+                                            onChange={e => updateDraft('vehicle', e.target.value)}
+                                        >
+                                            <option value="">All Vehicles</option>
+                                            {uniqueVehicles.map(vehicle => (
+                                                <option key={`reports-vehicle-${vehicle}`} value={vehicle}>
+                                                    {vehicle}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                                        <select
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.vendor || ''}
+                                            onChange={e => updateDraft('vendor', e.target.value)}
+                                        >
+                                            <option value="">All Vendors</option>
+                                            {uniqueVendors.map(vendor => (
+                                                <option key={`reports-vendor-${vendor}`} value={vendor}>
+                                                    {vendor}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
+                                        <select
+                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.material || ''}
+                                            onChange={e => updateDraft('material', e.target.value)}
+                                        >
+                                            <option value="">All Materials</option>
+                                            {uniqueMaterials.map(material => (
+                                                <option key={`reports-material-${material}`} value={material}>
+                                                    {material}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-wrap justify-end gap-2 lg:col-span-3">
+                                        <button
+                                            type="button"
+                                            onClick={applyDraftFilters}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                                        >
+                                            Apply
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={resetDraftFilters}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >
+                                            Reset
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFiltersOpen(false)}
+                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >
+                                            Hide
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setFiltersOpen(true)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    <ion-icon name="chevron-down-outline"></ion-icon>
+                                    Show Filters
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             />
             <main className="pt-6">
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">

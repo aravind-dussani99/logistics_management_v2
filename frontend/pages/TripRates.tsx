@@ -330,7 +330,7 @@ const TripRateLedger: React.FC = () => {
   } = useData();
   const [filters, setFilters] = useState<Filters>(getDefaultDate());
   const [draftFilters, setDraftFilters] = useState<Filters>(getDefaultDate());
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const [pageIndex, setPageIndex] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<PartyTab['key']>('mineQuarry');
@@ -690,39 +690,28 @@ const TripRateLedger: React.FC = () => {
         showFilters={[]}
         showMoreFilters={[]}
         showAddAction={false}
-        headerContent={(
-          <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Filters</div>
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(prev => !prev)}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
-              >
-                <ion-icon name={filtersOpen ? 'chevron-up-outline' : 'chevron-down-outline'}></ion-icon>
-                {filtersOpen ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {filtersOpen && (
-              <div className="mt-3 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="min-w-[140px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Date</label>
+        headerRight={(
+          <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
+            {filtersOpen ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date</label>
                     <input
                       type="date"
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
                       onFocus={openDatePicker}
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}
                     />
                   </div>
-                  <div className="min-w-[150px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Vehicle</label>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.vehicle || ''}
                       onChange={e => updateDraft('vehicle', e.target.value)}
                     >
@@ -734,10 +723,10 @@ const TripRateLedger: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="min-w-[170px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.vendor || ''}
                       onChange={e => updateDraft('vendor', e.target.value)}
                     >
@@ -749,10 +738,10 @@ const TripRateLedger: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="min-w-[150px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Material</label>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.material || ''}
                       onChange={e => updateDraft('material', e.target.value)}
                     >
@@ -765,11 +754,11 @@ const TripRateLedger: React.FC = () => {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-                  <div className="min-w-[170px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Mine & Quarry</label>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Mine & Quarry</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.mine || ''}
                       onChange={e => updateDraft('mine', e.target.value)}
                     >
@@ -781,10 +770,10 @@ const TripRateLedger: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="min-w-[190px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Transport & Owner</label>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Transport & Owner</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.transportOwner || ''}
                       onChange={e => updateDraft('transportOwner', e.target.value)}
                     >
@@ -796,10 +785,10 @@ const TripRateLedger: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="min-w-[150px]">
-                    <label className="text-xs text-gray-500 dark:text-gray-400">Royalty</label>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Royalty</label>
                     <select
-                      className="w-full text-sm px-2 py-1 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.royalty || ''}
                       onChange={e => updateDraft('royalty', e.target.value)}
                     >
@@ -815,26 +804,44 @@ const TripRateLedger: React.FC = () => {
                     <button
                       type="button"
                       onClick={applyDraftFilters}
-                      className="px-4 py-2 rounded-md text-sm font-medium text-white bg-primary hover:bg-primary-dark"
+                      className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
                     >
-                      Apply Filters
+                      Apply
                     </button>
                     <button
                       type="button"
                       onClick={resetDraftFilters}
-                      className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                      className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
                       Reset
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen(false)}
+                      className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                      Hide
+                    </button>
                   </div>
                 </div>
+              </div>
+            ) : (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  <ion-icon name="chevron-down-outline"></ion-icon>
+                  Show Filters
+                </button>
               </div>
             )}
           </div>
         )}
       />
       <div className="space-y-6">
-        <div className="rounded-lg bg-white dark:bg-gray-800 shadow-md px-4 py-3 flex flex-wrap gap-2">
+        <div className="rounded-lg bg-white dark:bg-gray-800 shadow-md px-4 py-3 flex flex-wrap gap-2 sticky top-20 z-30">
           {partyTabs.map(tab => {
             const awaitingCount = tab.key === 'allIn'
               ? filteredTrips.filter(trip => {
