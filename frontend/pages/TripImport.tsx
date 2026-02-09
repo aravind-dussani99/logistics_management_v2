@@ -447,6 +447,12 @@ const TripImport: React.FC = () => {
       duplicateCount ? `${duplicateCount} duplicates skipped.` : '',
       failed.length ? `${failed.length} remaining rows not imported.` : '',
     ].filter(Boolean).join(' '));
+    setParsedTrips([]);
+    setRows([]);
+    setErrors([]);
+    setExcludedRowNumbers([]);
+    setShowDuplicateDialog(false);
+    setFileName('');
   };
 
   const retryFailed = async () => {

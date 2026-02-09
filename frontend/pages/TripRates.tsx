@@ -11,7 +11,7 @@ import { formatDateDisplay } from '../utils';
 const PAGE_SIZE = 10;
 
 type PartyTab = {
-  key: 'transportOwner' | 'mineQuarry' | 'royaltyOwner' | 'allIn' | 'combo';
+  key: 'transportOwner' | 'mineQuarry' | 'royaltyOwner' | 'combo';
   label: string;
   field?: keyof Trip;
 };
@@ -21,7 +21,6 @@ const partyTabs: PartyTab[] = [
   { key: 'royaltyOwner', label: 'Royalty Owner', field: 'royaltyOwnerName' },
   { key: 'transportOwner', label: 'Transport & Owner', field: 'transporterName' },
   { key: 'combo', label: 'Combo Rates' },
-  { key: 'allIn', label: 'All-in Rate' },
 ];
 
 const getRatePartyName = (trip: Trip, tabKey: PartyTab['key']) => {
@@ -339,8 +338,6 @@ const TripRateLedger: React.FC = () => {
   const [bulkRateInputs, setBulkRateInputs] = useState<Record<string, string>>({});
   const [bulkModeActive, setBulkModeActive] = useState<Record<string, boolean>>({});
   const [optimisticRates, setOptimisticRates] = useState<MaterialRate[]>([]);
-  const [optimisticTripUpdates, setOptimisticTripUpdates] = useState<Record<number, Partial<Trip>>>({});
-  const [allInInputs, setAllInInputs] = useState<Record<number, { cost: string; customer: string }>>({});
   const [comboInputs, setComboInputs] = useState<Record<number, { rate: string; mine: boolean; royalty: boolean; transport: boolean }>>({});
   const { openModal, closeModal, alert } = useUI();
 
@@ -396,7 +393,6 @@ const TripRateLedger: React.FC = () => {
     rateValue: string,
     rateSource?: 'combo',
   ) => {
-    if (tabKey === 'allIn') return undefined;
     const partyName = getRatePartyName(trip, tabKey);
     if (!partyName) {
       await alert('Missing Rate Party', 'This trip does not have a rate party name for this tab. Please update the trip first.');
@@ -405,7 +401,7 @@ const TripRateLedger: React.FC = () => {
     const rateNumber = Number(rateValue) || 0;
     const tripDate = String(trip.date || '').split('T')[0];
     const effectiveFrom = tripDate;
-    const partyTypeMap: Record<Exclude<PartyTab['key'], 'allIn'>, RatePartyType> = {
+    const partyTypeMap: Record<Exclude<PartyTab['key'], 'combo'>, RatePartyType> = {
       transportOwner: 'transport-owner',
       mineQuarry: 'mine-quarry',
       royaltyOwner: 'royalty-owner',
@@ -586,13 +582,8 @@ const TripRateLedger: React.FC = () => {
     handleFilterChange(nextFilters);
   };
 
-  const displayTrips = useMemo(() => {
-    if (Object.keys(optimisticTripUpdates).length === 0) return trips;
-    return trips.map(trip => ({ ...trip, ...optimisticTripUpdates[trip.id] }));
-  }, [trips, optimisticTripUpdates]);
-
   const filteredTrips = useMemo(() => {
-    const filtered = displayTrips.filter(trip => {
+    const filtered = trips.filter(trip => {
       const tripDate = (trip.date || '').split('T')[0];
       if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
@@ -608,7 +599,7 @@ const TripRateLedger: React.FC = () => {
       if (dateDiff !== 0) return dateDiff;
       return a.id - b.id;
     });
-  }, [displayTrips, filters]);
+  }, [trips, filters]);
 
   const partyTypeByTab: Record<string, RatePartyType> = {
     transportOwner: 'transport-owner',
@@ -843,13 +834,7 @@ const TripRateLedger: React.FC = () => {
       <div className="space-y-6">
         <div className="rounded-lg bg-white dark:bg-gray-800 shadow-md px-4 py-3 flex flex-wrap gap-2 sticky top-20 z-30">
           {partyTabs.map(tab => {
-            const awaitingCount = tab.key === 'allIn'
-              ? filteredTrips.filter(trip => {
-                  const mode = trip.rateMode || 'activity';
-                  const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
-                  return mode !== 'all_in' || !hasRates;
-                }).length
-              : tab.key === 'combo'
+            const awaitingCount = tab.key === 'combo'
                 ? comboAwaitingTrips.length
               : filteredTrips.filter(trip => {
                   if ((trip.rateMode || 'activity') === 'all_in') return false;
@@ -879,35 +864,20 @@ const TripRateLedger: React.FC = () => {
           if (tab.key === 'combo') {
             const awaitingKey = `${tab.key}-awaiting`;
             const appliedKey = `${tab.key}-applied`;
+            const awaitingTrips = comboAwaitingTrips;
+            const appliedTrips = comboAppliedTrips;
             const awaitingPage = pageIndex[awaitingKey] || 1;
             const appliedPage = pageIndex[appliedKey] || 1;
-            const awaitingSlice = comboAwaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
-            const appliedSlice = comboAppliedTrips.slice((appliedPage - 1) * PAGE_SIZE, appliedPage * PAGE_SIZE);
-            const awaitingTotal = comboAwaitingTrips.length;
-            const appliedTotal = comboAppliedTrips.length;
+            const awaitingSlice = awaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
+            const appliedSlice = appliedTrips.slice((appliedPage - 1) * PAGE_SIZE, appliedPage * PAGE_SIZE);
+            const awaitingTotal = awaitingTrips.length;
+            const appliedTotal = appliedTrips.length;
             const awaitingStart = awaitingTotal === 0 ? 0 : (awaitingPage - 1) * PAGE_SIZE + 1;
             const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
             const appliedStart = appliedTotal === 0 ? 0 : (appliedPage - 1) * PAGE_SIZE + 1;
             const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
             const selectedSet = selectedTrips[tab.key] || new Set<number>();
-            const bulkRateValue = bulkRateInputs[tab.key] || '';
             const allSelected = awaitingSlice.length > 0 && awaitingSlice.every(trip => selectedSet.has(trip.id));
-
-            const toggleSelect = (tripId: number) => {
-              setSelectedTrips(prev => {
-                const next = new Set(prev[tab.key] || []);
-                if (next.has(tripId)) {
-                  next.delete(tripId);
-                } else {
-                  next.add(tripId);
-                }
-                if (next.size === 0) {
-                  setBulkModeActive(active => ({ ...active, [tab.key]: false }));
-                }
-                return { ...prev, [tab.key]: next };
-              });
-            };
-
             const toggleSelectAll = () => {
               setSelectedTrips(prev => {
                 const next = new Set(prev[tab.key] || []);
@@ -916,86 +886,93 @@ const TripRateLedger: React.FC = () => {
                 } else {
                   awaitingSlice.forEach(trip => next.add(trip.id));
                 }
-                if (next.size === 0) {
-                  setBulkModeActive(active => ({ ...active, [tab.key]: false }));
+                return { ...prev, [tab.key]: next };
+              });
+            };
+            const toggleSelect = (tripId: number) => {
+              setSelectedTrips(prev => {
+                const next = new Set(prev[tab.key] || []);
+                if (next.has(tripId)) {
+                  next.delete(tripId);
+                } else {
+                  next.add(tripId);
                 }
                 return { ...prev, [tab.key]: next };
               });
             };
-
+            const bulkRateValue = bulkRateInputs[tab.key] || '';
             const handleComboFillSelected = () => {
-              if (!bulkRateValue.trim()) {
-                openModal('Bulk rate missing', (
-                  <div className="p-6 space-y-4">
-                    <p className="text-sm text-gray-700 dark:text-gray-200">Enter a bulk rate before filling selected trips.</p>
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={closeModal}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none"
-                      >
-                        Okay
-                      </button>
-                    </div>
-                  </div>
-                ));
+              if (!bulkRateValue) return;
+              const missingRates = awaitingSlice.filter(trip => {
+                const input = getComboInput(trip);
+                return !input.rate;
+              });
+              if (missingRates.length === 0) return;
+              if (missingRates.length === awaitingSlice.length) {
+                setComboInputs(prev => {
+                  const next = { ...prev };
+                  awaitingSlice.forEach(trip => {
+                    const base = getComboInput(trip);
+                    next[trip.id] = { ...base, rate: bulkRateValue };
+                  });
+                  return next;
+                });
                 return;
               }
-              const selectedTripsList = comboAwaitingTrips.filter(trip => selectedSet.has(trip.id));
-              setComboInputs(prev => {
-                const next = { ...prev };
-                selectedTripsList.forEach(trip => {
-                  const base = next[trip.id] || getComboInput(trip);
-                  next[trip.id] = { ...base, rate: bulkRateValue };
-                });
-                return next;
-              });
-              setBulkModeActive(active => ({ ...active, [tab.key]: true }));
+              openModal('Fill missing rates', (
+                <div className="p-6 space-y-4">
+                  <p className="text-sm text-gray-700 dark:text-gray-200">
+                    {missingRates.length} selected trip(s) do not have a rate yet. Fill them with the bulk rate?
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComboInputs(prev => {
+                          const next = { ...prev };
+                          missingRates.forEach(trip => {
+                            const base = getComboInput(trip);
+                            next[trip.id] = { ...base, rate: bulkRateValue };
+                          });
+                          return next;
+                        });
+                        closeModal();
+                      }}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none"
+                    >
+                      Fill Missing With Bulk Rate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTrips(prev => {
+                          const next = new Set(prev[tab.key] || []);
+                          missingRates.forEach(trip => next.delete(trip.id));
+                          return { ...prev, [tab.key]: next };
+                        });
+                        closeModal();
+                      }}
+                      className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
+                    >
+                      Uncheck Missing
+                    </button>
+                  </div>
+                </div>
+              ));
             };
-
             const handleComboBulkApply = async () => {
-              if (bulkApplying) return;
-              const selectedTripsList = comboAwaitingTrips.filter(trip => selectedSet.has(trip.id));
+              const selectedTripsList = awaitingTrips.filter(trip => selectedSet.has(trip.id));
               if (selectedTripsList.length === 0) return;
+              if (!bulkRateValue.trim()) {
+                await alert('Missing Rate', 'Enter a bulk rate before applying to selected trips.');
+                return;
+              }
               const missingRates = selectedTripsList.filter(trip => {
                 const input = getComboInput(trip);
                 return !input.rate.trim();
               });
               if (missingRates.length > 0) {
-                if (!bulkRateValue.trim()) {
-                  openModal('Missing rates', (
-                    <div className="p-6 space-y-4">
-                      <p className="text-sm text-gray-700 dark:text-gray-200">
-                        {missingRates.length} selected trip(s) do not have a rate yet. Fill them with the bulk rate or uncheck them.
-                      </p>
-                      <div className="flex justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedTrips(prev => {
-                              const next = new Set(prev[tab.key] || []);
-                              missingRates.forEach(trip => next.delete(trip.id));
-                              return { ...prev, [tab.key]: next };
-                            });
-                            closeModal();
-                          }}
-                          className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
-                        >
-                          Uncheck Missing
-                        </button>
-                        <button
-                          type="button"
-                          onClick={closeModal}
-                          className="bg-white dark:bg-gray-700 py-2 px-4 border border-gray-300 dark:border-gray-500 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ));
-                  return;
-                }
-                openModal('Fill missing rates', (
+                openModal('Missing rates', (
                   <div className="p-6 space-y-4">
                     <p className="text-sm text-gray-700 dark:text-gray-200">
                       {missingRates.length} selected trip(s) do not have a rate yet. Fill them with the bulk rate?
@@ -1226,9 +1203,9 @@ const TripRateLedger: React.FC = () => {
                                       type="text"
                                       inputMode="decimal"
                                       value={input.rate}
+                                      placeholder="Rate"
                                       onChange={event => updateComboInput(trip.id, 'rate', event.target.value, input)}
                                       className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                      placeholder="Rate"
                                     />
                                   </td>
                                   <td className="px-3 py-2">
@@ -1254,8 +1231,17 @@ const TripRateLedger: React.FC = () => {
                 <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
                   <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
                     <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Combo Rates Applied</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      Showing {appliedStart}–{appliedEnd} of {appliedTotal}
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Showing {appliedStart}–{appliedEnd} of {appliedTotal}
+                      </div>
+                      <Pagination
+                        currentPage={appliedPage}
+                        totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))}
+                        onPageChange={page => handlePageChange(appliedKey, page)}
+                        totalItems={appliedTotal}
+                        pageSize={PAGE_SIZE}
+                      />
                     </div>
                   </div>
                   <div className="px-6 py-4">
@@ -1329,247 +1315,6 @@ const TripRateLedger: React.FC = () => {
                                             />
                                           )
                                         }
-                                        className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
-                                      >
-                                        Edit
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          }
-          if (tab.key === 'allIn') {
-            const awaitingKey = `${tab.key}-awaiting`;
-            const appliedKey = `${tab.key}-applied`;
-            const awaitingTrips = filteredTrips.filter(trip => {
-              const mode = trip.rateMode || 'activity';
-              const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
-              return mode !== 'all_in' || !hasRates;
-            });
-            const appliedTrips = filteredTrips.filter(trip => {
-              const mode = trip.rateMode || 'activity';
-              const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
-              return mode === 'all_in' && hasRates;
-            });
-            const awaitingPage = pageIndex[awaitingKey] || 1;
-            const appliedPage = pageIndex[appliedKey] || 1;
-            const awaitingSlice = awaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
-            const appliedSlice = appliedTrips.slice((appliedPage - 1) * PAGE_SIZE, appliedPage * PAGE_SIZE);
-            const awaitingTotal = awaitingTrips.length;
-            const appliedTotal = appliedTrips.length;
-            const awaitingStart = awaitingTotal === 0 ? 0 : (awaitingPage - 1) * PAGE_SIZE + 1;
-            const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
-            const appliedStart = appliedTotal === 0 ? 0 : (appliedPage - 1) * PAGE_SIZE + 1;
-            const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
-
-            const handleAllInInput = (tripId: number, field: 'cost' | 'customer', value: string) => {
-              setAllInInputs(prev => ({
-                ...prev,
-                [tripId]: {
-                  cost: prev[tripId]?.cost || '',
-                  customer: prev[tripId]?.customer || '',
-                  [field]: value,
-                },
-              }));
-            };
-
-            const handleAllInApply = async (trip: Trip) => {
-              const values = allInInputs[trip.id] || { cost: '', customer: '' };
-              const costValue = Number(values.cost || 0);
-              const customerValue = Number(values.customer || 0);
-              if (!costValue || !customerValue) return;
-              const updatedTrip = await tripRateApi.applyAllIn({
-                tripId: trip.id,
-                allInCostPerTon: costValue,
-                customerRatePerTon: customerValue,
-              });
-              setOptimisticTripUpdates(prev => ({ ...prev, [trip.id]: updatedTrip }));
-            };
-
-            return (
-              <div key={tab.key} className="space-y-6">
-                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-                  <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      Trips Awaiting All-in Rates
-                      <span className={`ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${awaitingTotal > 0 ? 'bg-primary text-white animate-pulse' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}>
-                        {awaitingTotal}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Showing {awaitingStart}–{awaitingEnd} of {awaitingTotal}
-                      </div>
-                      <Pagination
-                        currentPage={awaitingPage}
-                        totalPages={Math.max(1, Math.ceil(awaitingTotal / PAGE_SIZE))}
-                        onPageChange={page => handlePageChange(awaitingKey, page)}
-                        totalItems={awaitingTotal}
-                        pageSize={PAGE_SIZE}
-                      />
-                    </div>
-                  </div>
-                  <div className="px-6 py-4">
-                    {awaitingSlice.length === 0 ? (
-                      <div className="px-4 py-12 text-center text-sm text-gray-500">No trips pending all-in rates.</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full table-auto border-collapse text-sm">
-                          <thead>
-                            <tr className="text-left text-gray-500">
-                              <th className="w-12 px-3 py-2">S.No.</th>
-                              <th className="px-3 py-2">Trip #</th>
-                              <th className="px-3 py-2">Date</th>
-                              <th className="px-3 py-2">Invoice/DC</th>
-                              <th className="px-3 py-2">Customer</th>
-                              <th className="px-3 py-2">Net Qty</th>
-                              <th className="px-3 py-2 w-36">All-in Cost/Ton</th>
-                              <th className="px-3 py-2 w-36">Customer Rate/Ton</th>
-                              <th className="px-3 py-2">Total Cost</th>
-                              <th className="px-3 py-2">Revenue</th>
-                              <th className="px-3 py-2">Profit</th>
-                              <th className="px-3 py-2">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {awaitingSlice.map((trip, idx) => {
-                              const inputs = allInInputs[trip.id] || { cost: '', customer: '' };
-                              const netQty = Number(trip.netWeight || 0);
-                              const costPerTon = Number(inputs.cost || 0);
-                              const customerPerTon = Number(inputs.customer || 0);
-                              const totalCost = netQty * costPerTon;
-                              const revenue = netQty * customerPerTon;
-                              const profit = revenue - totalCost;
-                              return (
-                                <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
-                                  <td className="px-3 py-2">{(awaitingPage - 1) * PAGE_SIZE + idx + 1}</td>
-                                  <td className="px-3 py-2">#{trip.id}</td>
-                                  <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
-                                  <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
-                                  <td className="px-3 py-2">{trip.customer || '-'}</td>
-                                  <td className="px-3 py-2">{netQty.toFixed(2)}</td>
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={inputs.cost}
-                                      placeholder="Cost"
-                                      onChange={event => handleAllInInput(trip.id, 'cost', event.target.value)}
-                                      className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input
-                                      type="text"
-                                      inputMode="decimal"
-                                      value={inputs.customer}
-                                      placeholder="Rate"
-                                      onChange={event => handleAllInInput(trip.id, 'customer', event.target.value)}
-                                      className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-                                    />
-                                  </td>
-                                  <td className="px-3 py-2">{totalCost.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{revenue.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{profit.toFixed(2)}</td>
-                                  <td className="px-3 py-2">
-                                    <button
-                                      onClick={() => handleAllInApply(trip)}
-                                      disabled={!costPerTon || !customerPerTon}
-                                      className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
-                                    >
-                                      Apply Rate
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-                  <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">All-in Rates Applied</div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Showing {appliedStart}–{appliedEnd} of {appliedTotal}
-                      </div>
-                      <Pagination
-                        currentPage={appliedPage}
-                        totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))}
-                        onPageChange={page => handlePageChange(appliedKey, page)}
-                        totalItems={appliedTotal}
-                        pageSize={PAGE_SIZE}
-                      />
-                    </div>
-                  </div>
-                  <div className="px-6 py-4">
-                    {appliedSlice.length === 0 ? (
-                      <div className="px-4 py-12 text-center text-sm text-gray-500">No all-in rates recorded yet.</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full table-auto border-collapse text-sm">
-                          <thead>
-                            <tr className="text-left text-gray-500">
-                              <th className="w-12 px-3 py-2">S.No.</th>
-                              <th className="px-3 py-2">Trip #</th>
-                              <th className="px-3 py-2">Date</th>
-                              <th className="px-3 py-2">Invoice/DC</th>
-                              <th className="px-3 py-2">Customer</th>
-                              <th className="px-3 py-2">Net Qty</th>
-                              <th className="px-3 py-2">All-in Cost/Ton</th>
-                              <th className="px-3 py-2">Customer Rate/Ton</th>
-                              <th className="px-3 py-2">Total Cost</th>
-                              <th className="px-3 py-2">Revenue</th>
-                              <th className="px-3 py-2">Profit</th>
-                              <th className="px-3 py-2">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {appliedSlice.map((trip, idx) => {
-                              const netQty = Number(trip.netWeight || 0);
-                              const costPerTon = Number(trip.allInCostPerTon || 0);
-                              const customerPerTon = Number(trip.customerRatePerTon || 0);
-                              const totalCost = Number(trip.allInCost || 0) || netQty * costPerTon;
-                              const revenue = Number(trip.revenue || 0) || netQty * customerPerTon;
-                              const profit = revenue - totalCost;
-                              return (
-                                <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
-                                  <td className="px-3 py-2">{(appliedPage - 1) * PAGE_SIZE + idx + 1}</td>
-                                  <td className="px-3 py-2">#{trip.id}</td>
-                                  <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
-                                  <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
-                                  <td className="px-3 py-2">{trip.customer || '-'}</td>
-                                  <td className="px-3 py-2">{netQty.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{costPerTon.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{customerPerTon.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{totalCost.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{revenue.toFixed(2)}</td>
-                                  <td className="px-3 py-2">{profit.toFixed(2)}</td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => openModal(`View Trip #${trip.id}`, <SupervisorTripForm mode="view" trip={trip} onClose={closeModal} />)}
-                                        className="rounded-md bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                                      >
-                                        View
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => openModal(`Edit Trip #${trip.id}`, <SupervisorTripForm mode="edit" trip={trip} onClose={closeModal} />)}
                                         className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
                                       >
                                         Edit
