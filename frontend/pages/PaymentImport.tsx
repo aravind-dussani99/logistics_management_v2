@@ -166,14 +166,31 @@ const PaymentImport: React.FC = () => {
   };
 
   const excludedRowsSet = useMemo(() => new Set(excludedRowNumbers), [excludedRowNumbers]);
+
+  const getRowIssues = (row: ParsedRow['data']) => {
+    const issues: string[] = [];
+    if (!row.date) issues.push('Date is required.');
+    if (!row.transactionType) issues.push('Transaction Type is required.');
+    if (!row.fromAccount) issues.push('From Account is required.');
+    if (!row.toName) issues.push('To Name is required.');
+    if (row.amount === '') issues.push('Amount is required.');
+    if (!row.remarks) issues.push('Remarks are required.');
+    const normalizedType = importMode === 'payments'
+      ? normalizePaymentType(row.transactionType)
+      : normalizeExpenseType(row.transactionType);
+    if (!normalizedType) issues.push('Transaction Type is invalid.');
+    return issues;
+  };
+
+  const activeRows = useMemo(
+    () => parsedRows.filter(row => !excludedRowsSet.has(row.rowNumber)),
+    [parsedRows, excludedRowsSet],
+  );
   const readyRows = useMemo(
-    () => parsedRows.filter(row => !excludedRowsSet.has(row.rowNumber) && (!row.issues || row.issues.length === 0)),
-    [parsedRows, excludedRowsSet],
+    () => activeRows.filter(row => getRowIssues(row.data).length === 0),
+    [activeRows],
   );
-  const reviewRows = useMemo(
-    () => parsedRows.filter(row => !excludedRowsSet.has(row.rowNumber) && (row.issues || []).length > 0),
-    [parsedRows, excludedRowsSet],
-  );
+  const reviewRows = activeRows;
 
   useEffect(() => {
     if (rows.length > 0) validateAndParse();
@@ -224,20 +241,6 @@ const PaymentImport: React.FC = () => {
       const toName = getValueFromRow(row, HEADER_ALIASES.toName);
       const amountValue = normalizeAmount(getValueFromRow(row, HEADER_ALIASES.amount));
       const remarks = getValueFromRow(row, HEADER_ALIASES.remarks);
-      const issues: string[] = [];
-
-      if (!dateValue) issues.push('Date is required.');
-      if (!transactionType) issues.push('Transaction Type is required.');
-      if (!fromAccount) issues.push('From Account is required.');
-      if (!toName) issues.push('To Name is required.');
-      if (amountValue === '') issues.push('Amount is required.');
-      if (!remarks) issues.push('Remarks are required.');
-
-      const normalizedType = importMode === 'payments'
-        ? normalizePaymentType(transactionType)
-        : normalizeExpenseType(transactionType);
-      if (!normalizedType) issues.push('Transaction Type is invalid.');
-
       parsed.push({
         rowNumber,
         data: {
@@ -254,7 +257,6 @@ const PaymentImport: React.FC = () => {
           subCategory: getValueFromRow(row, HEADER_ALIASES.subCategory),
           tripId: getValueFromRow(row, HEADER_ALIASES.tripId),
         },
-        issues: issues.length > 0 ? issues : undefined,
       });
     }
     setErrors(nextErrors);
@@ -277,7 +279,6 @@ const PaymentImport: React.FC = () => {
       return {
         ...row,
         data: { ...row.data, [field]: nextValue },
-        issues: undefined,
       };
     }));
   };
@@ -333,6 +334,8 @@ const PaymentImport: React.FC = () => {
 
     setIsSubmitting(false);
     setFailedRows(failed);
+    setParsedRows(failed);
+    setExcludedRowNumbers([]);
     setSubmitMessage(cancelRef.current
       ? 'Import cancelled.'
       : `Import completed. ${failed.length} row(s) failed.`);
@@ -399,7 +402,7 @@ const PaymentImport: React.FC = () => {
 
           {parsedRows.length > 0 && errors.length === 0 && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              {parsedRows.length} rows parsed — {readyRows.length} ready, {reviewRows.length} need review.
+              {parsedRows.length} rows parsed — {readyRows.length} ready, {reviewRows.length - readyRows.length} need review.
             </div>
           )}
 
@@ -447,7 +450,9 @@ const PaymentImport: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {reviewRows.map(row => (
+                    {reviewRows.map(row => {
+                      const rowIssues = getRowIssues(row.data);
+                      return (
                       <tr key={`review-${row.rowNumber}`} className="even:bg-amber-50/60 dark:even:bg-amber-900/20">
                         <td className="px-3 py-2">{row.rowNumber}</td>
                         <td className="px-3 py-2">
@@ -494,7 +499,7 @@ const PaymentImport: React.FC = () => {
                           />
                         </td>
                         <td className="px-3 py-2 text-amber-700">
-                          {(row.issues || []).map(issue => (
+                          {rowIssues.map(issue => (
                             <div key={`${row.rowNumber}-${issue}`}>{issue}</div>
                           ))}
                         </td>
@@ -508,7 +513,8 @@ const PaymentImport: React.FC = () => {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

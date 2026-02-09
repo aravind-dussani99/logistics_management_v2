@@ -39,12 +39,14 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
   const {
     trips,
     payments,
+    materialRates,
     vendorCustomers,
     mineQuarries,
     transportOwnerProfiles,
     royaltyOwnerProfiles,
     loadTrips,
     loadPayments,
+    loadMaterialRates,
     loadVendorCustomers,
     loadMineQuarries,
     loadTransportOwnerProfiles,
@@ -60,6 +62,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
   useEffect(() => {
     loadTrips();
     loadPayments();
+    loadMaterialRates();
     loadVendorCustomers();
     loadMineQuarries();
     loadTransportOwnerProfiles();
@@ -67,6 +70,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
   }, [
     loadTrips,
     loadPayments,
+    loadMaterialRates,
     loadVendorCustomers,
     loadMineQuarries,
     loadTransportOwnerProfiles,
@@ -232,6 +236,14 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
         const materialCost = Number(trip.materialCost || 0);
         const transportCost = Number(trip.transportCost || 0);
         const royaltyCost = Number(trip.royaltyCost || 0);
+        const comboRates = materialRates.filter(rate =>
+          rate.tripId === trip.id && String(rate.remarks || '').toLowerCase().includes('combo rate')
+        );
+        const comboRatePerTon = comboRates.length > 0 ? Number(comboRates[0].ratePerTon || 0) : 0;
+        const comboRateParties = new Set(comboRates.map(rate => rate.ratePartyType));
+        const comboMine = comboRateParties.has('mine-quarry');
+        const comboTransport = comboRateParties.has('transport-owner');
+        const comboRoyalty = comboRateParties.has('royalty-owner');
         const matchesCustomer = (trip.actualVendorCustomerName && normalizeName(trip.actualVendorCustomerName) === selectedPartyKey)
           || (trip.customer && normalizeName(trip.customer) === selectedPartyKey)
           || (trip.vendorName && normalizeName(trip.vendorName) === selectedPartyKey);
@@ -240,12 +252,18 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
         const matchesRoyalty = trip.royaltyOwnerName && normalizeName(trip.royaltyOwnerName) === selectedPartyKey;
         if (!matchesCustomer && !matchesQuarry && !matchesTransport && !matchesRoyalty) return null;
 
-        const matchedRevenue = matchesCustomer ? revenue : 0;
-        const matchedMaterial = matchesQuarry ? materialCost : 0;
-        const matchedTransport = matchesTransport ? transportCost : 0;
-        const matchedRoyalty = matchesRoyalty ? royaltyCost : 0;
-        const matchedTotal = matchedRevenue + matchedMaterial + matchedTransport + matchedRoyalty;
         const netWeight = Number(trip.netWeight || 0);
+        const comboAmount = netWeight * comboRatePerTon;
+        const comboAppliesToParty = (matchesQuarry && comboMine)
+          || (matchesTransport && comboTransport)
+          || (matchesRoyalty && comboRoyalty);
+
+        const matchedRevenue = matchesCustomer ? revenue : 0;
+        const matchedMaterial = matchesQuarry && !comboMine ? materialCost : 0;
+        const matchedTransport = matchesTransport && !comboTransport ? transportCost : 0;
+        const matchedRoyalty = matchesRoyalty && !comboRoyalty ? royaltyCost : 0;
+        const matchedCombo = comboAppliesToParty ? comboAmount : 0;
+        const matchedTotal = matchedRevenue + matchedMaterial + matchedTransport + matchedRoyalty + matchedCombo;
         return {
           id: trip.id,
           date: trip.date,
@@ -258,10 +276,16 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
           materialCost: matchedMaterial,
           transportCost: matchedTransport,
           royaltyCost: matchedRoyalty,
+          comboRate: comboRatePerTon,
+          comboAmount: matchedCombo,
+          comboMine,
+          comboTransport,
+          comboRoyalty,
+          hasCombo: comboRatePerTon > 0,
           hasCustomer: matchesCustomer,
-          hasMine: !!matchesQuarry,
-          hasTransport: !!matchesTransport,
-          hasRoyalty: !!matchesRoyalty,
+          hasMine: Boolean(matchesQuarry),
+          hasTransport: Boolean(matchesTransport),
+          hasRoyalty: Boolean(matchesRoyalty),
           customerRate: netWeight > 0 ? matchedRevenue / netWeight : 0,
           mineRate: netWeight > 0 ? matchedMaterial / netWeight : 0,
           transportRate: netWeight > 0 ? matchedTransport / netWeight : 0,
@@ -282,6 +306,12 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
         materialCost: number;
         transportCost: number;
         royaltyCost: number;
+        comboRate: number;
+        comboAmount: number;
+        comboMine: boolean;
+        comboTransport: boolean;
+        comboRoyalty: boolean;
+        hasCombo: boolean;
         hasCustomer: boolean;
         hasMine: boolean;
         hasTransport: boolean;
@@ -293,7 +323,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
         totalValue: number;
         amount: number;
       }>;
-  }, [filteredTrips, selectedPartyKey]);
+  }, [filteredTrips, materialRates, selectedPartyKey]);
 
   const partyTripRowsSorted = useMemo(() => {
     return [...partyTripRows].sort((a, b) => {
@@ -305,14 +335,16 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
   }, [partyTripRows]);
 
   const showCustomerColumns = partyTripRowsSorted.some(row => row.hasCustomer);
-  const showMineColumns = partyTripRowsSorted.some(row => row.hasMine);
-  const showTransportColumns = partyTripRowsSorted.some(row => row.hasTransport);
-  const showRoyaltyColumns = partyTripRowsSorted.some(row => row.hasRoyalty);
+  const showCombinedColumns = partyTripRowsSorted.some(row => row.hasCombo);
+  const showMineColumns = partyTripRowsSorted.some(row => row.hasMine && !row.comboMine);
+  const showTransportColumns = partyTripRowsSorted.some(row => row.hasTransport && !row.comboTransport);
+  const showRoyaltyColumns = partyTripRowsSorted.some(row => row.hasRoyalty && !row.comboRoyalty);
   const tripColCount = 6
     + (showMineColumns ? 3 : 0)
     + (showTransportColumns ? 4 : 0)
     + (showCustomerColumns ? 2 : 0)
-    + (showRoyaltyColumns ? 2 : 0);
+    + (showRoyaltyColumns ? 2 : 0)
+    + (showCombinedColumns ? 2 : 0);
 
   const partyPaymentRows = useMemo(() => {
     if (!selectedPartyKey) return [];
@@ -585,6 +617,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
       ...(showTransportColumns ? ['Pickup Location', 'Drop-off Location'] : []),
       'Net Qty',
       ...(showCustomerColumns ? ['Customer Rate/Ton', 'Customer Amount'] : []),
+      ...(showCombinedColumns ? ['Combined Rate/Ton', 'Combined Amount'] : []),
       ...(showMineColumns ? ['Mine Rate/Ton', 'Mine Amount'] : []),
       ...(showTransportColumns ? ['Transport Rate/Ton', 'Transport Amount'] : []),
       ...(showRoyaltyColumns ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
@@ -598,6 +631,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
       ...(showTransportColumns ? [row.pickupPlace || '-', row.dropOffPlace || '-'] : []),
       row.netWeight.toFixed(2),
       ...(showCustomerColumns ? [row.customerRate.toFixed(2), row.revenue.toFixed(2)] : []),
+      ...(showCombinedColumns ? [row.comboRate.toFixed(2), row.comboAmount.toFixed(2)] : []),
       ...(showMineColumns ? [row.mineRate.toFixed(2), row.materialCost.toFixed(2)] : []),
       ...(showTransportColumns ? [row.transportRate.toFixed(2), row.transportCost.toFixed(2)] : []),
       ...(showRoyaltyColumns ? [row.royaltyRate.toFixed(2), row.royaltyCost.toFixed(2)] : []),
@@ -612,7 +646,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
       formatDateDisplay(payment.date),
       payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
       payment.fromAccount || '-',
-      payment.toAccount || '-',
+      payment.toAccount || payment.ratePartyName || '-',
       Number(payment.amount || 0).toFixed(2),
     ]);
     exportCsv(`reconciliation_payments_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
@@ -688,6 +722,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
           ${showTransportColumns ? '<th>Pickup</th><th>Drop-off</th>' : ''}
           <th>Net Qty</th>
           ${showCustomerColumns ? '<th>Customer Rate/Ton</th><th>Customer Amount</th>' : ''}
+          ${showCombinedColumns ? '<th>Combined Rate/Ton</th><th>Combined Amount</th>' : ''}
           ${showMineColumns ? '<th>Mine Rate/Ton</th><th>Mine Amount</th>' : ''}
           ${showTransportColumns ? '<th>Transport Rate/Ton</th><th>Transport Amount</th>' : ''}
           ${showRoyaltyColumns ? '<th>Royalty Rate/Ton</th><th>Royalty Amount</th>' : ''}
@@ -704,6 +739,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
           ${showTransportColumns ? `<td>${row.pickupPlace || '-'}</td><td>${row.dropOffPlace || '-'}</td>` : ''}
           <td>${row.netWeight.toFixed(2)}</td>
           ${showCustomerColumns ? `<td>${formatCurrency(row.customerRate)}</td><td>${formatCurrency(row.revenue)}</td>` : ''}
+          ${showCombinedColumns ? `<td>${formatCurrency(row.comboRate)}</td><td>${formatCurrency(row.comboAmount)}</td>` : ''}
           ${showMineColumns ? `<td>${formatCurrency(row.mineRate)}</td><td>${formatCurrency(row.materialCost)}</td>` : ''}
           ${showTransportColumns ? `<td>${formatCurrency(row.transportRate)}</td><td>${formatCurrency(row.transportCost)}</td>` : ''}
           ${showRoyaltyColumns ? `<td>${formatCurrency(row.royaltyRate)}</td><td>${formatCurrency(row.royaltyCost)}</td>` : ''}
@@ -791,6 +827,7 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
     showTransportColumns,
     showCustomerColumns,
     showRoyaltyColumns,
+    showCombinedColumns,
     tripColCount,
     getCounterpartyDelta,
   ]);
@@ -1045,7 +1082,13 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                   {(() => {
                     let runningBalance = 0;
                     return paymentSlice.map((payment, index) => {
-                    const { match, displayFrom, displayTo } = isAccountSelection ? getAccountDisplay(payment) : { match: null, displayFrom: payment.fromAccount || '-', displayTo: payment.toAccount || '-' };
+                    const { match, displayFrom, displayTo } = isAccountSelection
+                      ? getAccountDisplay(payment)
+                      : {
+                        match: null,
+                        displayFrom: payment.fromAccount || '-',
+                        displayTo: payment.toAccount || payment.ratePartyName || '-',
+                      };
                     const amountValue = Number(payment.amount || 0);
                     let delta = 0;
                     if (!partyHasTrips) {
@@ -1237,6 +1280,8 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                     <th className="px-4 py-3 text-left">Net Qty</th>
                     {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Rate/Ton</th>}
                     {showCustomerColumns && <th className="px-4 py-3 text-left">Customer Amount</th>}
+                    {showCombinedColumns && <th className="px-4 py-3 text-left">Combined Rate/Ton</th>}
+                    {showCombinedColumns && <th className="px-4 py-3 text-left">Combined Amount</th>}
                     {showMineColumns && <th className="px-4 py-3 text-left">Mine Rate/Ton</th>}
                     {showMineColumns && <th className="px-4 py-3 text-left">Mine Amount</th>}
                     {showTransportColumns && <th className="px-4 py-3 text-left">Transport Rate/Ton</th>}
@@ -1259,6 +1304,8 @@ const PaymentReconciliation = React.forwardRef<PaymentReconciliationHandle, Paym
                       <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
                       {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.customerRate)}</td>}
                       {showCustomerColumns && <td className="px-4 py-3">{formatCurrency(row.revenue)}</td>}
+                      {showCombinedColumns && <td className="px-4 py-3">{formatCurrency(row.comboRate)}</td>}
+                      {showCombinedColumns && <td className="px-4 py-3">{formatCurrency(row.comboAmount)}</td>}
                       {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.mineRate)}</td>}
                       {showMineColumns && <td className="px-4 py-3">{formatCurrency(row.materialCost)}</td>}
                       {showTransportColumns && <td className="px-4 py-3">{formatCurrency(row.transportRate)}</td>}
