@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
-import PaymentReconciliation, { PaymentReconciliationHandle } from './PaymentReconciliation';
+import AccountReconciliation, { AccountReconciliationHandle } from './AccountReconciliation';
 import { useData } from '../contexts/DataContext';
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
 import { DailyExpense, Payment, PaymentType, RatePartyType, Trip } from '../types';
@@ -43,8 +43,8 @@ const AccountLedgerOverview: React.FC = () => {
   const [draftFilters, setDraftFilters] = useState<Filters>(getMtdRange());
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'abstract' | 'history' | 'party' | 'head'>('history');
-  const partyExportRef = useRef<PaymentReconciliationHandle | null>(null);
-  const headExportRef = useRef<PaymentReconciliationHandle | null>(null);
+  const partyExportRef = useRef<AccountReconciliationHandle | null>(null);
+  const headExportRef = useRef<AccountReconciliationHandle | null>(null);
 
   useEffect(() => {
     loadTrips();
@@ -72,10 +72,14 @@ const AccountLedgerOverview: React.FC = () => {
     if (/^[0-9-]$/.test(event.key)) return;
     event.preventDefault();
   };
-  const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+  const openDatePicker = (event: React.MouseEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
-      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+      try {
+        (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+      } catch {
+        // Ignore non-gesture errors (Safari/Chrome constraint).
+      }
     }
   };
   const updateDraft = (key: keyof Filters, value: string) => {
@@ -486,7 +490,6 @@ const AccountLedgerOverview: React.FC = () => {
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      onFocus={openDatePicker}
                       className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}
@@ -499,7 +502,6 @@ const AccountLedgerOverview: React.FC = () => {
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      onFocus={openDatePicker}
                       className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateTo || ''}
                       onChange={e => updateDraft('dateTo', e.target.value)}
@@ -670,9 +672,8 @@ const AccountLedgerOverview: React.FC = () => {
 
         {activeTab === 'party' && (
           <div id="ledger-tab-party">
-            <PaymentReconciliation
+            <AccountReconciliation
               ref={partyExportRef}
-              showHeader={false}
               initialMode="party"
               hideModeToggle
               hideDownload
@@ -685,9 +686,8 @@ const AccountLedgerOverview: React.FC = () => {
 
         {activeTab === 'head' && (
           <div id="ledger-tab-head">
-            <PaymentReconciliation
+            <AccountReconciliation
               ref={headExportRef}
-              showHeader={false}
               initialMode="head"
               hideModeToggle
               hideDownload

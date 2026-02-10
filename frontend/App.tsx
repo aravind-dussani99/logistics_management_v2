@@ -21,6 +21,7 @@ import Advances from './pages/Advances';
 import Reports from './pages/Reports';
 import SiteManagerDashboard from './pages/SiteManagerDashboard';
 import TripRates from './pages/TripRates';
+import TripGstRates from './pages/TripGstRates';
 import Bills from './pages/Bills';
 import Vehicles from './pages/Vehicles';
 import SiteLocations from './pages/SiteLocations';
@@ -45,6 +46,7 @@ import SupervisorSiteExpenses from './pages/Supervisor/SiteExpenses';
 import SupervisorAdvancesForm from './pages/Supervisor/AdvancesForm';
 import TripImport from './pages/TripImport';
 import PaymentImport from './pages/PaymentImport';
+import GstImport from './pages/GstImport';
 import TripFeed from './pages/TripFeed';
 import Accounting from './pages/Accounting';
 import Capital from './pages/Capital';
@@ -119,6 +121,11 @@ const AppRoutes: React.FC = () => (
           <PaymentImport />
         </ProtectedRoute>
       } />
+      <Route path="/gst-import" element={
+        <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER]}>
+          <GstImport />
+        </ProtectedRoute>
+      } />
       <Route path="/trip-feed" element={
         <ProtectedRoute roles={[Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER]}>
           <TripFeed />
@@ -127,6 +134,11 @@ const AppRoutes: React.FC = () => (
       <Route path="/trip-rates" element={
         <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
           <TripRates />
+        </ProtectedRoute>
+      } />
+      <Route path="/trip-gst-rates" element={
+        <ProtectedRoute roles={[Role.SITE_MANAGER, Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT]}>
+          <TripGstRates />
         </ProtectedRoute>
       } />
       <Route path="/bills-invoices" element={

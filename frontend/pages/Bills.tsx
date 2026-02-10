@@ -169,10 +169,14 @@ const Bills: React.FC = () => {
     if (/^[0-9-]$/.test(event.key)) return;
     event.preventDefault();
   };
-  const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+  const openDatePicker = (event: React.MouseEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
-      (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+      try {
+        (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+      } catch {
+        // Ignore non-gesture errors (Safari/Chrome constraint).
+      }
     }
   };
   const updateDraft = (key: keyof Filters, value: string) => {
@@ -398,7 +402,6 @@ const Bills: React.FC = () => {
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      onFocus={openDatePicker}
                       className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}

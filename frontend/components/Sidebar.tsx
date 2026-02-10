@@ -21,6 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.GUEST] },
         { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.SITE_MANAGER] },
         { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/trip-gst-rates', icon: 'calculator-outline', name: 'GST Trip Rates', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/bills-invoices', icon: 'receipt-outline', name: 'Bills / Invoices', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/payments', icon: 'book-outline', name: 'Payments', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER] },
@@ -28,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         { to: '/reports', icon: 'download-outline', name: 'Reports', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/payment-import', icon: 'cloud-upload-outline', name: 'Payment Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
+        { to: '/gst-import', icon: 'cloud-upload-outline', name: 'GST Import', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.SITE_MANAGER] },
         { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed', roles: [Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT, Role.PICKUP_SUPERVISOR, Role.DROPOFF_SUPERVISOR, Role.SITE_MANAGER] },
         { to: '/trip-records', icon: 'folder-open-outline', name: 'Trip Records', roles: [Role.ADMIN] },
       ],
@@ -87,6 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/dashboard', icon: 'speedometer-outline', name: 'Dashboard' },
     { to: '/enter-trips', icon: 'enter-outline', name: 'Enter Trips' },
     { to: '/trip-rates', icon: 'analytics-outline', name: 'Trip Rates' },
+    { to: '/trip-gst-rates', icon: 'calculator-outline', name: 'GST Trip Rates' },
     { to: '/bills-invoices', icon: 'receipt-outline', name: 'Bills / Invoices' },
     { to: '/payments', icon: 'card-outline', name: 'Payments' },
     { to: '/daily-expenses', icon: 'wallet-outline', name: 'Daily Expenses' },
@@ -96,6 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { to: '/account-ledger', icon: 'pie-chart-outline', name: 'Logistics Accounts Reports' },
     { to: '/trip-import', icon: 'cloud-upload-outline', name: 'Trip Import' },
     { to: '/payment-import', icon: 'cloud-upload-outline', name: 'Payment Import' },
+    { to: '/gst-import', icon: 'cloud-upload-outline', name: 'GST Import' },
     { to: '/trip-feed', icon: 'chatbubbles-outline', name: 'Trip Feed' },
   ];
 
