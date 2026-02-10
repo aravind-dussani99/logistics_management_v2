@@ -153,7 +153,11 @@ const TripImport: React.FC = () => {
   const [failedRows, setFailedRows] = useState<ParsedTrip[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [progressCurrent, setProgressCurrent] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [completionModal, setCompletionModal] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
   const cancelRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [excludedRowNumbers, setExcludedRowNumbers] = useState<number[]>([]);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
@@ -420,6 +424,8 @@ const TripImport: React.FC = () => {
       setSubmitMessage(hasPendingDuplicates ? 'No trips selected for import because duplicates remain. Remove them first.' : 'No new trips to import.');
       return;
     }
+    setProgressTotal(rowsToImport.length);
+    setProgressCurrent(0);
     let successCount = 0;
     let failed: ParsedTrip[] = [];
     for (let index = 0; index < rowsToImport.length; index += 1) {
@@ -445,21 +451,25 @@ const TripImport: React.FC = () => {
         failed = rowsToImport.slice(index);
         break;
       }
+      setProgressCurrent(index + 1);
     }
     setIsSubmitting(false);
     setFailedRows(failed);
     const duplicateCount = totalDuplicateCount;
-    setSubmitMessage([
+    const summaryMessage = [
       cancelRef.current ? `Import cancelled after ${successCount} trips.` : `Imported ${successCount} trips.`,
       duplicateCount ? `${duplicateCount} duplicates skipped.` : '',
       failed.length ? `${failed.length} remaining rows not imported.` : '',
     ].filter(Boolean).join(' '));
+    setSubmitMessage(summaryMessage);
+    setCompletionModal({ open: true, message: summaryMessage });
     setParsedTrips([]);
     setRows([]);
     setErrors([]);
     setExcludedRowNumbers([]);
     setShowDuplicateDialog(false);
     setFileName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const retryFailed = async () => {
@@ -514,7 +524,7 @@ const TripImport: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">CSV File</label>
-            <input type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
             {fileName && <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">Loaded: {fileName}</div>}
           </div>
 
@@ -612,6 +622,19 @@ const TripImport: React.FC = () => {
           >
             {isSubmitting ? 'Importing...' : 'Import Trips'}
           </button>
+          {isSubmitting && progressTotal > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs text-gray-500 dark:text-gray-300">
+                Processing {progressCurrent} / {progressTotal}
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.min(100, Math.round((progressCurrent / progressTotal) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
           {isSubmitting && (
             <button
               type="button"
@@ -869,6 +892,29 @@ const TripImport: React.FC = () => {
                 className="px-3 py-1 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {completionModal.open && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Import Summary</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{completionModal.message}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletionModal({ open: false, message: '' });
+                  setSubmitMessage('');
+                  setProgressCurrent(0);
+                  setProgressTotal(0);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
+              >
+                Okay
               </button>
             </div>
           </div>
