@@ -17,20 +17,6 @@ interface ParseError {
   message: string;
 }
 
-const REQUIRED_HEADERS = [
-  'date',
-  'invoice & dc number',
-  'vendor & customer name',
-  'transport & owner name',
-  'vehicle number',
-  'mine & quarry name',
-  'material type',
-  'royalty owner name',
-  'net weight (tons)',
-  'pickup place',
-  'drop-off place',
-];
-
 const normalizeHeader = (value: string) => value.trim().toLowerCase();
 const DATE_INPUT_HINT = 'Expected: YYYY-MM-DD, DD/MM/YYYY, or MM/DD/YYYY';
 
@@ -47,6 +33,20 @@ const HEADER_ALIASES: Record<string, string[]> = {
   pickupPlace: ['Pickup Place', 'Pickup', 'Pick-up Place'],
   dropOffPlace: ['Drop-off Place', 'Dropoff Place', 'Drop Off Place', 'Drop-off', 'Drop Off'],
 };
+
+const REQUIRED_FIELDS: Array<{ key: keyof typeof HEADER_ALIASES; label: string }> = [
+  { key: 'date', label: 'date' },
+  { key: 'invoice', label: 'invoice & dc number' },
+  { key: 'vendorCustomer', label: 'vendor & customer name' },
+  { key: 'transportOwner', label: 'transport & owner name' },
+  { key: 'vehicle', label: 'vehicle number' },
+  { key: 'mineQuarry', label: 'mine & quarry name' },
+  { key: 'material', label: 'material type' },
+  { key: 'royaltyOwner', label: 'royalty owner name' },
+  { key: 'netWeight', label: 'net weight (tons)' },
+  { key: 'pickupPlace', label: 'pickup place' },
+  { key: 'dropOffPlace', label: 'drop-off place' },
+];
 
 const parseCsvText = (text: string) => {
   const rows: string[][] = [];
@@ -147,6 +147,7 @@ const TripImport: React.FC = () => {
   const { trips, loadTrips, addTripAtomic } = useData();
   const [fileName, setFileName] = useState('');
   const [rows, setRows] = useState<string[][]>([]);
+  const [headerOverrides, setHeaderOverrides] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<ParseError[]>([]);
   const [parsedTrips, setParsedTrips] = useState<ParsedTrip[]>([]);
   const [failedRows, setFailedRows] = useState<ParsedTrip[]>([]);
@@ -167,8 +168,23 @@ const TripImport: React.FC = () => {
       return map;
     }, new Map<string, number>());
   }, [rows]);
+  const headerOptions = useMemo(() => rows[0] || [], [rows]);
+  const getPreferredHeader = (key: string) => {
+    const aliases = HEADER_ALIASES[key] || [];
+    const match = headerOptions.find(header =>
+      aliases.some(alias => normalizeHeader(alias) === normalizeHeader(header))
+    );
+    return match || '';
+  };
 
-  const getColumnIndex = (aliases: string[]) => {
+  const getColumnIndex = (aliases: string[], overrideKey?: string) => {
+    if (overrideKey) {
+      const override = headerOverrides[overrideKey];
+      if (override) {
+        const col = headerMap.get(normalizeHeader(override));
+        if (col !== undefined) return col;
+      }
+    }
     for (const alias of aliases) {
       const col = headerMap.get(normalizeHeader(alias));
       if (col !== undefined) return col;
@@ -176,8 +192,8 @@ const TripImport: React.FC = () => {
     return undefined;
   };
 
-  const getValueFromRow = (row: string[], aliases: string[]) => {
-    const col = getColumnIndex(aliases);
+  const getValueFromRow = (row: string[], aliases: string[], overrideKey?: string) => {
+    const col = getColumnIndex(aliases, overrideKey);
     return col === undefined ? '' : (row[col] || '').trim();
   };
 
@@ -208,12 +224,13 @@ const TripImport: React.FC = () => {
     if (rows.length > 0) {
       validateAndParse();
     }
-  }, [existingKeys, rows.length]);
+  }, [existingKeys, rows.length, headerOverrides]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setHeaderOverrides({});
     setSubmitMessage('');
     const text = await file.text();
     const parsed = parseCsvText(text);
@@ -304,22 +321,12 @@ const TripImport: React.FC = () => {
       setParsedTrips([]);
       return;
     }
-    const requiredLookup: Record<string, string[]> = {
-      date: HEADER_ALIASES.date,
-      invoice: HEADER_ALIASES.invoice,
-      vendorCustomer: HEADER_ALIASES.vendorCustomer,
-      transportOwner: HEADER_ALIASES.transportOwner,
-      vehicle: HEADER_ALIASES.vehicle,
-      mineQuarry: HEADER_ALIASES.mineQuarry,
-      material: HEADER_ALIASES.material,
-      royaltyOwner: HEADER_ALIASES.royaltyOwner,
-      netWeight: HEADER_ALIASES.netWeight,
-      pickupPlace: HEADER_ALIASES.pickupPlace,
-      dropOffPlace: HEADER_ALIASES.dropOffPlace,
-    };
-    const missingHeaders = Object.entries(requiredLookup).filter(([, aliases]) => getColumnIndex(aliases) === undefined);
+    const missingHeaders = REQUIRED_FIELDS.filter(field => {
+      const aliases = HEADER_ALIASES[field.key];
+      return getColumnIndex(aliases, field.key) === undefined;
+    });
     if (missingHeaders.length > 0) {
-      setErrors([{ rowNumber: 0, message: `Missing headers: ${missingHeaders.map(([key]) => key).join(', ')}` }]);
+      setErrors([{ rowNumber: 0, message: `Missing headers: ${missingHeaders.map(field => field.label).join(', ')}` }]);
       setParsedTrips([]);
       return;
     }
@@ -331,19 +338,19 @@ const TripImport: React.FC = () => {
       const rowNumber = index + 2;
       const issues: string[] = [];
       const warnings: string[] = [];
-      const dateValue = getValueFromRow(row, HEADER_ALIASES.date);
+      const dateValue = getValueFromRow(row, HEADER_ALIASES.date, 'date');
       const dateParsed = parseDate(dateValue);
       const date = dateParsed.value;
       if (dateParsed.warning) warnings.push(dateParsed.warning);
-      const netWeightRaw = getValueFromRow(row, HEADER_ALIASES.netWeight);
+      const netWeightRaw = getValueFromRow(row, HEADER_ALIASES.netWeight, 'netWeight');
       const netWeight = Number(netWeightRaw || 0);
 
       if (!date) {
         issues.push(`Invalid date format. ${DATE_INPUT_HINT}`);
       }
-      const invoiceNumber = getValueFromRow(row, HEADER_ALIASES.invoice);
-      const vehicleNumber = getValueFromRow(row, HEADER_ALIASES.vehicle);
-      if (!getValueFromRow(row, HEADER_ALIASES.vendorCustomer)) {
+      const invoiceNumber = getValueFromRow(row, HEADER_ALIASES.invoice, 'invoice');
+      const vehicleNumber = getValueFromRow(row, HEADER_ALIASES.vehicle, 'vehicle');
+      if (!getValueFromRow(row, HEADER_ALIASES.vendorCustomer, 'vendorCustomer')) {
         issues.push('Vendor & Customer Name is required.');
       }
       if (!vehicleNumber) {
@@ -364,16 +371,16 @@ const TripImport: React.FC = () => {
         warnings,
         data: {
           date,
-          place: getValueFromRow(row, HEADER_ALIASES.dropOffPlace),
-          pickupPlace: getValueFromRow(row, HEADER_ALIASES.pickupPlace),
-          dropOffPlace: getValueFromRow(row, HEADER_ALIASES.dropOffPlace),
-          customer: getValueFromRow(row, HEADER_ALIASES.vendorCustomer),
+          place: getValueFromRow(row, HEADER_ALIASES.dropOffPlace, 'dropOffPlace'),
+          pickupPlace: getValueFromRow(row, HEADER_ALIASES.pickupPlace, 'pickupPlace'),
+          dropOffPlace: getValueFromRow(row, HEADER_ALIASES.dropOffPlace, 'dropOffPlace'),
+          customer: getValueFromRow(row, HEADER_ALIASES.vendorCustomer, 'vendorCustomer'),
           invoiceDCNumber: invoiceNumber,
-          quarryName: getValueFromRow(row, HEADER_ALIASES.mineQuarry),
-          royaltyOwnerName: getValueFromRow(row, HEADER_ALIASES.royaltyOwner),
-          material: getValueFromRow(row, HEADER_ALIASES.material),
+          quarryName: getValueFromRow(row, HEADER_ALIASES.mineQuarry, 'mineQuarry'),
+          royaltyOwnerName: getValueFromRow(row, HEADER_ALIASES.royaltyOwner, 'royaltyOwner'),
+          material: getValueFromRow(row, HEADER_ALIASES.material, 'material'),
           vehicleNumber,
-          transporterName: getValueFromRow(row, HEADER_ALIASES.transportOwner),
+          transporterName: getValueFromRow(row, HEADER_ALIASES.transportOwner, 'transportOwner'),
           transportOwnerMobileNumber: '',
           netWeight,
           emptyWeight: 0,
@@ -510,6 +517,40 @@ const TripImport: React.FC = () => {
             <input type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
             {fileName && <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">Loaded: {fileName}</div>}
           </div>
+
+          {rows.length > 0 && (
+            <div className="rounded-md border border-gray-200 bg-white px-4 py-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+              <div className="font-semibold text-gray-700 dark:text-gray-200">Column mapping</div>
+              <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-3">
+                {REQUIRED_FIELDS.map(field => {
+                  const selected = headerOverrides[field.key] ?? getPreferredHeader(field.key);
+                  return (
+                    <label key={field.key} className="space-y-1">
+                      <span className="block text-[11px] uppercase tracking-wide text-gray-500">{field.label}</span>
+                      <select
+                        value={selected}
+                        onChange={event => {
+                          const value = event.target.value;
+                          setHeaderOverrides(prev => ({
+                            ...prev,
+                            [field.key]: value,
+                          }));
+                        }}
+                        className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                      >
+                        <option value="">Select column</option>
+                        {headerOptions.map(header => (
+                          <option key={`${field.key}-${header}`} value={header}>
+                            {header}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
@@ -775,8 +816,8 @@ const TripImport: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Required CSV Headers</h3>
           <ul className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-            {REQUIRED_HEADERS.map(header => (
-              <li key={header}>{header}</li>
+            {REQUIRED_FIELDS.map(field => (
+              <li key={field.key}>{field.label}</li>
             ))}
           </ul>
         </div>

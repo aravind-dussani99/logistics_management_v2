@@ -50,6 +50,9 @@ export interface Trip {
     allInCostPerTon?: number;
     allInCost?: number;
     customerRatePerTon?: number;
+    gstRatePerTon?: number;
+    gstPercentage?: number;
+    gstAmount?: number;
     actualVendorCustomerName?: string;
     vendorCustomerRatePerTon?: number;
     profit: number;

@@ -20,7 +20,7 @@ import PaymentForm from '../components/PaymentForm';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
 
-type ReportType = 'trips' | 'payments' | 'expenses' | 'trip-rates' | 'bills';
+type ReportType = 'trips' | 'payments' | 'expenses' | 'trip-rates' | 'gst-trip-rates' | 'bills';
 const ITEMS_PER_PAGE = 10;
 
 const getDefaultDateRange = () => {
@@ -63,7 +63,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     }, [location.state, mode, isDropoffSupervisor]);
 
     useEffect(() => {
-        if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'bills') {
+        if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') {
             loadTrips();
         }
         if (reportType === 'payments') {
@@ -114,10 +114,14 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         if (/^[0-9-]$/.test(event.key)) return;
         event.preventDefault();
     };
-    const openDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+    const openDatePicker = (event: React.MouseEvent<HTMLInputElement>) => {
         const input = event.currentTarget;
         if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === 'function') {
-            (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+            try {
+                (input as HTMLInputElement & { showPicker: () => void }).showPicker();
+            } catch {
+                // Ignore non-gesture errors (Safari/Chrome constraint).
+            }
         }
     };
     const updateDraft = (key: keyof Filters, value: string) => {
@@ -207,6 +211,13 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     return [t.date, t.id, t.invoiceDCNumber, t.customer, t.rateMode || '-', rateStatus, t.vendorCustomerRatePerTon || t.customerRatePerTon || 0, t.materialCost || 0, t.transportCost || 0, t.royaltyCost || 0, totalCost];
                 });
                 break;
+            case 'gst-trip-rates':
+                headers = ["Date", "Trip #", "Invoice/DC", "Customer", "Net Tons", "GST Rate/Ton", "GST %", "GST Amount"];
+                rows = filteredData.map(d => {
+                    const t = d as Trip;
+                    return [t.date, t.id, t.invoiceDCNumber, t.customer, t.netWeight || 0, t.gstRatePerTon || 0, t.gstPercentage || 0, t.gstAmount || 0];
+                });
+                break;
             case 'bills':
                 headers = ["Date", "Trip #", "Invoice/DC", "Customer", "Actual Name", "Rate/Ton", "Net Tons", "Bill Amount", "Bill Status"];
                 rows = filteredData.map(d => {
@@ -237,6 +248,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             case 'payments': data = payments; break;
             case 'expenses': data = allExpenses; break;
             case 'trip-rates': data = trips; break;
+            case 'gst-trip-rates': data = trips; break;
             case 'bills': data = trips; break;
         }
 
@@ -270,7 +282,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             const itemDate = item?.date ? new Date(item.date) : null;
             if (fromDate && itemDate && itemDate < fromDate) return false;
             if (toDate && itemDate && itemDate > toDate) return false;
-            if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'bills') {
+            if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') {
                 if (filters.vehicle && item.vehicleNumber !== filters.vehicle) return false;
                 if (filters.material && item.material !== filters.material) return false;
                 if (filters.vendor) {
@@ -820,6 +832,48 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     );
                 }} />;
             }
+            case 'gst-trip-rates': {
+                const headers = showActions
+                  ? ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount', 'Actions']
+                  : ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount'];
+                return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip) => (
+                  <tr key={t.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">#{t.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{Number(t.netWeight || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.gstRatePerTon || 0))}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{Number(t.gstPercentage || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.gstAmount || 0))}</td>
+                    {showActions && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
+                        <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                        <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                        <button
+                          onClick={() => {
+                            openModal('Delete Trip', (
+                              <AlertDialog
+                                message="Delete this trip? This action cannot be undone."
+                                confirmLabel="Delete"
+                                cancelLabel="Cancel"
+                                onCancel={closeModal}
+                                onConfirm={async () => {
+                                  await deleteTrip(t.id);
+                                  closeModal();
+                                }}
+                              />
+                            ));
+                          }}
+                          className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )} />;
+            }
             case 'bills': {
                 const headers = showActions
                   ? ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status', 'Actions']
@@ -910,7 +964,6 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             inputMode="numeric"
                                             onKeyDown={allowDateTyping}
                                             onClick={openDatePicker}
-                                            onFocus={openDatePicker}
                                             className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.dateFrom || ''}
                                             onChange={e => updateDraft('dateFrom', e.target.value)}
@@ -923,7 +976,6 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             inputMode="numeric"
                                             onKeyDown={allowDateTyping}
                                             onClick={openDatePicker}
-                                            onFocus={openDatePicker}
                                             className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.dateTo || ''}
                                             onChange={e => updateDraft('dateTo', e.target.value)}
@@ -1026,6 +1078,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                 <option value="payments">Payments</option>
                                 <option value="expenses">Daily Expenses</option>
                                 <option value="trip-rates">Trips Rate</option>
+                                <option value="gst-trip-rates">GST Trip Rates</option>
                                 <option value="bills">Bills / Invoices</option>
                             </select>
                             <button onClick={handleExport} className="px-3 py-1 text-xs font-medium text-green-600 border border-green-600 rounded-md hover:bg-green-600 hover:text-white transition">
