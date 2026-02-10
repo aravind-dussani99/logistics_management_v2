@@ -142,8 +142,12 @@ const PaymentImport: React.FC = () => {
   const [failedRows, setFailedRows] = useState<ParsedRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [progressCurrent, setProgressCurrent] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [completionModal, setCompletionModal] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
   const [excludedRowNumbers, setExcludedRowNumbers] = useState<number[]>([]);
   const cancelRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const headerMap = useMemo(() => {
     if (rows.length === 0) return new Map<string, number>();
@@ -183,6 +187,22 @@ const PaymentImport: React.FC = () => {
 
   const excludedRowsSet = useMemo(() => new Set(excludedRowNumbers), [excludedRowNumbers]);
 
+  const normalizePaymentType = (value: string) => {
+    const raw = value.trim().toLowerCase();
+    if (!raw) return '';
+    if (raw.includes('receipt') || raw.includes('receive') || raw.includes('in') || raw.includes('credit')) return PaymentType.RECEIPT;
+    if (raw.includes('payment') || raw.includes('pay') || raw.includes('out') || raw.includes('debit')) return PaymentType.PAYMENT;
+    return '';
+  };
+
+  const normalizeExpenseType = (value: string) => {
+    const raw = value.trim().toLowerCase();
+    if (!raw) return '';
+    if (raw.includes('credit') || raw.includes('top up') || raw.includes('topup') || raw.includes('receipt')) return 'CREDIT';
+    if (raw.includes('debit') || raw.includes('expense') || raw.includes('payment')) return 'DEBIT';
+    return '';
+  };
+
   const getRowIssues = (row: ParsedRow['data']) => {
     const issues: string[] = [];
     if (!row.date) issues.push('Date is required.');
@@ -221,22 +241,6 @@ const PaymentImport: React.FC = () => {
       return { rowNumber: 1, message: `Missing required headers: ${missing.join(', ')}` };
     }
     return null;
-  };
-
-  const normalizePaymentType = (value: string) => {
-    const raw = value.trim().toLowerCase();
-    if (!raw) return '';
-    if (raw.includes('receipt') || raw.includes('receive') || raw.includes('in') || raw.includes('credit')) return PaymentType.RECEIPT;
-    if (raw.includes('payment') || raw.includes('pay') || raw.includes('out') || raw.includes('debit')) return PaymentType.PAYMENT;
-    return '';
-  };
-
-  const normalizeExpenseType = (value: string) => {
-    const raw = value.trim().toLowerCase();
-    if (!raw) return '';
-    if (raw.includes('credit') || raw.includes('top up') || raw.includes('topup') || raw.includes('receipt')) return 'CREDIT';
-    if (raw.includes('debit') || raw.includes('expense') || raw.includes('payment')) return 'DEBIT';
-    return '';
   };
 
   const validateAndParse = () => {
@@ -305,8 +309,11 @@ const PaymentImport: React.FC = () => {
     setIsSubmitting(true);
     setSubmitMessage('');
     const failed: ParsedRow[] = [];
+    setProgressTotal(readyRows.length);
+    setProgressCurrent(0);
 
-    for (const row of readyRows) {
+    for (let index = 0; index < readyRows.length; index += 1) {
+      const row = readyRows[index];
       if (cancelRef.current) break;
       try {
         const normalizedType = importMode === 'payments'
@@ -347,15 +354,19 @@ const PaymentImport: React.FC = () => {
       } catch (error) {
         failed.push(row);
       }
+      setProgressCurrent(index + 1);
     }
 
     setIsSubmitting(false);
     setFailedRows(failed);
     setParsedRows(failed);
     setExcludedRowNumbers([]);
-    setSubmitMessage(cancelRef.current
-      ? 'Import cancelled.'
-      : `Import completed. ${failed.length} row(s) failed.`);
+    const successCount = Math.max(0, readyRows.length - failed.length);
+    const summaryMessage = cancelRef.current
+      ? `Import cancelled after ${successCount} rows.`
+      : `Import completed. ${successCount} row(s) imported, ${failed.length} failed.`;
+    setSubmitMessage(summaryMessage);
+    setCompletionModal({ open: true, message: summaryMessage });
   };
 
   return (
@@ -392,7 +403,7 @@ const PaymentImport: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">CSV File</label>
-            <input type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
             {fileName && <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">Loaded: {fileName}</div>}
           </div>
           <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
@@ -465,6 +476,19 @@ const PaymentImport: React.FC = () => {
           >
             {isSubmitting ? 'Importing...' : `Import ${importMode === 'payments' ? 'Payments' : 'Daily Expenses'}`}
           </button>
+          {isSubmitting && progressTotal > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs text-gray-500 dark:text-gray-300">
+                Processing {progressCurrent} / {progressTotal}
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.min(100, Math.round((progressCurrent / progressTotal) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
           {isSubmitting && (
             <button
               type="button"
@@ -573,6 +597,37 @@ const PaymentImport: React.FC = () => {
           )}
         </div>
       </main>
+      {completionModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Import Summary</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{completionModal.message}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletionModal({ open: false, message: '' });
+                  setSubmitMessage('');
+                  setProgressCurrent(0);
+                  setProgressTotal(0);
+                  setRows([]);
+                  setParsedRows([]);
+                  setErrors([]);
+                  setFailedRows([]);
+                  setExcludedRowNumbers([]);
+                  setHeaderOverrides({});
+                  setFileName('');
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
+              >
+                Okay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

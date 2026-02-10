@@ -142,7 +142,11 @@ const GstImport: React.FC = () => {
   const [excludedRowNumbers, setExcludedRowNumbers] = useState<number[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
+  const [progressCurrent, setProgressCurrent] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [completionModal, setCompletionModal] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
   const cancelRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadTrips();
@@ -186,17 +190,21 @@ const GstImport: React.FC = () => {
 
   const excludedRowsSet = useMemo(() => new Set(excludedRowNumbers), [excludedRowNumbers]);
 
-  const getRowIssues = (row: ParsedRow['data']) => {
+  const getRowIssues = (row: ParsedRow) => {
     const issues: string[] = [];
-    if (!row.date) issues.push('Date is required.');
-    if (!row.tripId && !row.invoice) issues.push('Trip # or Invoice/DC is required.');
-    if (!row.materialOwner) issues.push('Material Owner is required.');
-    if (!row.vehicleNumber) issues.push('Vehicle number is required.');
-    if (row.netTons === '') issues.push('Net tons is required.');
-    if (row.gstRatePerTon === '') issues.push('Trip rate for GST is required.');
-    if (row.gstPercentage === '') issues.push('GST % is required.');
-    if (row.gstAmount === '') issues.push('GST amount is required.');
-    return issues;
+    const data = row.data;
+    if (!data.date) issues.push('Date is required.');
+    if (!data.tripId && !data.invoice) issues.push('Trip # or Invoice/DC is required.');
+    if (!data.materialOwner) issues.push('Material Owner is required.');
+    if (!data.vehicleNumber) issues.push('Vehicle number is required.');
+    if (data.netTons === '') issues.push('Net tons is required.');
+    if (data.gstRatePerTon === '') issues.push('Trip rate for GST is required.');
+    if (data.gstPercentage === '') issues.push('GST % is required.');
+    if (data.gstAmount === '') issues.push('GST amount is required.');
+    if (row.issues && row.issues.length > 0) {
+      issues.push(...row.issues);
+    }
+    return [...new Set(issues)];
   };
 
   const activeRows = useMemo(
@@ -204,7 +212,7 @@ const GstImport: React.FC = () => {
     [parsedRows, excludedRowsSet],
   );
   const readyRows = useMemo(
-    () => activeRows.filter(row => getRowIssues(row.data).length === 0),
+    () => activeRows.filter(row => getRowIssues(row).length === 0),
     [activeRows],
   );
   const reviewRows = activeRows;
@@ -319,6 +327,8 @@ const GstImport: React.FC = () => {
     setIsSubmitting(true);
     cancelRef.current = false;
     const failed: ParsedRow[] = [];
+    setProgressTotal(readyRows.length);
+    setProgressCurrent(0);
     for (let index = 0; index < readyRows.length; index += 1) {
       if (cancelRef.current) {
         failed.push(...readyRows.slice(index));
@@ -342,16 +352,21 @@ const GstImport: React.FC = () => {
           gstAmount,
         });
       } catch (error) {
-        failed.push(row);
+        const message = error instanceof Error ? error.message : 'Import failed.';
+        failed.push({ ...row, issues: [message] });
       }
+      setProgressCurrent(index + 1);
     }
     setIsSubmitting(false);
     setFailedRows(failed);
     setParsedRows(failed);
     setExcludedRowNumbers([]);
-    setSubmitMessage(cancelRef.current
-      ? 'Import cancelled.'
-      : `Import completed. ${failed.length} row(s) failed.`);
+    const successCount = Math.max(0, readyRows.length - failed.length);
+    const summaryMessage = cancelRef.current
+      ? `Import cancelled after ${successCount} rows.`
+      : `Import completed. ${successCount} row(s) imported, ${failed.length} failed.`;
+    setSubmitMessage(summaryMessage);
+    setCompletionModal({ open: true, message: summaryMessage });
   };
 
   return (
@@ -369,7 +384,7 @@ const GstImport: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">CSV File</label>
-            <input type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
+            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="mt-2 text-sm text-gray-600 dark:text-gray-300" />
             {fileName && <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">Loaded: {fileName}</div>}
           </div>
 
@@ -442,6 +457,19 @@ const GstImport: React.FC = () => {
           >
             {isSubmitting ? 'Importing...' : 'Import GST'}
           </button>
+          {isSubmitting && progressTotal > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs text-gray-500 dark:text-gray-300">
+                Processing {progressCurrent} / {progressTotal}
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.min(100, Math.round((progressCurrent / progressTotal) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
           {isSubmitting && (
             <button
               type="button"
@@ -479,7 +507,7 @@ const GstImport: React.FC = () => {
                   </thead>
                   <tbody>
                     {reviewRows.map(row => {
-                      const rowIssues = getRowIssues(row.data);
+                      const rowIssues = getRowIssues(row);
                       return (
                         <tr key={`review-${row.rowNumber}`} className="even:bg-amber-50/60 dark:even:bg-amber-900/20">
                           <td className="px-3 py-2">{row.rowNumber}</td>
@@ -571,6 +599,37 @@ const GstImport: React.FC = () => {
           )}
         </div>
       </main>
+      {completionModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Import Summary</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{completionModal.message}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletionModal({ open: false, message: '' });
+                  setSubmitMessage('');
+                  setProgressCurrent(0);
+                  setProgressTotal(0);
+                  setRows([]);
+                  setParsedRows([]);
+                  setErrors([]);
+                  setFailedRows([]);
+                  setExcludedRowNumbers([]);
+                  setHeaderOverrides({});
+                  setFileName('');
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
+              >
+                Okay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
