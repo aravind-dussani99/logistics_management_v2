@@ -460,7 +460,7 @@ const TripImport: React.FC = () => {
       cancelRef.current ? `Import cancelled after ${successCount} trips.` : `Imported ${successCount} trips.`,
       duplicateCount ? `${duplicateCount} duplicates skipped.` : '',
       failed.length ? `${failed.length} remaining rows not imported.` : '',
-    ].filter(Boolean).join(' '));
+    ].filter(Boolean).join(' ');
     setSubmitMessage(summaryMessage);
     setCompletionModal({ open: true, message: summaryMessage });
     setParsedTrips([]);
