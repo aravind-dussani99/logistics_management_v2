@@ -115,3 +115,4 @@ Planned modules/resources (placeholders):
 
 ## Roadmap (v2 changes)
 - The app uses `HashRouter` (see `frontend/App.tsx`), which keeps routing after `#` so static hosting works without server rewrites. If you want clean URLs, switch to `BrowserRouter` and add SPA rewrites on the hosting/CDN.
+- Centralize ledger calculation logic into dedicated helpers (trip rates, combined rates, GST, bills, payments) and reuse across Reports + Logistics Accounts Reports + Account Reconciliation to prevent drift. See `docs/LEDGER_HELPERS.md`.

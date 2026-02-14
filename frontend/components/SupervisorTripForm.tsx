@@ -685,6 +685,7 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                 <FileInputField label="Wayment Slip" id="waymentSlipUpload" onChange={handleFileChange} files={files.waymentSlipUpload} multiple />
                                 <FileInputField label="Royalty Slip" id="royaltyUpload" onChange={handleFileChange} files={files.royaltyUpload} multiple />
                                 <FileInputField label="Tax Invoice" id="taxInvoiceUpload" onChange={handleFileChange} files={files.taxInvoiceUpload} multiple />
+                                <FileInputField label="Wayment Slip (End Location)" id="endWaymentSlipUpload" onChange={handleFileChange} files={files.endWaymentSlipUpload} isReadOnly={receivedReadOnly} multiple />
                             </div>
                             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {renderUploadList('E-Way Bill', files.ewayBillUpload)}
@@ -692,6 +693,16 @@ const SupervisorTripForm: React.FC<SupervisorTripFormProps> = ({ mode, trip, onC
                                 {renderUploadList('Wayment Slip', files.waymentSlipUpload)}
                                 {renderUploadList('Royalty Slip', files.royaltyUpload)}
                                 {renderUploadList('Tax Invoice', files.taxInvoiceUpload)}
+                                {renderUploadList('Wayment Slip (End Location)', files.endWaymentSlipUpload)}
+                            </div>
+                            <div className="mt-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-2 lg:grid-cols-4">
+                                <InputField label="Received Date" id="receivedDate" type="date" value={formData.receivedDate ? String(formData.receivedDate).split('T')[0] : ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                <InputField label="End Empty Weight (T)" id="endEmptyWeight" type="number" step="0.01" value={formData.endEmptyWeight ?? ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                <InputField label="End Gross Weight (T)" id="endGrossWeight" type="number" step="0.01" value={formData.endGrossWeight ?? ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                <InputField label="End Net Weight (T)" id="endNetWeight" type="number" step="0.01" value={safeToFixed(formData.endNetWeight)} isReadOnly />
+                                {(formData.netWeight && formData.endNetWeight && Number(formData.netWeight) !== Number(formData.endNetWeight)) && (
+                                    <InputField label="Reason for Difference" id="weightDifferenceReason" type="textarea" value={formData.weightDifferenceReason || ''} onChange={handleInputChange} isReadOnly={receivedReadOnly} />
+                                )}
                             </div>
                         </div>
                     </>

@@ -345,7 +345,9 @@ const GstImport: React.FC = () => {
         const gstRate = Number(row.data.gstRatePerTon || 0);
         const gstPercent = Number(row.data.gstPercentage || 0);
         const computedAmount = netTons * gstRate * (gstPercent / 100);
-        const gstAmount = row.data.gstAmount === '' ? computedAmount : Number(row.data.gstAmount || 0);
+        const gstAmount = (gstRate > 0 && gstPercent > 0)
+          ? computedAmount
+          : (row.data.gstAmount === '' ? computedAmount : Number(row.data.gstAmount || 0));
         await updateTrip(trip.id, {
           gstRatePerTon: gstRate,
           gstPercentage: gstPercent,

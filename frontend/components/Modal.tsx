@@ -19,7 +19,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
             <ion-icon name="close-outline" className="text-2xl"></ion-icon>
           </button>
         </div>
-        <div className="overflow-y-auto">
+        <div className="overflow-y-auto p-6">
           {children}
         </div>
       </div>

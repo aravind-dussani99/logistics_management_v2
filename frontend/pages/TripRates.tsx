@@ -297,11 +297,11 @@ const ComboRateDialog: React.FC<ComboRateDialogProps> = ({
 
 const getDefaultDate = () => {
   const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
-  const dateValue = formatDate(today);
   return {
-    dateFrom: dateValue,
-    dateTo: dateValue,
+    dateFrom: formatDate(startOfMonth),
+    dateTo: formatDate(today),
   };
 };
 
@@ -324,6 +324,7 @@ const TripRateLedger: React.FC = () => {
     loadRoyaltyOwnerProfiles,
     loadMaterialTypeDefinitions,
     loadMaterialRates,
+    cacheMaterialRate,
     loadSiteLocations,
     refreshKey,
   } = useData();
@@ -414,6 +415,7 @@ const TripRateLedger: React.FC = () => {
       applyScope: 'trip',
       rateSource,
     });
+    cacheMaterialRate(createdRate);
     setOptimisticRates(prev => [createdRate, ...prev]);
     return createdRate;
   };
@@ -559,10 +561,6 @@ const TripRateLedger: React.FC = () => {
     }
   };
   const updateDraft = (key: keyof Filters, value: string) => {
-    if (key === 'dateFrom') {
-      setDraftFilters(prev => ({ ...prev, dateFrom: value, dateTo: value }));
-      return;
-    }
     setDraftFilters(prev => ({ ...prev, [key]: value }));
   };
   const applyDraftFilters = () => {
@@ -572,24 +570,29 @@ const TripRateLedger: React.FC = () => {
       return;
     }
     const next = { ...draftFilters };
-    if (next.dateFrom) {
-      next.dateTo = next.dateFrom;
+    if (next.dateFrom && next.dateTo && next.dateFrom > next.dateTo) {
+      const swap = next.dateFrom;
+      next.dateFrom = next.dateTo;
+      next.dateTo = swap;
     }
     handleFilterChange(next);
   };
   const resetDraftFilters = () => {
     const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const formatDate = (date: Date) => date.toISOString().split('T')[0];
-    const nextDate = formatDate(today);
-    const nextFilters = { dateFrom: nextDate, dateTo: nextDate };
+    const nextFilters = { dateFrom: formatDate(startOfMonth), dateTo: formatDate(today) };
     setDraftFilters(nextFilters);
     handleFilterChange(nextFilters);
   };
 
   const filteredTrips = useMemo(() => {
+    const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+    const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
     const filtered = trips.filter(trip => {
-      const tripDate = (trip.date || '').split('T')[0];
-      if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
+      const tripDate = trip.date ? new Date(trip.date) : null;
+      if (fromDate && tripDate && tripDate < fromDate) return false;
+      if (toDate && tripDate && tripDate > toDate) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
       if (filters.vendor && trip.customer !== filters.vendor) return false;
       if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
@@ -689,9 +692,9 @@ const TripRateLedger: React.FC = () => {
           <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
             {filtersOpen ? (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
                   <div>
-                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date</label>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
                     <input
                       type="date"
                       inputMode="numeric"
@@ -700,6 +703,18 @@ const TripRateLedger: React.FC = () => {
                       className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date To</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateTo || ''}
+                      onChange={e => updateDraft('dateTo', e.target.value)}
                     />
                   </div>
                   <div>
@@ -1146,6 +1161,7 @@ const TripRateLedger: React.FC = () => {
                               <th className="w-12 px-3 py-2">S.No.</th>
                               <th className="px-3 py-2">Trip #</th>
                               <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Material Type</th>
                               <th className="px-3 py-2">Rate Party</th>
                               <th className="px-3 py-2">Net Qty</th>
                               <th className="px-3 py-2">Apply To</th>
@@ -1165,6 +1181,7 @@ const TripRateLedger: React.FC = () => {
                                   <td className="px-3 py-2">{(awaitingPage - 1) * PAGE_SIZE + idx + 1}</td>
                                   <td className="px-3 py-2">#{trip.id}</td>
                                   <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
+                                  <td className="px-3 py-2">{trip.material || '-'}</td>
                                   <td className="px-3 py-2">{ratePartyName}</td>
                                   <td className="px-3 py-2">{Number(trip.netWeight || 0).toFixed(2)}</td>
                                   <td className="px-3 py-2">
@@ -1258,6 +1275,7 @@ const TripRateLedger: React.FC = () => {
                               <th className="w-12 px-3 py-2">S.No.</th>
                               <th className="px-3 py-2">Trip #</th>
                               <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Material Type</th>
                               <th className="px-3 py-2">Mine Rate</th>
                               <th className="px-3 py-2">Royalty Rate</th>
                               <th className="px-3 py-2">Transport Rate</th>
@@ -1274,6 +1292,7 @@ const TripRateLedger: React.FC = () => {
                                   <td className="px-3 py-2">{(appliedPage - 1) * PAGE_SIZE + idx + 1}</td>
                                   <td className="px-3 py-2">#{trip.id}</td>
                                   <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
+                                  <td className="px-3 py-2">{trip.material || '-'}</td>
                                   <td className="px-3 py-2">{mineRate?.ratePerTon?.toFixed(2) || '-'}</td>
                                   <td className="px-3 py-2">{royaltyRate?.ratePerTon?.toFixed(2) || '-'}</td>
                                   <td className="px-3 py-2">{transportRate?.ratePerTon?.toFixed(2) || '-'}</td>
