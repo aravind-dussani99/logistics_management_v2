@@ -4,7 +4,7 @@ import { useUI } from '../contexts/UIContext';
 import PageHeader from '../components/PageHeader';
 import Pagination from '../components/Pagination';
 import { Filters } from '../components/FilterPanel';
-import { formatDateDisplay } from '../utils';
+import { computeTripGstAmount, formatDateDisplay } from '../utils';
 import { Trip } from '../types';
 
 const PAGE_SIZE = 10;
@@ -18,9 +18,9 @@ type GstInput = {
 
 const getDefaultDate = () => {
   const today = new Date();
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
-  const dateValue = formatDate(today);
-  return { dateFrom: dateValue, dateTo: dateValue };
+  return { dateFrom: formatDate(startOfMonth), dateTo: formatDate(today) };
 };
 
 const TripGstRates: React.FC = () => {
@@ -105,10 +105,6 @@ const TripGstRates: React.FC = () => {
   };
 
   const updateDraft = (key: keyof Filters, value: string) => {
-    if (key === 'dateFrom') {
-      setDraftFilters(prev => ({ ...prev, dateFrom: value, dateTo: value }));
-      return;
-    }
     setDraftFilters(prev => ({ ...prev, [key]: value }));
   };
 
@@ -119,8 +115,10 @@ const TripGstRates: React.FC = () => {
       return;
     }
     const next = { ...draftFilters };
-    if (next.dateFrom) {
-      next.dateTo = next.dateFrom;
+    if (next.dateFrom && next.dateTo && next.dateFrom > next.dateTo) {
+      const swap = next.dateFrom;
+      next.dateFrom = next.dateTo;
+      next.dateTo = swap;
     }
     setFilters(next);
   };
@@ -132,9 +130,12 @@ const TripGstRates: React.FC = () => {
   };
 
   const filteredTrips = useMemo(() => {
+    const fromDate = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+    const toDate = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59`) : null;
     const filtered = trips.filter(trip => {
-      const tripDate = (trip.date || '').split('T')[0];
-      if (filters.dateFrom && tripDate !== filters.dateFrom) return false;
+      const tripDate = trip.date ? new Date(trip.date) : null;
+      if (fromDate && tripDate && tripDate < fromDate) return false;
+      if (toDate && tripDate && tripDate > toDate) return false;
       if (filters.vehicle && trip.vehicleNumber !== filters.vehicle) return false;
       if (filters.vendor && trip.customer !== filters.vendor) return false;
       if (filters.transportOwner && trip.transporterName !== filters.transportOwner) return false;
@@ -156,15 +157,6 @@ const TripGstRates: React.FC = () => {
       const rate = Number(trip.gstRatePerTon || 0);
       const percent = Number(trip.gstPercentage || 0);
       return amount === 0 && rate === 0 && percent === 0;
-    });
-  }, [filteredTrips]);
-
-  const appliedTrips = useMemo(() => {
-    return filteredTrips.filter(trip => {
-      const amount = Number(trip.gstAmount || 0);
-      const rate = Number(trip.gstRatePerTon || 0);
-      const percent = Number(trip.gstPercentage || 0);
-      return amount > 0 || rate > 0 || percent > 0;
     });
   }, [filteredTrips]);
 
@@ -233,17 +225,15 @@ const TripGstRates: React.FC = () => {
   };
 
   const awaitingKey = 'gst-awaiting';
-  const appliedKey = 'gst-applied';
   const awaitingPage = pageIndex[awaitingKey] || 1;
-  const appliedPage = pageIndex[appliedKey] || 1;
   const awaitingSlice = awaitingTrips.slice((awaitingPage - 1) * PAGE_SIZE, awaitingPage * PAGE_SIZE);
-  const appliedSlice = appliedTrips.slice((appliedPage - 1) * PAGE_SIZE, appliedPage * PAGE_SIZE);
   const awaitingTotal = awaitingTrips.length;
-  const appliedTotal = appliedTrips.length;
   const awaitingStart = awaitingTotal === 0 ? 0 : (awaitingPage - 1) * PAGE_SIZE + 1;
   const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
-  const appliedStart = appliedTotal === 0 ? 0 : (appliedPage - 1) * PAGE_SIZE + 1;
-  const appliedEnd = Math.min(appliedPage * PAGE_SIZE, appliedTotal);
+
+  const getDisplayGstAmount = (trip: Trip) => {
+    return computeTripGstAmount(trip);
+  };
 
   const allSelected = awaitingSlice.length > 0 && awaitingSlice.every(trip => selectedTrips.has(trip.id));
   const toggleSelectAll = () => {
@@ -370,23 +360,35 @@ const TripGstRates: React.FC = () => {
           <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
             {filtersOpen ? (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 items-end">
                   <div>
-                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date</label>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
                     <input
                       type="date"
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}
                     />
                   </div>
                   <div>
+                    <label className="text-[11px] text-gray-500 dark:text-gray-400">Date To</label>
+                    <input
+                      type="date"
+                      inputMode="numeric"
+                      onKeyDown={allowDateTyping}
+                      onClick={openDatePicker}
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      value={draftFilters.dateTo || ''}
+                      onChange={e => updateDraft('dateTo', e.target.value)}
+                    />
+                  </div>
+                  <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.vehicle || ''}
                       onChange={e => updateDraft('vehicle', e.target.value)}
                     >
@@ -401,7 +403,7 @@ const TripGstRates: React.FC = () => {
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.vendor || ''}
                       onChange={e => updateDraft('vendor', e.target.value)}
                     >
@@ -416,7 +418,7 @@ const TripGstRates: React.FC = () => {
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.material || ''}
                       onChange={e => updateDraft('material', e.target.value)}
                     >
@@ -428,12 +430,10 @@ const TripGstRates: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Mine & Quarry</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.mine || ''}
                       onChange={e => updateDraft('mine', e.target.value)}
                     >
@@ -448,7 +448,7 @@ const TripGstRates: React.FC = () => {
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Transport & Owner</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.transportOwner || ''}
                       onChange={e => updateDraft('transportOwner', e.target.value)}
                     >
@@ -463,7 +463,7 @@ const TripGstRates: React.FC = () => {
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Royalty</label>
                     <select
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.royalty || ''}
                       onChange={e => updateDraft('royalty', e.target.value)}
                     >
@@ -479,21 +479,21 @@ const TripGstRates: React.FC = () => {
                     <button
                       type="button"
                       onClick={applyDraftFilters}
-                      className="h-8 px-3 rounded-md text-xs font-semibold text-white bg-primary hover:bg-primary-dark"
+                      className="h-7 px-3 rounded-md text-[11px] font-semibold text-white bg-primary hover:bg-primary-dark"
                     >
                       Apply
                     </button>
                     <button
                       type="button"
                       onClick={resetDraftFilters}
-                      className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                      className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
                       Reset
                     </button>
                     <button
                       type="button"
                       onClick={() => setFiltersOpen(false)}
-                      className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                      className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
                       Hide
                     </button>
@@ -595,6 +595,8 @@ const TripGstRates: React.FC = () => {
                       <th className="px-3 py-2">Trip #</th>
                       <th className="px-3 py-2">Date</th>
                       <th className="px-3 py-2">Invoice/DC</th>
+                      <th className="px-3 py-2">Material Owner</th>
+                      <th className="px-3 py-2">Material Type</th>
                       <th className="px-3 py-2">Net Qty</th>
                       <th className="px-3 py-2">Trip Rate for GST</th>
                       <th className="px-3 py-2">GST %</th>
@@ -614,6 +616,8 @@ const TripGstRates: React.FC = () => {
                           <td className="px-3 py-2">#{trip.id}</td>
                           <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
                           <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
+                          <td className="px-3 py-2">{trip.quarryName || '-'}</td>
+                          <td className="px-3 py-2">{trip.material || '-'}</td>
                           <td className="px-3 py-2">{Number(trip.netWeight || 0).toFixed(2)}</td>
                           <td className="px-3 py-2">
                             <input
@@ -657,60 +661,6 @@ const TripGstRates: React.FC = () => {
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">GST Applied Trips</div>
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Showing {appliedStart}–{appliedEnd} of {appliedTotal}
-              </div>
-              <Pagination
-                currentPage={appliedPage}
-                totalPages={Math.max(1, Math.ceil(appliedTotal / PAGE_SIZE))}
-                onPageChange={page => setPageIndex(prev => ({ ...prev, [appliedKey]: page }))}
-                totalItems={appliedTotal}
-                pageSize={PAGE_SIZE}
-              />
-            </div>
-          </div>
-          <div className="px-6 py-4">
-            {appliedSlice.length === 0 ? (
-              <div className="px-4 py-12 text-center text-sm text-gray-500">No GST entries recorded yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto border-collapse text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-500">
-                      <th className="w-12 px-3 py-2">S.No.</th>
-                      <th className="px-3 py-2">Trip #</th>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Invoice/DC</th>
-                      <th className="px-3 py-2">Net Qty</th>
-                      <th className="px-3 py-2">Trip Rate for GST</th>
-                      <th className="px-3 py-2">GST %</th>
-                      <th className="px-3 py-2">GST Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {appliedSlice.map((trip, idx) => (
-                      <tr key={trip.id} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="px-3 py-2">{(appliedPage - 1) * PAGE_SIZE + idx + 1}</td>
-                        <td className="px-3 py-2">#{trip.id}</td>
-                        <td className="px-3 py-2">{formatDateDisplay(trip.date)}</td>
-                        <td className="px-3 py-2">{trip.invoiceDCNumber || '-'}</td>
-                        <td className="px-3 py-2">{Number(trip.netWeight || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2">{Number(trip.gstRatePerTon || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2">{Number(trip.gstPercentage || 0).toFixed(2)}</td>
-                        <td className="px-3 py-2">{Number(trip.gstAmount || 0).toFixed(2)}</td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>

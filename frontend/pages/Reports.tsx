@@ -3,13 +3,12 @@ import { useLocation } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useUI } from '../contexts/UIContext';
-import { formatDateDisplay } from '../utils';
+import { computeTripGstAmount, formatCurrency, formatDateDisplay, getCombinedRatePerTon, getComboPartyTypes, isComboRate, resolveTripRate } from '../utils';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import DataTable from '../components/DataTable';
 import Pagination from '../components/Pagination';
-import { Trip, DailyExpense, Payment, Role, Notification } from '../types';
-import { formatCurrency } from '../utils';
+import { Trip, DailyExpense, Payment, Role, Notification, MaterialRate, RatePartyType } from '../types';
 import SupervisorTripForm from '../components/SupervisorTripForm';
 import TripHistoryDialog from '../components/TripHistoryDialog';
 import ReceiveTripForm from '../components/ReceiveTripForm';
@@ -19,6 +18,8 @@ import DailyExpenseForm from '../components/DailyExpenseForm';
 import PaymentForm from '../components/PaymentForm';
 import { tripApi } from '../services/tripApi';
 import { notificationApi } from '../services/notificationApi';
+import { tripRateApi } from '../services/tripRateApi';
+import { billsApi } from '../services/billsApi';
 
 type ReportType = 'trips' | 'payments' | 'expenses' | 'trip-rates' | 'gst-trip-rates' | 'bills';
 const ITEMS_PER_PAGE = 10;
@@ -33,11 +34,369 @@ const getDefaultDateRange = () => {
     };
 };
 
+type TripRateDialogValues = {
+    combinedRate?: string;
+    mineRate?: string;
+    transportRate?: string;
+    royaltyRate?: string;
+};
+
+const getComboLabel = (comboTypes: RatePartyType[]): string => {
+    const hasMine = comboTypes.includes('mine-quarry');
+    const hasTransport = comboTypes.includes('transport-owner');
+    const hasRoyalty = comboTypes.includes('royalty-owner');
+    if (hasMine && hasTransport && hasRoyalty) return 'mine_royalty_transport';
+    if (hasMine && hasTransport) return 'mine_transport';
+    if (hasMine && hasRoyalty) return 'mine_royalty';
+    if (hasTransport && hasRoyalty) return 'transport_royalty';
+    return 'individual';
+};
+
+const TripRateDialog: React.FC<{
+    mode: 'view' | 'edit';
+    trip: Trip;
+    comboTypes: RatePartyType[];
+    initialValues: TripRateDialogValues;
+    onSave: (values: TripRateDialogValues) => Promise<void>;
+    onClose: () => void;
+}> = ({ mode, trip, comboTypes, initialValues, onSave, onClose }) => {
+    const [values, setValues] = useState<TripRateDialogValues>(initialValues);
+    const netQty = Number(trip.netWeight || 0);
+    const numeric = (value?: string) => Number(value || 0);
+    const combinedAmount = numeric(values.combinedRate) * netQty;
+    const mineAmount = numeric(values.mineRate) * netQty;
+    const transportAmount = numeric(values.transportRate) * netQty;
+    const royaltyAmount = numeric(values.royaltyRate) * netQty;
+    const totalAmount = combinedAmount + mineAmount + transportAmount + royaltyAmount;
+
+    const renderRateField = (label: string, key: keyof TripRateDialogValues) => (
+        <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400">{label}</label>
+            {mode === 'edit' ? (
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    value={values[key] ?? ''}
+                    onChange={event => setValues(prev => ({ ...prev, [key]: event.target.value }))}
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                />
+            ) : (
+                <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {numeric(values[key]).toFixed(2)}
+                </div>
+            )}
+        </div>
+    );
+
+    const comboLabel = getComboLabel(comboTypes);
+
+    return (
+        <div className="space-y-6 max-w-3xl w-full">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+                        <div className="text-base font-semibold">#{trip.id}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+                        <div className="text-base font-semibold">{formatDateDisplay(trip.date)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+                        <div className="text-base font-semibold">{trip.invoiceDCNumber || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Mine & Quarry</div>
+                        <div className="text-base font-semibold">{trip.quarryName || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Transport & Owner</div>
+                        <div className="text-base font-semibold">{trip.transporterName || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Royalty Owner</div>
+                        <div className="text-base font-semibold">{trip.royaltyOwnerName || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Net Qty</div>
+                        <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Amount</div>
+                        <div className="text-base font-semibold">{totalAmount.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {comboTypes.length > 1 && renderRateField(`${comboLabel} rate`, 'combinedRate')}
+                {initialValues.mineRate !== undefined && renderRateField('Mine & Quarry Rate', 'mineRate')}
+                {initialValues.transportRate !== undefined && renderRateField('Transport & Owner Rate', 'transportRate')}
+                {initialValues.royaltyRate !== undefined && renderRateField('Royalty Rate', 'royaltyRate')}
+            </div>
+
+            {mode === 'edit' ? (
+                <div className="flex justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onSave(values)}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Save
+                    </button>
+                </div>
+            ) : (
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Close
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const GstRateDialog: React.FC<{
+    mode: 'view' | 'edit';
+    trip: Trip;
+    onSave: (values: { rate: string; percent: string; amount: string }) => Promise<void>;
+    onClose: () => void;
+}> = ({ mode, trip, onSave, onClose }) => {
+    const initialRate = trip.gstRatePerTon ? String(trip.gstRatePerTon) : '';
+    const initialPercent = trip.gstPercentage ? String(trip.gstPercentage) : '';
+    const netQty = Number(trip.netWeight || 0);
+    const computedAmount = (Number(initialRate || 0) > 0 && Number(initialPercent || 0) > 0)
+      ? netQty * Number(initialRate || 0) * (Number(initialPercent || 0) / 100)
+      : Number(trip.gstAmount || 0);
+    const [rate, setRate] = useState(initialRate);
+    const [percent, setPercent] = useState(initialPercent);
+    const [amount, setAmount] = useState(trip.gstAmount ? String(trip.gstAmount) : (computedAmount ? String(computedAmount) : ''));
+
+    return (
+        <div className="space-y-6 max-w-3xl w-full">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+                        <div className="text-base font-semibold">#{trip.id}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+                        <div className="text-base font-semibold">{formatDateDisplay(trip.date)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+                        <div className="text-base font-semibold">{trip.invoiceDCNumber || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Material Owner</div>
+                        <div className="text-base font-semibold">{trip.quarryName || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Vehicle</div>
+                        <div className="text-base font-semibold">{trip.vehicleNumber || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Net Tons</div>
+                        <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Trip Rate for GST</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={rate}
+                            onChange={event => setRate(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(rate || 0).toFixed(2)}</div>
+                    )}
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">GST %</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={percent}
+                            onChange={event => setPercent(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(percent || 0).toFixed(2)}</div>
+                    )}
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">GST Amount</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={amount}
+                            onChange={event => setAmount(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(amount || 0).toFixed(2)}</div>
+                    )}
+                </div>
+            </div>
+
+            {mode === 'edit' ? (
+                <div className="flex justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onSave({ rate, percent, amount })}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Save
+                    </button>
+                </div>
+            ) : (
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Close
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const BillRateDialog: React.FC<{
+    mode: 'view' | 'edit';
+    trip: Trip;
+    onSave: (values: { name: string; rate: string }) => Promise<void>;
+    onClose: () => void;
+}> = ({ mode, trip, onSave, onClose }) => {
+    const [name, setName] = useState(trip.actualVendorCustomerName || '');
+    const [rate, setRate] = useState(trip.vendorCustomerRatePerTon ? String(trip.vendorCustomerRatePerTon) : '');
+    const netQty = Number(trip.netWeight || 0);
+    const billAmount = Number(rate || 0) * netQty;
+
+    return (
+        <div className="space-y-6 max-w-3xl w-full">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Trip #</div>
+                        <div className="text-base font-semibold">#{trip.id}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Date</div>
+                        <div className="text-base font-semibold">{formatDateDisplay(trip.date)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Invoice/DC</div>
+                        <div className="text-base font-semibold">{trip.invoiceDCNumber || '-'}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Net Tons</div>
+                        <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Bill Amount</div>
+                        <div className="text-base font-semibold">{billAmount.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Actual Name</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={event => setName(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{name || '-'}</div>
+                    )}
+                </div>
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">Rate/Ton</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={rate}
+                            onChange={event => setRate(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(rate || 0).toFixed(2)}</div>
+                    )}
+                </div>
+            </div>
+
+            {mode === 'edit' ? (
+                <div className="flex justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onSave({ name, rate })}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Save
+                    </button>
+                </div>
+            ) : (
+                <div className="flex justify-end">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+                    >
+                        Close
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports' }) => {
     const location = useLocation();
     const { currentUser } = useAuth();
     const { openModal, closeModal } = useUI();
-    const { trips, payments, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadPayments, updateTrip, deleteTrip, updateDailyExpense, deleteDailyExpense, updatePayment, deletePayment } = useData();
+    const { trips, payments, materialRates, loadMaterialRates, getDailyExpenses, getSupervisorAccounts, refreshKey, loadTrips, loadPayments, updateTrip, deleteTrip, updateDailyExpense, deleteDailyExpense, updatePayment, deletePayment } = useData();
     const canViewAll = currentUser?.role === Role.ADMIN || currentUser?.role === Role.MANAGER || currentUser?.role === Role.ACCOUNTANT;
     const isDropoffSupervisor = currentUser?.role === Role.DROPOFF_SUPERVISOR;
     const isPickupSupervisor = currentUser?.role === Role.PICKUP_SUPERVISOR;
@@ -66,10 +425,13 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') {
             loadTrips();
         }
+        if (reportType === 'trip-rates') {
+            loadMaterialRates();
+        }
         if (reportType === 'payments') {
             loadPayments();
         }
-    }, [loadTrips, loadPayments, refreshKey, reportType]);
+    }, [loadTrips, loadMaterialRates, loadPayments, refreshKey, reportType]);
 
     useEffect(() => {
         const fetchAllExpenses = async () => {
@@ -124,6 +486,27 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             }
         }
     };
+    const getRateForTrip = (trip: Trip, partyType: RatePartyType, comboOnly?: boolean) =>
+        resolveTripRate(materialRates, trip.id, partyType, { comboOnly });
+    const getExplicitComboTypes = (trip: Trip): RatePartyType[] => {
+        const rates = materialRates.filter(rate => rate.tripId === trip.id && isComboRate(rate));
+        return Array.from(new Set(rates.map(rate => rate.ratePartyType as RatePartyType)));
+    };
+    const getExplicitComboRateValue = (trip: Trip): number => {
+        const rates = materialRates.filter(rate => rate.tripId === trip.id && isComboRate(rate));
+        const mine = rates.find(rate => rate.ratePartyType === 'mine-quarry');
+        const transport = rates.find(rate => rate.ratePartyType === 'transport-owner');
+        const royalty = rates.find(rate => rate.ratePartyType === 'royalty-owner');
+        return Number(mine?.ratePerTon || transport?.ratePerTon || royalty?.ratePerTon || 0);
+    };
+    const getCombinedRateValue = (trip: Trip) => getCombinedRatePerTon(materialRates, trip.id);
+    const getTripRateStatus = (trip: Trip) => {
+        const hasCombo = getCombinedRateValue(trip) > 0;
+        const hasMine = Boolean(getRateForTrip(trip, 'mine-quarry', false));
+        const hasTransport = Boolean(getRateForTrip(trip, 'transport-owner', false));
+        const hasRoyalty = Boolean(getRateForTrip(trip, 'royalty-owner', false));
+        return hasCombo || hasMine || hasTransport || hasRoyalty ? 'Applied' : 'Awaiting';
+    };
     const updateDraft = (key: keyof Filters, value: string) => {
         setDraftFilters(prev => ({ ...prev, [key]: value }));
     };
@@ -161,20 +544,6 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         return hasRate && hasName ? 'Applied' : 'Awaiting';
     };
 
-    const getTripRateStatus = (trip: Trip) => {
-        const mode = trip.rateMode || 'activity';
-        if (mode === 'all_in') {
-            const hasRates = Number(trip.allInCostPerTon || 0) > 0 && Number(trip.customerRatePerTon || 0) > 0;
-            return hasRates ? 'Applied' : 'Awaiting';
-        }
-        const hasAnyRate = Number(trip.materialCost || 0) > 0
-            || Number(trip.transportCost || 0) > 0
-            || Number(trip.royaltyCost || 0) > 0
-            || Number(trip.customerRatePerTon || 0) > 0
-            || Number(trip.vendorCustomerRatePerTon || 0) > 0;
-        return hasAnyRate ? 'Applied' : 'Awaiting';
-    };
-
     const handleExport = () => {
         let headers: string[] = [];
         let rows: (string|number)[][] = [];
@@ -203,29 +572,71 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 });
                 break;
             case 'trip-rates':
-                headers = ["Date", "Trip #", "Invoice/DC", "Customer", "Rate Mode", "Rate Status", "Customer Rate/Ton", "Material Cost", "Transport Cost", "Royalty Cost", "Total Cost"];
+                headers = [
+                    "Date",
+                    "Trip #",
+                    "Invoice/DC",
+                    "Rate Mode",
+                    "Rate Status",
+                    "Mine Rate/Ton",
+                    "Mine Amount",
+                    "Transport Rate/Ton",
+                    "Transport Amount",
+                    "Royalty Rate/Ton",
+                    "Royalty Amount",
+                    "Linked Rate",
+                    "Linked Amount",
+                    "Total Amount",
+                ];
                 rows = filteredData.map(d => {
                     const t = d as Trip;
-                    const totalCost = Number(t.materialCost || 0) + Number(t.transportCost || 0) + Number(t.royaltyCost || 0);
+                    const mineRate = getRateForTrip(t, 'mine-quarry', false);
+                    const transportRate = getRateForTrip(t, 'transport-owner', false);
+                    const royaltyRate = getRateForTrip(t, 'royalty-owner', false);
+                    const combinedRate = getExplicitComboRateValue(t);
+                    const netQty = Number(t.netWeight || 0);
+                    const mineAmount = Number(mineRate?.ratePerTon || 0) * netQty;
+                    const transportAmount = Number(transportRate?.ratePerTon || 0) * netQty;
+                    const royaltyAmount = Number(royaltyRate?.ratePerTon || 0) * netQty;
+                    const combinedAmount = combinedRate * netQty;
+                    const totalAmount = combinedAmount + mineAmount + transportAmount + royaltyAmount;
                     const rateStatus = getTripRateStatus(t);
-                    return [t.date, t.id, t.invoiceDCNumber, t.customer, t.rateMode || '-', rateStatus, t.vendorCustomerRatePerTon || t.customerRatePerTon || 0, t.materialCost || 0, t.transportCost || 0, t.royaltyCost || 0, totalCost];
+                    const comboTypes = getExplicitComboTypes(t);
+                    const rateMode = comboTypes.length > 1 ? getComboLabel(comboTypes) : 'individual';
+                    return [
+                        t.date,
+                        t.id,
+                        t.invoiceDCNumber,
+                        rateMode,
+                        rateStatus,
+                        mineRate?.ratePerTon || '',
+                        mineAmount || '',
+                        transportRate?.ratePerTon || '',
+                        transportAmount || '',
+                        royaltyRate?.ratePerTon || '',
+                        royaltyAmount || '',
+                        combinedRate || '',
+                        combinedAmount || '',
+                        totalAmount || '',
+                    ];
                 });
                 break;
             case 'gst-trip-rates':
-                headers = ["Date", "Trip #", "Invoice/DC", "Customer", "Net Tons", "GST Rate/Ton", "GST %", "GST Amount"];
+                headers = ["Date", "Trip #", "Invoice/DC", "Material Owner", "Vehicle Number", "Net Tons", "GST Rate/Ton", "GST %", "GST Amount"];
                 rows = filteredData.map(d => {
                     const t = d as Trip;
-                    return [t.date, t.id, t.invoiceDCNumber, t.customer, t.netWeight || 0, t.gstRatePerTon || 0, t.gstPercentage || 0, t.gstAmount || 0];
+                    const gstAmount = computeTripGstAmount(t);
+                    return [t.date, t.id, t.invoiceDCNumber, t.quarryName || '', t.vehicleNumber || '', t.netWeight || 0, t.gstRatePerTon || 0, t.gstPercentage || 0, gstAmount];
                 });
                 break;
             case 'bills':
-                headers = ["Date", "Trip #", "Invoice/DC", "Customer", "Actual Name", "Rate/Ton", "Net Tons", "Bill Amount", "Bill Status"];
+                headers = ["Date", "Trip #", "Invoice/DC", "Actual Name", "Rate/Ton", "Net Tons", "Bill Amount", "Bill Status"];
                 rows = filteredData.map(d => {
                     const t = d as Trip;
                     const rate = Number(t.vendorCustomerRatePerTon || 0);
                     const net = Number(t.netWeight || 0);
                     const billStatus = getBillStatus(t);
-                    return [t.date, t.id, t.invoiceDCNumber, t.customer, t.actualVendorCustomerName || '', rate, net, (rate * net) || 0, billStatus];
+                    return [t.date, t.id, t.invoiceDCNumber, t.actualVendorCustomerName || '', rate, net, (rate * net) || 0, billStatus];
                 });
                 break;
         }
@@ -285,6 +696,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             if (reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') {
                 if (filters.vehicle && item.vehicleNumber !== filters.vehicle) return false;
                 if (filters.material && item.material !== filters.material) return false;
+                if (filters.mine && item.quarryName !== filters.mine) return false;
+                if (filters.transportOwner && item.transporterName !== filters.transportOwner) return false;
                 if (filters.vendor) {
                     const vendorName = item.actualVendorCustomerName || item.customer || '';
                     if (vendorName !== filters.vendor) return false;
@@ -312,6 +725,14 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     }, [trips]);
     const uniqueMaterials = useMemo(() => {
         const names = trips.map(item => item.material || '').filter(Boolean);
+        return Array.from(new Set(names));
+    }, [trips]);
+    const uniqueMines = useMemo(() => {
+        const names = trips.map(item => item.quarryName || '').filter(Boolean);
+        return Array.from(new Set(names));
+    }, [trips]);
+    const uniqueTransportOwners = useMemo(() => {
+        const names = trips.map(item => item.transporterName || '').filter(Boolean);
         return Array.from(new Set(names));
     }, [trips]);
 
@@ -529,6 +950,156 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 hideSecondary={Boolean(isViewMode)}
             />
         ));
+    };
+
+    const openTripRateModal = (title: string, trip: Trip, mode: 'view' | 'edit') => {
+        const hasMine = Boolean(trip.quarryName);
+        const hasTransport = Boolean(trip.transporterName);
+        const hasRoyalty = Boolean(trip.royaltyOwnerName);
+        const existingComboTypes: RatePartyType[] = getExplicitComboTypes(trip);
+        const hasComboApplied = existingComboTypes.length > 0;
+        const comboTypes: RatePartyType[] = hasComboApplied ? existingComboTypes : [];
+        const mineRate = getRateForTrip(trip, 'mine-quarry', false);
+        const transportRate = getRateForTrip(trip, 'transport-owner', false);
+        const royaltyRate = getRateForTrip(trip, 'royalty-owner', false);
+        const showMineRate = hasMine && !comboTypes.includes('mine-quarry');
+        const showTransportRate = hasTransport && !comboTypes.includes('transport-owner');
+        const showRoyaltyRate = hasRoyalty && !comboTypes.includes('royalty-owner');
+        const initialValues: TripRateDialogValues = {
+            combinedRate: hasComboApplied ? String(getExplicitComboRateValue(trip) || '') : undefined,
+            mineRate: showMineRate ? String(mineRate?.ratePerTon || '') : undefined,
+            transportRate: showTransportRate ? String(transportRate?.ratePerTon || '') : undefined,
+            royaltyRate: showRoyaltyRate ? String(royaltyRate?.ratePerTon || '') : undefined,
+        };
+        const showCombined = hasComboApplied;
+        openModal(title, (
+            <TripRateDialog
+                mode={mode}
+                trip={trip}
+                comboTypes={comboTypes}
+                initialValues={initialValues}
+                onSave={async values => {
+                    if (mode !== 'edit') return;
+                    const tasks: Promise<unknown>[] = [];
+                    if (showCombined && values.combinedRate !== undefined && String(values.combinedRate).trim() !== '') {
+                        const comboRateValue = Number(values.combinedRate || 0);
+                        comboTypes.forEach(type => {
+                            tasks.push(tripRateApi.apply({
+                                tripId: trip.id,
+                                ratePartyType: type,
+                                ratePerTon: comboRateValue,
+                                applyScope: 'trip',
+                                rateSource: 'combo',
+                            }));
+                        });
+                    }
+                    if (hasMine && values.mineRate !== undefined && String(values.mineRate).trim() !== '') {
+                        tasks.push(tripRateApi.apply({
+                            tripId: trip.id,
+                            ratePartyType: 'mine-quarry',
+                            ratePerTon: Number(values.mineRate || 0),
+                            applyScope: 'trip',
+                        }));
+                    }
+                    if (hasTransport && values.transportRate !== undefined && String(values.transportRate).trim() !== '') {
+                        tasks.push(tripRateApi.apply({
+                            tripId: trip.id,
+                            ratePartyType: 'transport-owner',
+                            ratePerTon: Number(values.transportRate || 0),
+                            applyScope: 'trip',
+                        }));
+                    }
+                    if (hasRoyalty && values.royaltyRate !== undefined && String(values.royaltyRate).trim() !== '') {
+                        tasks.push(tripRateApi.apply({
+                            tripId: trip.id,
+                            ratePartyType: 'royalty-owner',
+                            ratePerTon: Number(values.royaltyRate || 0),
+                            applyScope: 'trip',
+                        }));
+                    }
+                    if (tasks.length > 0) {
+                        await Promise.all(tasks);
+                        await loadMaterialRates(true);
+                    }
+                    closeModal();
+                }}
+                onClose={closeModal}
+            />
+        ));
+    };
+
+    const openGstRateModal = (title: string, trip: Trip, mode: 'view' | 'edit') => {
+        openModal(title, (
+            <GstRateDialog
+                mode={mode}
+                trip={trip}
+                onSave={async values => {
+                    if (mode !== 'edit') return;
+                    const netQty = Number(trip.netWeight || 0);
+                    const rateValue = Number(values.rate || 0);
+                    const percentValue = Number(values.percent || 0);
+                    const computedAmount = netQty * rateValue * (percentValue / 100);
+                    const amountValue = values.amount.trim() !== ''
+                      ? Number(values.amount)
+                      : (rateValue > 0 && percentValue > 0 ? computedAmount : 0);
+                    await updateTrip(trip.id, {
+                        gstRatePerTon: rateValue,
+                        gstPercentage: percentValue,
+                        gstAmount: amountValue,
+                    });
+                    closeModal();
+                }}
+                onClose={closeModal}
+            />
+        ));
+    };
+
+    const openBillRateModal = (title: string, trip: Trip, mode: 'view' | 'edit') => {
+        openModal(title, (
+            <BillRateDialog
+                mode={mode}
+                trip={trip}
+                onSave={async values => {
+                    if (mode !== 'edit') return;
+                    await billsApi.apply({
+                        tripId: trip.id,
+                        actualVendorCustomerName: (values.name || '').trim(),
+                        vendorCustomerRatePerTon: Number(values.rate || 0),
+                    });
+                    closeModal();
+                }}
+                onClose={closeModal}
+            />
+        ));
+    };
+
+    const handleDeleteTripRates = async (trip: Trip) => {
+        const tripRates = materialRates.filter(rate => rate.tripId === trip.id);
+        const rateTypes = Array.from(new Set(tripRates.map(rate => rate.ratePartyType)));
+        const tasks = rateTypes.map(type => tripRateApi.apply({
+            tripId: trip.id,
+            ratePartyType: type,
+            ratePerTon: 0,
+            applyScope: 'trip',
+            rateSource: tripRates.some(rate => rate.ratePartyType === type && isComboRate(rate)) ? 'combo' : undefined,
+        }));
+        await Promise.all(tasks);
+        await loadMaterialRates(true);
+    };
+
+    const handleDeleteGst = async (trip: Trip) => {
+        await updateTrip(trip.id, {
+            gstRatePerTon: 0,
+            gstPercentage: 0,
+            gstAmount: 0,
+        });
+    };
+
+    const handleDeleteBill = async (trip: Trip) => {
+        await updateTrip(trip.id, {
+            actualVendorCustomerName: '',
+            vendorCustomerRatePerTon: 0,
+        });
     };
 
     const renderTable = () => {
@@ -784,48 +1355,74 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 )} />;
             }
             case 'trip-rates': {
-                const headers = showActions
-                  ? ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Rate Mode', 'Rate Status', 'Customer Rate/Ton', 'Material Cost', 'Transport Cost', 'Royalty Cost', 'Total Cost', 'Actions']
-                  : ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Rate Mode', 'Rate Status', 'Customer Rate/Ton', 'Material Cost', 'Transport Cost', 'Royalty Cost', 'Total Cost'];
+                const tripRows = filteredData as Trip[];
+                const showMineRate = tripRows.some(trip => Boolean(getRateForTrip(trip, 'mine-quarry', false)));
+                const showTransportRate = tripRows.some(trip => Boolean(getRateForTrip(trip, 'transport-owner', false)));
+                const showRoyaltyRate = tripRows.some(trip => Boolean(getRateForTrip(trip, 'royalty-owner', false)));
+                const showCombinedRate = tripRows.some(trip => getCombinedRateValue(trip) > 0);
+                const headers = [
+                    'Date',
+                    'Trip #',
+                    'Invoice/DC',
+                    'Rate Mode',
+                    'Rate Status',
+                    ...(showMineRate ? ['Mine Rate/Ton', 'Mine Amount'] : []),
+                    ...(showTransportRate ? ['Transport Rate/Ton', 'Transport Amount'] : []),
+                    ...(showRoyaltyRate ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
+                    ...(showCombinedRate ? ['Linked Rate', 'Linked Amount'] : []),
+                    'Total Amount',
+                    ...(showActions ? ['Actions'] : []),
+                ];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip) => {
-                    const totalCost = Number(t.materialCost || 0) + Number(t.transportCost || 0) + Number(t.royaltyCost || 0);
+                    const netQty = Number(t.netWeight || 0);
+                    const mineRate = getRateForTrip(t, 'mine-quarry', false);
+                    const transportRate = getRateForTrip(t, 'transport-owner', false);
+                    const royaltyRate = getRateForTrip(t, 'royalty-owner', false);
+                    const combinedRate = getCombinedRateValue(t);
+                    const comboTypes = Array.from(getComboPartyTypes(materialRates, t.id));
+                    const mineAmount = comboTypes.includes('mine-quarry') ? 0 : Number(mineRate?.ratePerTon || 0) * netQty;
+                    const transportAmount = comboTypes.includes('transport-owner') ? 0 : Number(transportRate?.ratePerTon || 0) * netQty;
+                    const royaltyAmount = comboTypes.includes('royalty-owner') ? 0 : Number(royaltyRate?.ratePerTon || 0) * netQty;
+                    const combinedAmount = combinedRate * netQty;
+                    const totalAmount = combinedAmount + mineAmount + transportAmount + royaltyAmount;
                     const rateStatus = getTripRateStatus(t);
+                    const rateMode = comboTypes.length > 1 ? getComboLabel(comboTypes) : 'individual';
                     return (
                       <tr key={t.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">#{t.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{t.rateMode || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{rateMode}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{rateStatus}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.vendorCustomerRatePerTon || t.customerRatePerTon || 0))}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.materialCost || 0))}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.transportCost || 0))}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.royaltyCost || 0))}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(totalCost)}</td>
+                        {showMineRate && (
+                            <>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(mineRate?.ratePerTon || 0))}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(mineAmount)}</td>
+                            </>
+                        )}
+                        {showTransportRate && (
+                            <>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(transportRate?.ratePerTon || 0))}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(transportAmount)}</td>
+                            </>
+                        )}
+                        {showRoyaltyRate && (
+                            <>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(royaltyRate?.ratePerTon || 0))}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(royaltyAmount)}</td>
+                            </>
+                        )}
+                        {showCombinedRate && (
+                            <>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{combinedRate ? formatCurrency(combinedRate) : '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">{combinedRate ? formatCurrency(combinedAmount) : '-'}</td>
+                            </>
+                        )}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(totalAmount)}</td>
                         {showActions && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
-                            <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                            <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
-                            <button
-                              onClick={() => {
-                                openModal('Delete Trip', (
-                                  <AlertDialog
-                                    message="Delete this trip? This action cannot be undone."
-                                    confirmLabel="Delete"
-                                    cancelLabel="Cancel"
-                                    onCancel={closeModal}
-                                    onConfirm={async () => {
-                                      await deleteTrip(t.id);
-                                      closeModal();
-                                    }}
-                                  />
-                                ));
-                              }}
-                              className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => openTripRateModal(`View Trip Rates #${t.id}`, t, 'view')} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                            <button onClick={() => openTripRateModal(`Edit Trip Rates #${t.id}`, t, 'edit')} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                           </td>
                         )}
                       </tr>
@@ -834,32 +1431,38 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             }
             case 'gst-trip-rates': {
                 const headers = showActions
-                  ? ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount', 'Actions']
-                  : ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount'];
+                  ? ['Date', 'Trip #', 'Invoice/DC', 'Material Owner', 'Vehicle', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount', 'Actions']
+                  : ['Date', 'Trip #', 'Invoice/DC', 'Material Owner', 'Vehicle', 'Net Tons', 'GST Rate/Ton', 'GST %', 'GST Amount'];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip) => (
                   <tr key={t.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">#{t.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{t.quarryName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{t.vehicleNumber || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{Number(t.netWeight || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.gstRatePerTon || 0))}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">{Number(t.gstPercentage || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(Number(t.gstAmount || 0))}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {(() => {
+                        const netQty = Number(t.netWeight || 0);
+                        return formatCurrency(computeTripGstAmount(t));
+                      })()}
+                    </td>
                     {showActions && (
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
-                        <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                        <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                        <button onClick={() => openGstRateModal(`View GST #${t.id}`, t, 'view')} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                        <button onClick={() => openGstRateModal(`Edit GST #${t.id}`, t, 'edit')} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                         <button
                           onClick={() => {
-                            openModal('Delete Trip', (
+                            openModal('Delete GST', (
                               <AlertDialog
-                                message="Delete this trip? This action cannot be undone."
+                                message="Delete GST values for this trip? This will move it back to awaiting GST."
                                 confirmLabel="Delete"
                                 cancelLabel="Cancel"
                                 onCancel={closeModal}
                                 onConfirm={async () => {
-                                  await deleteTrip(t.id);
+                                  await handleDeleteGst(t);
                                   closeModal();
                                 }}
                               />
@@ -876,8 +1479,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             }
             case 'bills': {
                 const headers = showActions
-                  ? ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status', 'Actions']
-                  : ['Date', 'Trip #', 'Invoice/DC', 'Customer', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status'];
+                  ? ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status', 'Actions']
+                  : ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status'];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip) => {
                     const rate = Number(t.vendorCustomerRatePerTon || 0);
                     const net = Number(t.netWeight || 0);
@@ -887,7 +1490,6 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">#{t.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{t.customer || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.actualVendorCustomerName || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(rate)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{net.toFixed(2)}</td>
@@ -895,18 +1497,18 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{billStatus}</td>
                         {showActions && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
-                            <button onClick={() => openModal(`View Trip #${t.id}`, <SupervisorTripForm mode="view" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
-                            <button onClick={() => openModal(`Edit Trip #${t.id}`, <SupervisorTripForm mode="edit" trip={t} onClose={closeModal} />)} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
+                            <button onClick={() => openBillRateModal(`View Bill #${t.id}`, t, 'view')} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
+                            <button onClick={() => openBillRateModal(`Edit Bill #${t.id}`, t, 'edit')} className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Edit</button>
                             <button
                               onClick={() => {
-                                openModal('Delete Trip', (
+                                openModal('Delete Bill', (
                                   <AlertDialog
-                                    message="Delete this trip? This action cannot be undone."
+                                    message="Delete bill details for this trip? This will move it back to awaiting bills."
                                     confirmLabel="Delete"
                                     cancelLabel="Cancel"
                                     onCancel={closeModal}
                                     onConfirm={async () => {
-                                      await deleteTrip(t.id);
+                                      await handleDeleteBill(t);
                                       closeModal();
                                     }}
                                   />
@@ -956,7 +1558,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
                         {filtersOpen ? (
                             <div className="space-y-2">
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 items-end">
                                     <div>
                                         <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
                                         <input
@@ -964,7 +1566,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             inputMode="numeric"
                                             onKeyDown={allowDateTyping}
                                             onClick={openDatePicker}
-                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.dateFrom || ''}
                                             onChange={e => updateDraft('dateFrom', e.target.value)}
                                         />
@@ -976,7 +1578,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             inputMode="numeric"
                                             onKeyDown={allowDateTyping}
                                             onClick={openDatePicker}
-                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.dateTo || ''}
                                             onChange={e => updateDraft('dateTo', e.target.value)}
                                         />
@@ -984,7 +1586,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                     <div>
                                         <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
                                         <select
-                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.vehicle || ''}
                                             onChange={e => updateDraft('vehicle', e.target.value)}
                                         >
@@ -999,7 +1601,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                     <div>
                                         <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
                                         <select
-                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.vendor || ''}
                                             onChange={e => updateDraft('vendor', e.target.value)}
                                         >
@@ -1012,11 +1614,11 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                         </select>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 items-end">
                                     <div>
                                         <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
                                         <select
-                                            className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                                             value={draftFilters.material || ''}
                                             onChange={e => updateDraft('material', e.target.value)}
                                         >
@@ -1028,25 +1630,55 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="flex flex-wrap justify-end gap-2 lg:col-span-3">
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Mine & Quarry</label>
+                                        <select
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.mine || ''}
+                                            onChange={e => updateDraft('mine', e.target.value)}
+                                        >
+                                            <option value="">All Mines/Quarries</option>
+                                            {uniqueMines.map(mine => (
+                                                <option key={`reports-mine-${mine}`} value={mine}>
+                                                    {mine}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Transport & Owner</label>
+                                        <select
+                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                            value={draftFilters.transportOwner || ''}
+                                            onChange={e => updateDraft('transportOwner', e.target.value)}
+                                        >
+                                            <option value="">All Transport Owners</option>
+                                            {uniqueTransportOwners.map(owner => (
+                                                <option key={`reports-transport-${owner}`} value={owner}>
+                                                    {owner}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-wrap justify-end gap-2 lg:col-span-1">
                                         <button
                                             type="button"
                                             onClick={applyDraftFilters}
-                                            className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                                            className="h-7 px-3 rounded-md text-[11px] font-medium text-white bg-primary hover:bg-primary-dark"
                                         >
                                             Apply
                                         </button>
                                         <button
                                             type="button"
                                             onClick={resetDraftFilters}
-                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                            className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                                         >
                                             Reset
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setFiltersOpen(false)}
-                                            className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                            className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                                         >
                                             Hide
                                         </button>

@@ -5,10 +5,11 @@ import AccountReconciliation, { AccountReconciliationHandle } from './AccountRec
 import { useData } from '../contexts/DataContext';
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
 import { DailyExpense, Payment, PaymentType, RatePartyType, Trip } from '../types';
+import { computeTripGstAmount, getCombinedRatePerTon, getComboPartyTypes, resolveTripRate } from '../utils';
 
 type RatePartySummary = {
   key: string;
-  type: RatePartyType | 'account' | 'mixed';
+  type: RatePartyType | 'account' | 'mixed' | 'combined';
   name: string;
   trips: Trip[];
   totalTons: number;
@@ -49,13 +50,14 @@ type BankSummary = {
   balance: number;
 };
 
-const RATE_PARTY_LABELS: Record<RatePartyType | 'account' | 'mixed', string> = {
+const RATE_PARTY_LABELS: Record<RatePartyType | 'account' | 'mixed' | 'combined', string> = {
   'vendor-customer': 'Vendor & Customer',
   'mine-quarry': 'Mine & Quarry',
   'royalty-owner': 'Royalty Owner',
   'transport-owner': 'Transport & Owner',
   account: 'Account',
   mixed: 'Multiple',
+  combined: 'Combined',
 };
 
 const MONTHLY_ACTIVITY_LABELS: Record<MonthlyActivityType, string> = {
@@ -78,7 +80,7 @@ const getMtdRange = () => {
 };
 
 const AccountLedgerOverview: React.FC = () => {
-  const { trips, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey } = useData();
+  const { trips, payments, vendorCustomers, mineQuarries, royaltyOwnerProfiles, transportOwnerProfiles, materialRates, loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, loadMaterialRates, refreshKey } = useData();
   const [expenses, setExpenses] = useState<DailyExpense[]>([]);
   const [filters, setFilters] = useState<Filters>(getMtdRange());
   const [draftFilters, setDraftFilters] = useState<Filters>(getMtdRange());
@@ -86,7 +88,6 @@ const AccountLedgerOverview: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'abstract' | 'history' | 'party' | 'head' | 'monthly'>('history');
   const partyExportRef = useRef<AccountReconciliationHandle | null>(null);
   const headExportRef = useRef<AccountReconciliationHandle | null>(null);
-
   useEffect(() => {
     loadTrips();
     loadPayments();
@@ -94,13 +95,14 @@ const AccountLedgerOverview: React.FC = () => {
     loadMineQuarries();
     loadRoyaltyOwnerProfiles();
     loadTransportOwnerProfiles();
+    loadMaterialRates();
     dailyExpenseApi.getAll()
       .then(setExpenses)
       .catch((error) => {
         console.warn('Failed to load daily expenses for ledger', error);
         setExpenses([]);
       });
-  }, [loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, refreshKey]);
+  }, [loadTrips, loadPayments, loadVendorCustomers, loadMineQuarries, loadRoyaltyOwnerProfiles, loadTransportOwnerProfiles, loadMaterialRates, refreshKey]);
 
   useEffect(() => {
     setDraftFilters(filters);
@@ -192,7 +194,7 @@ const AccountLedgerOverview: React.FC = () => {
     paymentsSource: Payment[],
   ) => {
     const bucket = new Map<string, RatePartySummary>();
-    const addSummary = (type: RatePartyType | 'account', name: string, trip?: Trip) => {
+    const addSummary = (type: RatePartyType | 'account' | 'combined', name: string, trip?: Trip, amountOverride?: number) => {
       const key = `${type}:${name}`;
       if (!bucket.has(key)) {
         bucket.set(key, {
@@ -210,18 +212,44 @@ const AccountLedgerOverview: React.FC = () => {
       if (trip) {
         summary.trips.push(trip);
         summary.totalTons += Number(trip.netWeight || 0);
-        if (type === 'vendor-customer') summary.grossAmount += Number(trip.revenue || 0);
-        if (type === 'mine-quarry') summary.grossAmount += Number(trip.materialCost || 0);
-        if (type === 'transport-owner') summary.grossAmount += Number(trip.transportCost || 0);
-        if (type === 'royalty-owner') summary.grossAmount += Number(trip.royaltyCost || 0);
+        if (typeof amountOverride === 'number') {
+          summary.grossAmount += amountOverride;
+        } else {
+          if (type === 'vendor-customer') summary.grossAmount += Number(trip.revenue || 0);
+          if (type === 'mine-quarry') summary.grossAmount += Number(trip.materialCost || 0);
+          if (type === 'transport-owner') summary.grossAmount += Number(trip.transportCost || 0);
+          if (type === 'royalty-owner') summary.grossAmount += Number(trip.royaltyCost || 0);
+        }
       }
     };
 
+    const getCombinedPartyName = (trip: Trip) => trip.quarryName || trip.royaltyOwnerName || trip.transporterName || 'Combined';
+
     tripsSource.forEach(trip => {
       if (trip.customer) addSummary('vendor-customer', trip.customer, trip);
-      if (trip.quarryName) addSummary('mine-quarry', trip.quarryName, trip);
-      if (trip.transporterName) addSummary('transport-owner', trip.transporterName, trip);
-      if (trip.royaltyOwnerName) addSummary('royalty-owner', trip.royaltyOwnerName, trip);
+
+      const comboRatePerTon = getCombinedRatePerTon(materialRates, trip.id);
+      const comboParties = getComboPartyTypes(materialRates, trip.id);
+      const netWeight = Number(trip.netWeight || 0);
+      if (comboRatePerTon > 0) {
+        addSummary('combined', getCombinedPartyName(trip), trip, netWeight * comboRatePerTon);
+      }
+
+      if (trip.quarryName && (!comboRatePerTon || !comboParties.has('mine-quarry'))) {
+        const rate = resolveTripRate(materialRates, trip.id, 'mine-quarry', { comboOnly: false });
+        const amount = Number(rate?.ratePerTon || 0) * netWeight;
+        addSummary('mine-quarry', trip.quarryName, trip, amount);
+      }
+      if (trip.transporterName && (!comboRatePerTon || !comboParties.has('transport-owner'))) {
+        const rate = resolveTripRate(materialRates, trip.id, 'transport-owner', { comboOnly: false });
+        const amount = Number(rate?.ratePerTon || 0) * netWeight;
+        addSummary('transport-owner', trip.transporterName, trip, amount);
+      }
+      if (trip.royaltyOwnerName && (!comboRatePerTon || !comboParties.has('royalty-owner'))) {
+        const rate = resolveTripRate(materialRates, trip.id, 'royalty-owner', { comboOnly: false });
+        const amount = Number(rate?.ratePerTon || 0) * netWeight;
+        addSummary('royalty-owner', trip.royaltyOwnerName, trip, amount);
+      }
     });
 
     const addPayment = (type: RatePartyType | 'account' | undefined, name: string | undefined, amount: number) => {
@@ -296,7 +324,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     return Array.from(bucket.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [partyIdLookup, partyNameLookup]);
+  }, [materialRates, partyIdLookup, partyNameLookup]);
 
   const summaries = useMemo<RatePartySummary[]>(() => {
     return buildSummaries(filteredTrips, filteredExpenses, filteredPayments);
@@ -308,11 +336,13 @@ const AccountLedgerOverview: React.FC = () => {
   }, [buildSummaries, trips, expenses, payments]);
 
   const mergeSummariesByName = useCallback((items: RatePartySummary[]) => {
-    const bucket = new Map<string, { summary: RatePartySummary; types: Set<RatePartySummary['type']> }>();
+    const bucket = new Map<string, { summary: RatePartySummary; types: Set<RatePartySummary['type']>; tripMap: Map<number, Trip> }>();
     items.forEach(item => {
       const key = item.name.trim().toLowerCase();
       const existing = bucket.get(key);
       if (!existing) {
+        const tripMap = new Map<number, Trip>();
+        item.trips.forEach(trip => tripMap.set(trip.id, trip));
         bucket.set(key, {
           summary: {
             ...item,
@@ -321,17 +351,19 @@ const AccountLedgerOverview: React.FC = () => {
             trips: [...item.trips],
           },
           types: new Set([item.type]),
+          tripMap,
         });
         return;
       }
-      existing.summary.trips = [...existing.summary.trips, ...item.trips];
-      existing.summary.totalTons += item.totalTons;
+      item.trips.forEach(trip => existing.tripMap.set(trip.id, trip));
+      existing.summary.trips = Array.from(existing.tripMap.values());
       existing.summary.grossAmount += item.grossAmount;
       existing.summary.paidAmount += item.paidAmount;
       existing.summary.balance += item.balance;
       existing.types.add(item.type);
     });
     const merged = Array.from(bucket.values()).map(({ summary, types }) => {
+      summary.totalTons = summary.trips.reduce((sum, trip) => sum + Number(trip.netWeight || 0), 0);
       const typeLabel = types.size > 1 ? 'mixed' : Array.from(types)[0];
       return { ...summary, type: typeLabel };
     });
@@ -355,7 +387,7 @@ const AccountLedgerOverview: React.FC = () => {
     if (isSupplier) {
       return balance > 0 ? 'Pay pending' : 'Recover overpaid';
     }
-    return balance > 0 ? 'Receive pending' : 'Pay pending';
+    return balance < 0 ? 'Receive pending' : 'Pay pending';
   };
 
   const exportCsv = () => {
@@ -685,7 +717,6 @@ const AccountLedgerOverview: React.FC = () => {
       paidBySource: Map<string, number>;
       totalPaid: number;
     }>();
-
     const updateRange = (entry: { minDate?: string; maxDate?: string }, dateValue?: string) => {
       if (!dateValue) return;
       if (!entry.minDate || dateValue < entry.minDate) entry.minDate = dateValue;
@@ -700,6 +731,10 @@ const AccountLedgerOverview: React.FC = () => {
       if (typeof trip.allInCost === 'number') return trip.allInCost;
       if (typeof trip.allInCostPerTon === 'number') {
         return Number(trip.netWeight || 0) * trip.allInCostPerTon;
+      }
+      const comboRate = getCombinedRatePerTon(materialRates, trip.id);
+      if (comboRate > 0) {
+        return Number(trip.netWeight || 0) * comboRate;
       }
       return Number(trip.materialCost || 0) + Number(trip.transportCost || 0) + Number(trip.royaltyCost || 0);
     };
@@ -722,7 +757,7 @@ const AccountLedgerOverview: React.FC = () => {
       entry.tripCount += 1;
       entry.netTons += Number(trip.netWeight || 0);
       entry.tripAmount += amount;
-      entry.gstAmount += Number(trip.gstAmount || 0);
+      entry.gstAmount += computeTripGstAmount(trip);
       updateRange(entry, trip.date ? trip.date.split('T')[0] : undefined);
     };
 
@@ -806,7 +841,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     return rows.sort((a, b) => b.businessValue - a.businessValue);
-  }, [filteredTrips, filteredPayments, resolvePaymentParty]);
+  }, [filteredTrips, filteredPayments, materialRates, resolvePaymentParty]);
 
   const monthlyKpis = useMemo(() => {
     const received = filteredPayments
@@ -877,7 +912,7 @@ const AccountLedgerOverview: React.FC = () => {
           <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">
             {filtersOpen ? (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                   <div>
                     <label className="text-[11px] text-gray-500 dark:text-gray-400">Date From</label>
                     <input
@@ -885,7 +920,7 @@ const AccountLedgerOverview: React.FC = () => {
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateFrom || ''}
                       onChange={e => updateDraft('dateFrom', e.target.value)}
                     />
@@ -897,7 +932,7 @@ const AccountLedgerOverview: React.FC = () => {
                       inputMode="numeric"
                       onKeyDown={allowDateTyping}
                       onClick={openDatePicker}
-                      className="w-full h-8 text-xs px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={draftFilters.dateTo || ''}
                       onChange={e => updateDraft('dateTo', e.target.value)}
                     />
@@ -907,21 +942,21 @@ const AccountLedgerOverview: React.FC = () => {
                   <button
                     type="button"
                     onClick={applyDraftFilters}
-                    className="h-8 px-3 rounded-md text-xs font-medium text-white bg-primary hover:bg-primary-dark"
+                    className="h-7 px-3 rounded-md text-[11px] font-medium text-white bg-primary hover:bg-primary-dark"
                   >
                     Apply
                   </button>
                   <button
                     type="button"
                     onClick={resetDraftFilters}
-                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                   >
                     Reset
                   </button>
                   <button
                     type="button"
                     onClick={() => setFiltersOpen(false)}
-                    className="h-8 px-3 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    className="h-7 px-3 rounded-md text-[11px] font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                   >
                     Hide
                   </button>

@@ -47,6 +47,7 @@ interface DataContextType {
   loadTransportOwnerVehicles: () => Promise<void>;
   loadMaterialTypeDefinitions: () => Promise<void>;
   loadMaterialRates: () => Promise<void>;
+  cacheMaterialRate: (rate: MaterialRate) => void;
   trips: Trip[];
   // advances removed
   payments: Payment[];
@@ -951,6 +952,12 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await materialRateApi.remove(id);
     setMaterialRates(prev => prev.filter(item => item.id !== id));
   };
+  const cacheMaterialRate = (rate: MaterialRate) => {
+    setMaterialRates(prev => {
+      if (prev.some(item => item.id === rate.id)) return prev;
+      return [rate, ...prev];
+    });
+  };
 
   const addMaterial = async () => {
     console.warn('Legacy materials are deprecated and no longer supported.');
@@ -991,6 +998,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadTransportOwnerVehicles,
     loadMaterialTypeDefinitions,
     loadMaterialRates,
+    cacheMaterialRate,
     trips,
 
     payments,
