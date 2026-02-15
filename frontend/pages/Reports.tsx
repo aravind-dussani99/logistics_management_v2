@@ -45,11 +45,30 @@ const getComboLabel = (comboTypes: RatePartyType[]): string => {
     const hasMine = comboTypes.includes('mine-quarry');
     const hasTransport = comboTypes.includes('transport-owner');
     const hasRoyalty = comboTypes.includes('royalty-owner');
-    if (hasMine && hasTransport && hasRoyalty) return 'mine_royalty_transport';
-    if (hasMine && hasTransport) return 'mine_transport';
-    if (hasMine && hasRoyalty) return 'mine_royalty';
-    if (hasTransport && hasRoyalty) return 'transport_royalty';
-    return 'individual';
+    if (hasMine && hasTransport && hasRoyalty) return 'Mine_Royalty_Transport';
+    if (hasMine && hasTransport) return 'Mine_Transport';
+    if (hasMine && hasRoyalty) return 'Mine_Royalty';
+    if (hasTransport && hasRoyalty) return 'Royalty_Transport';
+    return 'Individual';
+};
+
+const getRateModeLabel = (trip: Trip, comboTypes: RatePartyType[]): string => {
+    const uniqueComboTypes = Array.from(new Set(comboTypes));
+    if (uniqueComboTypes.length === 3) return 'Mine_Royalty_Transport';
+    if (uniqueComboTypes.length === 2) {
+        const comboLabel = getComboLabel(uniqueComboTypes);
+        const presentTypes: RatePartyType[] = [];
+        if (trip.quarryName) presentTypes.push('mine-quarry');
+        if (trip.transporterName) presentTypes.push('transport-owner');
+        if (trip.royaltyOwnerName) presentTypes.push('royalty-owner');
+        const missingType = presentTypes.find(type => !uniqueComboTypes.includes(type));
+        if (!missingType) return comboLabel;
+        const missingLabel = missingType === 'mine-quarry'
+            ? 'Mine'
+            : (missingType === 'transport-owner' ? 'Transport' : 'Royalty');
+        return `${comboLabel} + ${missingLabel}`;
+    }
+    return 'Individual';
 };
 
 const TripRateDialog: React.FC<{
@@ -130,7 +149,7 @@ const TripRateDialog: React.FC<{
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {comboTypes.length > 1 && renderRateField(`${comboLabel} rate`, 'combinedRate')}
+                {comboTypes.length > 1 && renderRateField(`${comboLabel} Rate/Ton`, 'combinedRate')}
                 {initialValues.mineRate !== undefined && renderRateField('Mine & Quarry Rate', 'mineRate')}
                 {initialValues.transportRate !== undefined && renderRateField('Transport & Owner Rate', 'transportRate')}
                 {initialValues.royaltyRate !== undefined && renderRateField('Royalty Rate', 'royaltyRate')}
@@ -488,17 +507,10 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
     };
     const getRateForTrip = (trip: Trip, partyType: RatePartyType, comboOnly?: boolean) =>
         resolveTripRate(materialRates, trip.id, partyType, { comboOnly });
-    const getExplicitComboTypes = (trip: Trip): RatePartyType[] => {
-        const rates = materialRates.filter(rate => rate.tripId === trip.id && isComboRate(rate));
-        return Array.from(new Set(rates.map(rate => rate.ratePartyType as RatePartyType)));
-    };
-    const getExplicitComboRateValue = (trip: Trip): number => {
-        const rates = materialRates.filter(rate => rate.tripId === trip.id && isComboRate(rate));
-        const mine = rates.find(rate => rate.ratePartyType === 'mine-quarry');
-        const transport = rates.find(rate => rate.ratePartyType === 'transport-owner');
-        const royalty = rates.find(rate => rate.ratePartyType === 'royalty-owner');
-        return Number(mine?.ratePerTon || transport?.ratePerTon || royalty?.ratePerTon || 0);
-    };
+    const getExplicitComboTypes = (trip: Trip): RatePartyType[] =>
+        Array.from(getComboPartyTypes(materialRates, trip.id));
+    const getExplicitComboRateValue = (trip: Trip): number =>
+        getCombinedRatePerTon(materialRates, trip.id);
     const getCombinedRateValue = (trip: Trip) => getCombinedRatePerTon(materialRates, trip.id);
     const getTripRateStatus = (trip: Trip) => {
         const hasCombo = getCombinedRateValue(trip) > 0;
@@ -584,8 +596,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     "Transport Amount",
                     "Royalty Rate/Ton",
                     "Royalty Amount",
-                    "Linked Rate",
-                    "Linked Amount",
+                    "Pair/All-Activity Rate/Ton",
+                    "Pair/All-Activity Amount",
                     "Total Amount",
                 ];
                 rows = filteredData.map(d => {
@@ -602,7 +614,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     const totalAmount = combinedAmount + mineAmount + transportAmount + royaltyAmount;
                     const rateStatus = getTripRateStatus(t);
                     const comboTypes = getExplicitComboTypes(t);
-                    const rateMode = comboTypes.length > 1 ? getComboLabel(comboTypes) : 'individual';
+                    const rateMode = getRateModeLabel(t, comboTypes);
                     return [
                         t.date,
                         t.id,
@@ -980,48 +992,65 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 initialValues={initialValues}
                 onSave={async values => {
                     if (mode !== 'edit') return;
-                    const tasks: Promise<unknown>[] = [];
-                    if (showCombined && values.combinedRate !== undefined && String(values.combinedRate).trim() !== '') {
-                        const comboRateValue = Number(values.combinedRate || 0);
-                        comboTypes.forEach(type => {
+                    try {
+                        const tasks: Promise<unknown>[] = [];
+                        if (showCombined && values.combinedRate !== undefined && String(values.combinedRate).trim() !== '') {
+                            const comboRateValue = Number(values.combinedRate || 0);
+                            comboTypes.forEach(type => {
+                                tasks.push(tripRateApi.apply({
+                                    tripId: trip.id,
+                                    ratePartyType: type,
+                                    ratePerTon: comboRateValue,
+                                    applyScope: 'trip',
+                                    rateSource: 'combo',
+                                }));
+                            });
+                        }
+                        if (hasMine && values.mineRate !== undefined && String(values.mineRate).trim() !== '') {
                             tasks.push(tripRateApi.apply({
                                 tripId: trip.id,
-                                ratePartyType: type,
-                                ratePerTon: comboRateValue,
+                                ratePartyType: 'mine-quarry',
+                                ratePerTon: Number(values.mineRate || 0),
                                 applyScope: 'trip',
-                                rateSource: 'combo',
                             }));
-                        });
+                        }
+                        if (hasTransport && values.transportRate !== undefined && String(values.transportRate).trim() !== '') {
+                            tasks.push(tripRateApi.apply({
+                                tripId: trip.id,
+                                ratePartyType: 'transport-owner',
+                                ratePerTon: Number(values.transportRate || 0),
+                                applyScope: 'trip',
+                            }));
+                        }
+                        if (hasRoyalty && values.royaltyRate !== undefined && String(values.royaltyRate).trim() !== '') {
+                            tasks.push(tripRateApi.apply({
+                                tripId: trip.id,
+                                ratePartyType: 'royalty-owner',
+                                ratePerTon: Number(values.royaltyRate || 0),
+                                applyScope: 'trip',
+                            }));
+                        }
+                        if (tasks.length > 0) {
+                            await Promise.all(tasks);
+                            await loadMaterialRates(true);
+                        }
+                        closeModal();
+                        openModal('Rate Update', (
+                            <AlertDialog
+                                message="Trip rate updated successfully."
+                                onConfirm={closeModal}
+                            />
+                        ));
+                    } catch (error) {
+                        console.error('Failed to update trip rate', error);
+                        closeModal();
+                        openModal('Rate Update Failed', (
+                            <AlertDialog
+                                message="Unable to update trip rate. Please try again."
+                                onConfirm={closeModal}
+                            />
+                        ));
                     }
-                    if (hasMine && values.mineRate !== undefined && String(values.mineRate).trim() !== '') {
-                        tasks.push(tripRateApi.apply({
-                            tripId: trip.id,
-                            ratePartyType: 'mine-quarry',
-                            ratePerTon: Number(values.mineRate || 0),
-                            applyScope: 'trip',
-                        }));
-                    }
-                    if (hasTransport && values.transportRate !== undefined && String(values.transportRate).trim() !== '') {
-                        tasks.push(tripRateApi.apply({
-                            tripId: trip.id,
-                            ratePartyType: 'transport-owner',
-                            ratePerTon: Number(values.transportRate || 0),
-                            applyScope: 'trip',
-                        }));
-                    }
-                    if (hasRoyalty && values.royaltyRate !== undefined && String(values.royaltyRate).trim() !== '') {
-                        tasks.push(tripRateApi.apply({
-                            tripId: trip.id,
-                            ratePartyType: 'royalty-owner',
-                            ratePerTon: Number(values.royaltyRate || 0),
-                            applyScope: 'trip',
-                        }));
-                    }
-                    if (tasks.length > 0) {
-                        await Promise.all(tasks);
-                        await loadMaterialRates(true);
-                    }
-                    closeModal();
                 }}
                 onClose={closeModal}
             />
@@ -1369,7 +1398,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     ...(showMineRate ? ['Mine Rate/Ton', 'Mine Amount'] : []),
                     ...(showTransportRate ? ['Transport Rate/Ton', 'Transport Amount'] : []),
                     ...(showRoyaltyRate ? ['Royalty Rate/Ton', 'Royalty Amount'] : []),
-                    ...(showCombinedRate ? ['Linked Rate', 'Linked Amount'] : []),
+                    ...(showCombinedRate ? ['Pair/All-Activity Rate/Ton', 'Pair/All-Activity Amount'] : []),
                     'Total Amount',
                     ...(showActions ? ['Actions'] : []),
                 ];
@@ -1386,7 +1415,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     const combinedAmount = combinedRate * netQty;
                     const totalAmount = combinedAmount + mineAmount + transportAmount + royaltyAmount;
                     const rateStatus = getTripRateStatus(t);
-                    const rateMode = comboTypes.length > 1 ? getComboLabel(comboTypes) : 'individual';
+                    const rateMode = getRateModeLabel(t, comboTypes);
                     return (
                       <tr key={t.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(t.date)}</td>

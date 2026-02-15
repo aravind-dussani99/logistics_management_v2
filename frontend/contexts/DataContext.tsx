@@ -46,7 +46,7 @@ interface DataContextType {
   loadTransportOwnerProfiles: () => Promise<void>;
   loadTransportOwnerVehicles: () => Promise<void>;
   loadMaterialTypeDefinitions: () => Promise<void>;
-  loadMaterialRates: () => Promise<void>;
+  loadMaterialRates: (force?: boolean) => Promise<void>;
   cacheMaterialRate: (rate: MaterialRate) => void;
   trips: Trip[];
   // advances removed
@@ -475,8 +475,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHasLoadedMaterialTypeDefinitions(true);
   }, [currentUser, hasLoadedMaterialTypeDefinitions]);
 
-  const loadMaterialRates = useCallback(async () => {
-    if (!currentUser || hasLoadedMaterialRates) return;
+  const loadMaterialRates = useCallback(async (force = false) => {
+    if (!currentUser) return;
+    if (!force && hasLoadedMaterialRates) return;
     const materialRateData = await materialRateApi.getAll();
     setMaterialRates(materialRateData);
     setHasLoadedMaterialRates(true);

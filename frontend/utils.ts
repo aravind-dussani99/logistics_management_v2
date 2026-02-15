@@ -137,27 +137,36 @@ export const resolveTripRate = (
     const sorted = [...nonZeroPool].sort((a, b) => {
         const aTime = a.effectiveFrom ? new Date(a.effectiveFrom).getTime() : 0;
         const bTime = b.effectiveFrom ? new Date(b.effectiveFrom).getTime() : 0;
-        return bTime - aTime;
+        if (bTime !== aTime) return bTime - aTime;
+        const aUpdated = new Date((a as unknown as { updatedAt?: string }).updatedAt || '').getTime() || 0;
+        const bUpdated = new Date((b as unknown as { updatedAt?: string }).updatedAt || '').getTime() || 0;
+        if (bUpdated !== aUpdated) return bUpdated - aUpdated;
+        const aCreated = new Date((a as unknown as { createdAt?: string }).createdAt || '').getTime() || 0;
+        const bCreated = new Date((b as unknown as { createdAt?: string }).createdAt || '').getTime() || 0;
+        return bCreated - aCreated;
     });
     const chosen = sorted[0];
     return Number(chosen.ratePerTon || 0) > 0 ? chosen : undefined;
 };
 
 export const getCombinedRatePerTon = (rates: MaterialRate[], tripId: number): number => {
-    const mine = resolveTripRate(rates, tripId, 'mine-quarry', { comboOnly: true });
-    const transport = resolveTripRate(rates, tripId, 'transport-owner', { comboOnly: true });
-    const royalty = resolveTripRate(rates, tripId, 'royalty-owner', { comboOnly: true });
-    return Number(mine?.ratePerTon || transport?.ratePerTon || royalty?.ratePerTon || 0);
+    const mine = resolveTripRate(rates, tripId, 'mine-quarry');
+    const transport = resolveTripRate(rates, tripId, 'transport-owner');
+    const royalty = resolveTripRate(rates, tripId, 'royalty-owner');
+    const mineCombo = mine && isComboRate(mine) ? mine : undefined;
+    const transportCombo = transport && isComboRate(transport) ? transport : undefined;
+    const royaltyCombo = royalty && isComboRate(royalty) ? royalty : undefined;
+    return Number(mineCombo?.ratePerTon || transportCombo?.ratePerTon || royaltyCombo?.ratePerTon || 0);
 };
 
 export const getComboPartyTypes = (rates: MaterialRate[], tripId: number): Set<RatePartyType> => {
     const types = new Set<RatePartyType>();
-    const mine = resolveTripRate(rates, tripId, 'mine-quarry', { comboOnly: true });
-    const transport = resolveTripRate(rates, tripId, 'transport-owner', { comboOnly: true });
-    const royalty = resolveTripRate(rates, tripId, 'royalty-owner', { comboOnly: true });
-    if (mine) types.add('mine-quarry');
-    if (transport) types.add('transport-owner');
-    if (royalty) types.add('royalty-owner');
+    const mine = resolveTripRate(rates, tripId, 'mine-quarry');
+    const transport = resolveTripRate(rates, tripId, 'transport-owner');
+    const royalty = resolveTripRate(rates, tripId, 'royalty-owner');
+    if (mine && isComboRate(mine)) types.add('mine-quarry');
+    if (transport && isComboRate(transport)) types.add('transport-owner');
+    if (royalty && isComboRate(royalty)) types.add('royalty-owner');
     return types;
 };
 
