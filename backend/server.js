@@ -4155,7 +4155,11 @@ app.get('/api/material-rates', async (req, res) => {
   try {
     const items = await withPrismaRetry(() => prisma.materialRate.findMany({
       include: { materialType: true, pickupLocation: true, dropOffLocation: true },
-      orderBy: { effectiveFrom: 'desc' },
+      orderBy: [
+        { effectiveFrom: 'desc' },
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
     }));
     const response = await Promise.all(items.map(async (item) => {
       const status = getMaterialRateStatus(item.effectiveFrom, item.effectiveTo);

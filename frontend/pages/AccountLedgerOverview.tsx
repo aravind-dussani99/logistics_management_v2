@@ -188,6 +188,57 @@ const AccountLedgerOverview: React.FC = () => {
     });
   }, [expenses, filters.dateFrom, filters.dateTo]);
 
+  const getTripAmountBreakdown = useCallback((trip: Trip) => {
+    const netWeight = Number(trip.netWeight || 0);
+    const comboRatePerTon = getCombinedRatePerTon(materialRates, trip.id);
+    const comboParties = getComboPartyTypes(materialRates, trip.id);
+
+    const latestMineRate = resolveTripRate(materialRates, trip.id, 'mine-quarry');
+    const latestTransportRate = resolveTripRate(materialRates, trip.id, 'transport-owner');
+    const latestRoyaltyRate = resolveTripRate(materialRates, trip.id, 'royalty-owner');
+    const mineCoveredByCombo = comboParties.has('mine-quarry');
+    const transportCoveredByCombo = comboParties.has('transport-owner');
+    const royaltyCoveredByCombo = comboParties.has('royalty-owner');
+
+    const mineRate = resolveTripRate(materialRates, trip.id, 'mine-quarry', { comboOnly: false });
+    const transportRate = resolveTripRate(materialRates, trip.id, 'transport-owner', { comboOnly: false });
+    const royaltyRate = resolveTripRate(materialRates, trip.id, 'royalty-owner', { comboOnly: false });
+
+    const materialFallback = Number(trip.materialCost || 0);
+    const transportFallback = Number(trip.transportCost || 0);
+    const royaltyFallback = Number(trip.royaltyCost || 0);
+    const mineAmount = trip.quarryName && !mineCoveredByCombo
+      ? (mineRate ? Number(mineRate.ratePerTon || 0) * netWeight : materialFallback)
+      : 0;
+    const transportAmount = trip.transporterName && !transportCoveredByCombo
+      ? (transportRate ? Number(transportRate.ratePerTon || 0) * netWeight : transportFallback)
+      : 0;
+    const royaltyAmount = trip.royaltyOwnerName && !royaltyCoveredByCombo
+      ? (royaltyRate ? Number(royaltyRate.ratePerTon || 0) * netWeight : royaltyFallback)
+      : 0;
+    const comboAmount = comboRatePerTon > 0 ? netWeight * comboRatePerTon : 0;
+    const comboPartyNames = Array.from(new Set([
+      mineCoveredByCombo ? (latestMineRate?.ratePartyName || trip.quarryName || '') : '',
+      transportCoveredByCombo ? (latestTransportRate?.ratePartyName || trip.transporterName || '') : '',
+      royaltyCoveredByCombo ? (latestRoyaltyRate?.ratePartyName || trip.royaltyOwnerName || '') : '',
+    ].filter(Boolean)));
+
+    return {
+      netWeight,
+      comboAmount,
+      mineAmount,
+      transportAmount,
+      royaltyAmount,
+      minePartyName: latestMineRate?.ratePartyName || trip.quarryName || '',
+      transportPartyName: latestTransportRate?.ratePartyName || trip.transporterName || '',
+      royaltyPartyName: latestRoyaltyRate?.ratePartyName || trip.royaltyOwnerName || '',
+      comboPartyName: comboPartyNames.length === 1 ? comboPartyNames[0] : '',
+      mineCoveredByCombo,
+      transportCoveredByCombo,
+      royaltyCoveredByCombo,
+    };
+  }, [materialRates]);
+
   const buildSummaries = useCallback((
     tripsSource: Trip[],
     expensesSource: DailyExpense[],
@@ -223,32 +274,23 @@ const AccountLedgerOverview: React.FC = () => {
       }
     };
 
-    const getCombinedPartyName = (trip: Trip) => trip.quarryName || trip.royaltyOwnerName || trip.transporterName || 'Combined';
+    const getCombinedPartyName = (trip: Trip, comboPartyName?: string) =>
+      comboPartyName || trip.quarryName || trip.royaltyOwnerName || trip.transporterName || 'Combined';
 
     tripsSource.forEach(trip => {
       if (trip.customer) addSummary('vendor-customer', trip.customer, trip);
-
-      const comboRatePerTon = getCombinedRatePerTon(materialRates, trip.id);
-      const comboParties = getComboPartyTypes(materialRates, trip.id);
-      const netWeight = Number(trip.netWeight || 0);
-      if (comboRatePerTon > 0) {
-        addSummary('combined', getCombinedPartyName(trip), trip, netWeight * comboRatePerTon);
+      const amounts = getTripAmountBreakdown(trip);
+      if (amounts.comboAmount > 0) {
+        addSummary('combined', getCombinedPartyName(trip, amounts.comboPartyName), trip, amounts.comboAmount);
       }
-
-      if (trip.quarryName && (!comboRatePerTon || !comboParties.has('mine-quarry'))) {
-        const rate = resolveTripRate(materialRates, trip.id, 'mine-quarry', { comboOnly: false });
-        const amount = Number(rate?.ratePerTon || 0) * netWeight;
-        addSummary('mine-quarry', trip.quarryName, trip, amount);
+      if (amounts.minePartyName && !amounts.mineCoveredByCombo) {
+        addSummary('mine-quarry', amounts.minePartyName, trip, amounts.mineAmount);
       }
-      if (trip.transporterName && (!comboRatePerTon || !comboParties.has('transport-owner'))) {
-        const rate = resolveTripRate(materialRates, trip.id, 'transport-owner', { comboOnly: false });
-        const amount = Number(rate?.ratePerTon || 0) * netWeight;
-        addSummary('transport-owner', trip.transporterName, trip, amount);
+      if (amounts.transportPartyName && !amounts.transportCoveredByCombo) {
+        addSummary('transport-owner', amounts.transportPartyName, trip, amounts.transportAmount);
       }
-      if (trip.royaltyOwnerName && (!comboRatePerTon || !comboParties.has('royalty-owner'))) {
-        const rate = resolveTripRate(materialRates, trip.id, 'royalty-owner', { comboOnly: false });
-        const amount = Number(rate?.ratePerTon || 0) * netWeight;
-        addSummary('royalty-owner', trip.royaltyOwnerName, trip, amount);
+      if (amounts.royaltyPartyName && !amounts.royaltyCoveredByCombo) {
+        addSummary('royalty-owner', amounts.royaltyPartyName, trip, amounts.royaltyAmount);
       }
     });
 
@@ -324,7 +366,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     return Array.from(bucket.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [materialRates, partyIdLookup, partyNameLookup]);
+  }, [getTripAmountBreakdown, partyIdLookup, partyNameLookup]);
 
   const summaries = useMemo<RatePartySummary[]>(() => {
     return buildSummaries(filteredTrips, filteredExpenses, filteredPayments);
@@ -767,9 +809,11 @@ const AccountLedgerOverview: React.FC = () => {
         addTripRow('combined', getCombinedPartyName(trip), trip, getAllInAmount(trip));
         return;
       }
-      if (trip.quarryName) addTripRow('mine-quarry', trip.quarryName, trip, Number(trip.materialCost || 0));
-      if (trip.royaltyOwnerName) addTripRow('royalty-owner', trip.royaltyOwnerName, trip, Number(trip.royaltyCost || 0));
-      if (trip.transporterName) addTripRow('transport-owner', trip.transporterName, trip, Number(trip.transportCost || 0));
+      const amounts = getTripAmountBreakdown(trip);
+      if (amounts.comboAmount > 0) addTripRow('combined', getCombinedPartyName(trip, amounts.comboPartyName), trip, amounts.comboAmount);
+      if (amounts.minePartyName && !amounts.mineCoveredByCombo) addTripRow('mine-quarry', amounts.minePartyName, trip, amounts.mineAmount);
+      if (amounts.royaltyPartyName && !amounts.royaltyCoveredByCombo) addTripRow('royalty-owner', amounts.royaltyPartyName, trip, amounts.royaltyAmount);
+      if (amounts.transportPartyName && !amounts.transportCoveredByCombo) addTripRow('transport-owner', amounts.transportPartyName, trip, amounts.transportAmount);
       if (trip.customer) addTripRow('vendor-customer', trip.customer, trip, Number(trip.revenue || 0));
     });
 
@@ -841,7 +885,7 @@ const AccountLedgerOverview: React.FC = () => {
     });
 
     return rows.sort((a, b) => b.businessValue - a.businessValue);
-  }, [filteredTrips, filteredPayments, materialRates, resolvePaymentParty]);
+  }, [filteredTrips, filteredPayments, materialRates, resolvePaymentParty, getTripAmountBreakdown]);
 
   const monthlyKpis = useMemo(() => {
     const received = filteredPayments

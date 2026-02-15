@@ -487,6 +487,8 @@ export interface MaterialRate {
     effectiveTo?: string;
     status?: string;
     remarks: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface VehicleMaster {

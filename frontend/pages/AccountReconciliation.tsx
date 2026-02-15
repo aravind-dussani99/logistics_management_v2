@@ -230,20 +230,23 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     return filteredTrips
       .map(trip => {
         const revenue = Number(trip.revenue || 0);
-        const materialCost = Number(trip.materialCost || 0);
-        const transportCost = Number(trip.transportCost || 0);
-        const royaltyCost = Number(trip.royaltyCost || 0);
         const comboRatePerTon = getCombinedRatePerTon(materialRates, trip.id);
         const comboRateParties = getComboPartyTypes(materialRates, trip.id);
         const comboMine = comboRateParties.has('mine-quarry');
         const comboTransport = comboRateParties.has('transport-owner');
         const comboRoyalty = comboRateParties.has('royalty-owner');
+        const latestMineRate = resolveTripRate(materialRates, trip.id, 'mine-quarry');
+        const latestTransportRate = resolveTripRate(materialRates, trip.id, 'transport-owner');
+        const latestRoyaltyRate = resolveTripRate(materialRates, trip.id, 'royalty-owner');
         const matchesCustomer = (trip.actualVendorCustomerName && normalizeName(trip.actualVendorCustomerName) === selectedPartyKey)
           || (trip.customer && normalizeName(trip.customer) === selectedPartyKey)
           || (trip.vendorName && normalizeName(trip.vendorName) === selectedPartyKey);
-        const matchesQuarry = trip.quarryName && normalizeName(trip.quarryName) === selectedPartyKey;
-        const matchesTransport = trip.transporterName && normalizeName(trip.transporterName) === selectedPartyKey;
-        const matchesRoyalty = trip.royaltyOwnerName && normalizeName(trip.royaltyOwnerName) === selectedPartyKey;
+        const matchesQuarry = (trip.quarryName && normalizeName(trip.quarryName) === selectedPartyKey)
+          || (latestMineRate?.ratePartyName && normalizeName(latestMineRate.ratePartyName) === selectedPartyKey);
+        const matchesTransport = (trip.transporterName && normalizeName(trip.transporterName) === selectedPartyKey)
+          || (latestTransportRate?.ratePartyName && normalizeName(latestTransportRate.ratePartyName) === selectedPartyKey);
+        const matchesRoyalty = (trip.royaltyOwnerName && normalizeName(trip.royaltyOwnerName) === selectedPartyKey)
+          || (latestRoyaltyRate?.ratePartyName && normalizeName(latestRoyaltyRate.ratePartyName) === selectedPartyKey);
         if (!matchesCustomer && !matchesQuarry && !matchesTransport && !matchesRoyalty) return null;
 
         const netWeight = Number(trip.netWeight || 0);
@@ -256,14 +259,35 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         const mineRate = resolveTripRate(materialRates, trip.id, 'mine-quarry', { comboOnly: false });
         const transportRate = resolveTripRate(materialRates, trip.id, 'transport-owner', { comboOnly: false });
         const royaltyRate = resolveTripRate(materialRates, trip.id, 'royalty-owner', { comboOnly: false });
-        const matchedMaterial = matchesQuarry && !comboMine ? (Number(mineRate?.ratePerTon || 0) * netWeight) : 0;
-        const matchedTransport = matchesTransport && !comboTransport ? (Number(transportRate?.ratePerTon || 0) * netWeight) : 0;
-        const matchedRoyalty = matchesRoyalty && !comboRoyalty ? (Number(royaltyRate?.ratePerTon || 0) * netWeight) : 0;
+        const mineRatePerTon = Number(mineRate?.ratePerTon || 0);
+        const transportRatePerTon = Number(transportRate?.ratePerTon || 0);
+        const royaltyRatePerTon = Number(royaltyRate?.ratePerTon || 0);
+        const materialFallback = Number(trip.materialCost || 0);
+        const transportFallback = Number(trip.transportCost || 0);
+        const royaltyFallback = Number(trip.royaltyCost || 0);
+        const matchedMaterial = matchesQuarry && !comboMine
+          ? (mineRate ? (mineRatePerTon * netWeight) : materialFallback)
+          : 0;
+        const matchedTransport = matchesTransport && !comboTransport
+          ? (transportRate ? (transportRatePerTon * netWeight) : transportFallback)
+          : 0;
+        const matchedRoyalty = matchesRoyalty && !comboRoyalty
+          ? (royaltyRate ? (royaltyRatePerTon * netWeight) : royaltyFallback)
+          : 0;
         const matchedCombo = comboAppliesToParty ? comboAmount : 0;
         const gstRate = Number(trip.gstRatePerTon || 0);
         const gstPercent = Number(trip.gstPercentage || 0);
         const gstAmount = computeTripGstAmount(trip);
         const matchedTotal = matchedRevenue + matchedMaterial + matchedTransport + matchedRoyalty + matchedCombo;
+        const mineDisplayRate = matchesQuarry && !comboMine
+          ? (mineRate ? mineRatePerTon : (netWeight > 0 ? materialFallback / netWeight : 0))
+          : 0;
+        const transportDisplayRate = matchesTransport && !comboTransport
+          ? (transportRate ? transportRatePerTon : (netWeight > 0 ? transportFallback / netWeight : 0))
+          : 0;
+        const royaltyDisplayRate = matchesRoyalty && !comboRoyalty
+          ? (royaltyRate ? royaltyRatePerTon : (netWeight > 0 ? royaltyFallback / netWeight : 0))
+          : 0;
         return {
           id: trip.id,
           date: trip.date,
@@ -290,9 +314,9 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
           hasTransport: Boolean(matchesTransport),
           hasRoyalty: Boolean(matchesRoyalty),
           customerRate: netWeight > 0 ? matchedRevenue / netWeight : 0,
-          mineRate: Number(mineRate?.ratePerTon || 0),
-          transportRate: Number(transportRate?.ratePerTon || 0),
-          royaltyRate: Number(royaltyRate?.ratePerTon || 0),
+          mineRate: mineDisplayRate,
+          transportRate: transportDisplayRate,
+          royaltyRate: royaltyDisplayRate,
           totalValue: matchedTotal,
           gstRatePerTon: gstRate,
           gstPercentage: gstPercent,
