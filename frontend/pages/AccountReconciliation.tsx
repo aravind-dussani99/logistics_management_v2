@@ -983,6 +983,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
               <th>Invoice/DC</th>
               <th>Material Owner</th>
               <th>Vehicle Number</th>
+              <th>Material Type</th>
               <th>Net Tons</th>
               <th>Trip Rate for GST</th>
               <th>GST %</th>
@@ -998,6 +999,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                 <td>${row.invoice || '-'}</td>
                 <td>${row.mineQuarryName || '-'}</td>
                 <td>${row.vehicleNumber || '-'}</td>
+                <td>${row.material || '-'}</td>
                 <td>${row.netWeight.toFixed(2)}</td>
                 <td>${formatCurrency(row.gstRatePerTon)}</td>
                 <td>${row.gstPercentage.toFixed(2)}</td>
@@ -1848,6 +1850,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         <th className="px-4 py-3 text-left">Invoice/DC</th>
                         <th className="px-4 py-3 text-left">Material Owner</th>
                         <th className="px-4 py-3 text-left">Vehicle Number</th>
+                        <th className="px-4 py-3 text-left">Material Type</th>
                         <th className="px-4 py-3 text-left">Net Tons</th>
                         <th className="px-4 py-3 text-left">Trip Rate for GST</th>
                         <th className="px-4 py-3 text-left">GST %</th>
@@ -1863,6 +1866,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                           <td className="px-4 py-3">{row.invoice || '-'}</td>
                           <td className="px-4 py-3">{row.mineQuarryName || '-'}</td>
                           <td className="px-4 py-3">{row.vehicleNumber || '-'}</td>
+                          <td className="px-4 py-3">{row.material || '-'}</td>
                           <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
                           <td className="px-4 py-3">{formatCurrency(row.gstRatePerTon)}</td>
                           <td className="px-4 py-3">{row.gstPercentage.toFixed(2)}</td>
@@ -1871,7 +1875,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                       ))}
                       {partyTripRowsSorted.length === 0 && (
                         <tr>
-                          <td colSpan={10} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
+                          <td colSpan={11} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
                         </tr>
                       )}
                     </tbody>
