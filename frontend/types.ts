@@ -170,6 +170,7 @@ export interface Advance {
 
 export interface Payment {
     id: string;
+    paymentNumber?: number;
     tripId?: number | null;
     amount: number;
     date: string;

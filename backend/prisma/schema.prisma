@@ -385,6 +385,7 @@ model TripActivityRecord {
 
 model PaymentRecord {
   id              String   @id @default(uuid())
+  paymentNumber   Int      @unique @default(autoincrement())
   date            DateTime
   entryType       String   @default("PAYMENT")
   headAccount     String?

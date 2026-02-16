@@ -432,6 +432,14 @@ const AccountLedgerOverview: React.FC = () => {
     return balance < 0 ? 'Receive pending' : 'Pay pending';
   };
 
+  const getBalanceToneClass = (summary: RatePartySummary) => {
+    const action = getActionLabel(summary).toLowerCase();
+    if (action === 'settled') return 'text-green-500';
+    if (action.includes('receive') || action.includes('under received')) return 'text-red-500';
+    if (action.includes('pay') || action.includes('over received')) return 'text-amber-600';
+    return summary.balance >= 0 ? 'text-red-500' : 'text-amber-600';
+  };
+
   const exportCsv = () => {
     if (activeTab === 'monthly') {
       const header = [
@@ -1091,7 +1099,7 @@ const AccountLedgerOverview: React.FC = () => {
                       <td className="px-6 py-3 text-sm">{item.totalTons.toFixed(2)}</td>
                       <td className="px-6 py-3 text-sm">{item.grossAmount.toFixed(2)}</td>
                       <td className="px-6 py-3 text-sm text-green-500">{item.paidAmount.toFixed(2)}</td>
-                      <td className={`px-6 py-3 text-sm font-semibold ${item.balance >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      <td className={`px-6 py-3 text-sm font-semibold ${getBalanceToneClass(item)}`}>
                         {item.balance.toFixed(2)}
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{getActionLabel(item)}</td>
@@ -1256,7 +1264,7 @@ const AccountLedgerOverview: React.FC = () => {
                       <td className="px-6 py-3 text-sm">{item.totalTons.toFixed(2)}</td>
                       <td className="px-6 py-3 text-sm">{item.grossAmount.toFixed(2)}</td>
                       <td className="px-6 py-3 text-sm text-green-500">{item.paidAmount.toFixed(2)}</td>
-                      <td className={`px-6 py-3 text-sm font-semibold ${item.balance >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                      <td className={`px-6 py-3 text-sm font-semibold ${getBalanceToneClass(item)}`}>
                         {item.balance.toFixed(2)}
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{getActionLabel(item)}</td>
