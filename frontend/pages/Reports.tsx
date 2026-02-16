@@ -570,10 +570,10 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 });
                 break;
             case 'payments':
-                headers = ["Date", "Transaction Type", "From Account", "To Name", "To Account", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"];
-                rows = filteredData.map(d => {
+                headers = ["S. No.", "Payment #", "Date", "Transaction Type", "From Account", "Via", "To Name", "Amount", "Remarks", "To Account", "Head Account", "Category", "Sub-Category", "Trip ID"];
+                rows = filteredData.map((d, index) => {
                     const p = d as Payment;
-                    return [p.date, p.type, p.fromAccount || '', p.ratePartyName || '', p.toAccount || '', p.amount, p.remarks || '', p.headAccount || '', p.via || '', p.tripId || '', p.category || '', p.subCategory || ''];
+                    return [index + 1, p.paymentNumber || '', p.date, p.type, p.fromAccount || '', p.via || '', p.ratePartyName || '', p.amount, p.remarks || '', p.toAccount || '', p.headAccount || '', p.category || '', p.subCategory || '', p.tripId || ''];
                 });
                 break;
             case 'expenses':
@@ -1339,22 +1339,24 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             }
             case 'payments': {
                  const headers = showActions
-                    ? ["Date", "Transaction Type", "From Account", "To Name", "To Account", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category", "Actions"]
-                    : ["Date", "Transaction Type", "From Account", "To Name", "To Account", "Amount", "Remarks", "Head Account", "Via", "Trip ID", "Category", "Sub-Category"];
-                 return <DataTable title="" headers={headers} data={tableData} renderRow={(p: Payment) => (
+                    ? ["S. No.", "Payment #", "Date", "Transaction Type", "From Account", "Via", "To Name", "Amount", "Remarks", "To Account", "Head Account", "Category", "Sub-Category", "Trip ID", "Actions"]
+                    : ["S. No.", "Payment #", "Date", "Transaction Type", "From Account", "Via", "To Name", "Amount", "Remarks", "To Account", "Head Account", "Category", "Sub-Category", "Trip ID"];
+                 return <DataTable title="" headers={headers} data={tableData} renderRow={(p: Payment, index: number) => (
                     <tr key={p.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{index + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.paymentNumber || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDateDisplay(p.date)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.type}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.fromAccount || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.via || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.ratePartyName || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.toAccount || '-'}</td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${p.type === 'PAYMENT' ? 'text-red-500' : 'text-green-500'}`}>{formatCurrency(p.amount)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.remarks || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.toAccount || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.headAccount || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.via || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.tripId ? `#${p.tripId}` : '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.category || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{p.subCategory || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{p.tripId ? `#${p.tripId}` : '-'}</td>
                         {showActions && (
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">
                                 <button onClick={() => openPaymentModal('View Payment', p, true)} className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">View</button>
