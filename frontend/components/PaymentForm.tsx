@@ -446,6 +446,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           )}
         </div>
         <div>
+          <label htmlFor="via" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Via (Optional)</label>
+          <input
+            id="via"
+            type="text"
+            value={via}
+            onChange={(e) => setVia(e.target.value)}
+            disabled={isViewMode}
+            list={via ? "via-list" : undefined}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
+          />
+        </div>
+        <div>
           <label htmlFor="rate-party-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{toLabel} *</label>
           <input
             id="rate-party-name"
@@ -535,18 +547,6 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
             onChange={(e) => setHeadAccount(e.target.value)}
             disabled={isViewMode}
             list={headAccount ? "account-list" : undefined}
-            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
-          />
-          </div>
-          <div>
-            <label htmlFor="via" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Via</label>
-            <input
-              id="via"
-              type="text"
-            value={via}
-            onChange={(e) => setVia(e.target.value)}
-            disabled={isViewMode}
-            list={via ? "via-list" : undefined}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary dark:border-gray-600 dark:bg-gray-900"
           />
           </div>

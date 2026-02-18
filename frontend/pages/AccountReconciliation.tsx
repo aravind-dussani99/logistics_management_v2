@@ -215,7 +215,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
   const selectedPartyKey = normalizeName(selectedParty);
   const internalAccountKeys = useMemo(() => {
     const values = new Set<string>();
-    filteredPayments.forEach(payment => {
+    safePayments.forEach(payment => {
       if (payment.toAccount) values.add(normalizeName(payment.toAccount));
       if (payment.headAccount) values.add(normalizeName(payment.headAccount));
       if (payment.type === 'RECEIPT' && payment.fromAccount && !payment.toAccount && payment.ratePartyName) {
@@ -223,7 +223,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
       }
     });
     return values;
-  }, [filteredPayments]);
+  }, [safePayments]);
   const isAccountSelection = selectedPartyKey ? internalAccountKeys.has(selectedPartyKey) : false;
 
   const selectedPartyTypes = useMemo(() => {
@@ -647,11 +647,16 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     amount: partyTransactionRows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
   }), [partyTransactionRows]);
 
+  const gstRows = useMemo(
+    () => partyTripRowsSorted.filter(row => row.hasMine),
+    [partyTripRowsSorted],
+  );
+  const showGstTable = gstRows.length > 0;
   const gstTableTotals = useMemo(() => ({
-    count: partyTripRowsSorted.length,
-    qty: partyTripRowsSorted.reduce((sum, row) => sum + Number(row.netWeight || 0), 0),
-    amount: partyTripRowsSorted.reduce((sum, row) => sum + Number(row.gstAmount || 0), 0),
-  }), [partyTripRowsSorted]);
+    count: gstRows.length,
+    qty: gstRows.reduce((sum, row) => sum + Number(row.netWeight || 0), 0),
+    amount: gstRows.reduce((sum, row) => sum + Number(row.gstAmount || 0), 0),
+  }), [gstRows]);
 
   const getAccountDisplay = useCallback((payment: (typeof payments)[number]) => {
     const match = resolveAccountMatch(payment, selectedPartyKey);
@@ -718,6 +723,74 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     count: accountDebitSummary.reduce((sum, item) => sum + item.count, 0),
     amount: accountDebitSummary.reduce((sum, item) => sum + item.total, 0),
   }), [accountDebitSummary]);
+
+  const mainSummaryRows = useMemo(() => {
+    const rows: Array<{ label: string; count: number; qty: number | null; amount: number }> = [];
+    if (!isAccountSelection) {
+      rows.push({
+        label: partyHasTrips ? 'Payments' : 'Transactions',
+        count: paymentTableTotals.count,
+        qty: null,
+        amount: paymentTableTotals.amount,
+      });
+    } else {
+      rows.push({ label: 'Credits Summary', count: accountCreditTotals.count, qty: null, amount: accountCreditTotals.amount });
+      rows.push({ label: 'Debits Summary', count: accountDebitTotals.count, qty: null, amount: accountDebitTotals.amount });
+    }
+    if (mineIndividualRows.length > 0) {
+      rows.push({
+        label: 'Mine & Quarry',
+        count: mineIndividualRows.length,
+        qty: mineIndividualRows.reduce((sum, row) => sum + row.netWeight, 0),
+        amount: mineIndividualRows.reduce((sum, row) => sum + row.materialCost, 0),
+      });
+    }
+    if (royaltyIndividualRows.length > 0) {
+      rows.push({
+        label: 'Royalty',
+        count: royaltyIndividualRows.length,
+        qty: royaltyIndividualRows.reduce((sum, row) => sum + row.netWeight, 0),
+        amount: royaltyIndividualRows.reduce((sum, row) => sum + row.royaltyCost, 0),
+      });
+    }
+    if (transportIndividualRows.length > 0) {
+      rows.push({
+        label: 'Transport',
+        count: transportIndividualRows.length,
+        qty: transportIndividualRows.reduce((sum, row) => sum + row.netWeight, 0),
+        amount: transportIndividualRows.reduce((sum, row) => sum + row.transportCost, 0),
+      });
+    }
+    comboActivitySections.forEach(section => {
+      rows.push({
+        label: section.title,
+        count: section.rows.length,
+        qty: section.rows.reduce((sum, row) => sum + row.netWeight, 0),
+        amount: section.rows.reduce((sum, row) => sum + row.comboAmount, 0),
+      });
+    });
+    if (showGstTable) {
+      rows.push({
+        label: 'Trip GST Details',
+        count: gstTableTotals.count,
+        qty: gstTableTotals.qty,
+        amount: gstTableTotals.amount,
+      });
+    }
+    return rows;
+  }, [
+    isAccountSelection,
+    partyHasTrips,
+    paymentTableTotals,
+    accountCreditTotals,
+    accountDebitTotals,
+    mineIndividualRows,
+    royaltyIndividualRows,
+    transportIndividualRows,
+    comboActivitySections,
+    showGstTable,
+    gstTableTotals,
+  ]);
 
   const headPaymentRows = useMemo(() => {
     if (!selectedHeadAccount) return [];
@@ -795,9 +868,9 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     if (mode === 'head' && !selectedHeadAccount) return null;
     const baseStyles = `
       body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
-      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-      th, td { border: 1px solid #e5e7eb; padding: 6px 8px; font-size: 12px; text-align: left; }
-      th { background: #f3f4f6; text-transform: uppercase; letter-spacing: 0.02em; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; border: 1px solid #6b7280; }
+      th, td { border: 1px solid #6b7280; padding: 6px 8px; font-size: 12px; text-align: left; }
+      th { background: #e5e7eb; text-transform: uppercase; letter-spacing: 0.02em; }
       h2 { margin: 0 0 12px; }
       h3 { margin: 18px 0 8px; }
     `;
@@ -825,12 +898,39 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         </table>
       `;
 
+      const mainSummaryHtml = partyHasTrips && mainSummaryRows.length > 0 ? `
+        <h3>Main Summary</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>S. No.</th>
+              <th>Section</th>
+              <th>Total Count</th>
+              <th>Total Qty</th>
+              <th>Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${mainSummaryRows.map((row, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${row.label}</td>
+                <td>${row.count}</td>
+                <td>${row.qty === null ? '-' : row.qty.toFixed(2)}</td>
+                <td>${formatCurrency(row.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '';
+
       const paymentHeader = `
         <tr>
           <th>S. No.</th>
           <th>Date</th>
           <th>Type</th>
           <th>From</th>
+          <th>Via</th>
           <th>To</th>
           <th>Amount</th>
           ${!partyHasTrips ? '<th>Opening Balance</th><th>Closing Balance</th>' : ''}
@@ -847,6 +947,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             displayTo: payment.toAccount || payment.ratePartyName || '-',
           };
         const amountValue = Number(payment.amount || 0);
+        const viaValue = (payment.via || '').trim() || 'N/A';
         let delta = 0;
         if (!partyHasTrips) {
           if (isAccountSelection) {
@@ -868,12 +969,24 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             <td>${formatDateDisplay(payment.date)}</td>
             <td>${payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
             <td>${displayFrom}</td>
+            <td>${viaValue}</td>
             <td>${displayTo}</td>
             <td>${formatCurrency(amountValue)}</td>
             ${balanceCells}
           </tr>
         `;
       }).join('');
+
+      const paymentTableHtml = !isAccountSelection ? `
+        <h3>${partyHasTrips ? 'Payments' : 'Transactions'}</h3>
+        <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
+          Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}
+        </div>
+        <table>
+          <thead>${paymentHeader}</thead>
+          <tbody>${paymentRowsHtml || `<tr><td colspan="${partyHasTrips ? 7 : 9}">No transactions found for this selection.</td></tr>`}</tbody>
+        </table>
+      ` : '';
 
       const buildSimpleTripTable = (
         title: string,
@@ -969,7 +1082,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         ${comboTablesHtml}
       ` : '';
 
-      const gstTable = partyHasTrips ? `
+      const gstTable = showGstTable ? `
         <h3>Trip GST Details</h3>
         <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
           Total Count: ${gstTableTotals.count} · Total Qty: ${gstTableTotals.qty.toFixed(2)} · Total GST Amount: ${formatCurrency(gstTableTotals.amount)}
@@ -991,7 +1104,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             </tr>
           </thead>
           <tbody>
-            ${partyTripRowsSorted.map((row, index) => `
+            ${gstRows.map((row, index) => `
               <tr>
                 <td>${index + 1}</td>
                 <td>${formatDateDisplay(row.date)}</td>
@@ -1076,6 +1189,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
           <th>Date</th>
           <th>Type</th>
           <th>From</th>
+          <th>Via</th>
           <th>To</th>
           <th>Amount</th>
           <th>Opening Balance</th>
@@ -1087,6 +1201,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
       const creditStatementRows = accountCreditRows.map((payment, index) => {
         const { displayFrom, displayTo } = getAccountDisplay(payment);
         const amountValue = Number(payment.amount || 0);
+        const viaValue = (payment.via || '').trim() || 'N/A';
         const openingBalance = creditRunningBalance;
         const closingBalance = openingBalance + amountValue;
         creditRunningBalance = closingBalance;
@@ -1096,6 +1211,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             <td>${formatDateDisplay(payment.date)}</td>
             <td>${payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
             <td>${displayFrom}</td>
+            <td>${viaValue}</td>
             <td>${displayTo}</td>
             <td>${formatCurrency(amountValue)}</td>
             <td>${formatCurrency(openingBalance)}</td>
@@ -1108,6 +1224,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
       const debitStatementRows = accountDebitRows.map((payment, index) => {
         const { displayFrom, displayTo } = getAccountDisplay(payment);
         const amountValue = Number(payment.amount || 0);
+        const viaValue = (payment.via || '').trim() || 'N/A';
         const openingBalance = debitRunningBalance;
         const closingBalance = openingBalance - amountValue;
         debitRunningBalance = closingBalance;
@@ -1117,6 +1234,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             <td>${formatDateDisplay(payment.date)}</td>
             <td>${payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
             <td>${displayFrom}</td>
+            <td>${viaValue}</td>
             <td>${displayTo}</td>
             <td>${formatCurrency(amountValue)}</td>
             <td>${formatCurrency(openingBalance)}</td>
@@ -1129,12 +1247,12 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         <h3>Credits Statement</h3>
         <table>
           <thead>${statementHeader}</thead>
-          <tbody>${creditStatementRows || '<tr><td colspan="8">No credits found for this selection.</td></tr>'}</tbody>
+          <tbody>${creditStatementRows || '<tr><td colspan="9">No credits found for this selection.</td></tr>'}</tbody>
         </table>
         <h3>Debits Statement</h3>
         <table>
           <thead>${statementHeader}</thead>
-          <tbody>${debitStatementRows || '<tr><td colspan="8">No debits found for this selection.</td></tr>'}</tbody>
+          <tbody>${debitStatementRows || '<tr><td colspan="9">No debits found for this selection.</td></tr>'}</tbody>
         </table>
       ` : '';
 
@@ -1147,16 +1265,11 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
           <body>
             <h2>Logistics Accounts Reports</h2>
             <div><strong>Name / Account:</strong> ${selectedParty}</div>
+            <div><strong>Date Range:</strong> ${dateFrom ? formatDateDisplay(dateFrom) : 'All'} to ${dateTo ? formatDateDisplay(dateTo) : 'All'}</div>
             ${kpiHtml}
+            ${mainSummaryHtml}
             ${isAccountSelection ? summaryTables : ''}
-            <h3>${partyHasTrips ? 'Payments' : 'Transactions'}</h3>
-            <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
-              Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}
-            </div>
-            <table>
-              <thead>${paymentHeader}</thead>
-              <tbody>${paymentRowsHtml || `<tr><td colspan="${partyHasTrips ? 6 : 8}">No transactions found for this selection.</td></tr>`}</tbody>
-            </table>
+            ${paymentTableHtml}
             ${statementTables}
             ${tripsTable}
             ${gstTable}
@@ -1185,6 +1298,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         <body>
           <h2>Logistics Accounts Reports</h2>
           <div><strong>Head Account:</strong> ${selectedHeadAccount}</div>
+          <div><strong>Date Range:</strong> ${dateFrom ? formatDateDisplay(dateFrom) : 'All'} to ${dateTo ? formatDateDisplay(dateTo) : 'All'}</div>
           <h3>Head Account Payments</h3>
           <table>
             <thead>
@@ -1206,6 +1320,8 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     mode,
     selectedParty,
     selectedHeadAccount,
+    dateFrom,
+    dateTo,
     selectedPartyKey,
     resolveAccountMatch,
     partyTransactionRows,
@@ -1224,6 +1340,9 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     balanceLabel,
     balanceValue,
     paymentTableTotals,
+    mainSummaryRows,
+    showGstTable,
+    gstRows,
     gstTableTotals,
     headPaymentRows,
     partyTripRowsSorted,
@@ -1331,6 +1450,37 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
                     <p className="text-gray-500 dark:text-gray-400">{balanceLabel}</p>
                     <p className={`text-lg font-semibold ${balanceTone}`}>{balanceValue}</p>
+                  </div>
+                </div>
+              )}
+              {selectedParty && partyHasTrips && mainSummaryRows.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                  <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                    Main Summary
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3 text-left">S. No.</th>
+                          <th className="px-4 py-3 text-left">Section</th>
+                          <th className="px-4 py-3 text-left">Total Count</th>
+                          <th className="px-4 py-3 text-left">Total Qty</th>
+                          <th className="px-4 py-3 text-left">Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mainSummaryRows.map((row, index) => (
+                          <tr key={`main-summary-${row.label}-${index}`} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="px-4 py-3">{index + 1}</td>
+                            <td className="px-4 py-3">{row.label}</td>
+                            <td className="px-4 py-3">{row.count}</td>
+                            <td className="px-4 py-3">{row.qty === null ? '-' : row.qty.toFixed(2)}</td>
+                            <td className="px-4 py-3">{formatCurrency(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -1491,6 +1641,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-left">Type</th>
                     <th className="px-4 py-3 text-left">From</th>
+                    <th className="px-4 py-3 text-left">Via</th>
                     <th className="px-4 py-3 text-left">To</th>
                     <th className="px-4 py-3 text-left">Amount</th>
                     {!partyHasTrips && <th className="px-4 py-3 text-left">Opening Balance</th>}
@@ -1509,6 +1660,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         displayTo: payment.toAccount || payment.ratePartyName || '-',
                       };
                     const amountValue = Number(payment.amount || 0);
+                    const viaValue = (payment.via || '').trim() || 'N/A';
                     let delta = 0;
                     if (!partyHasTrips) {
                       if (isAccountSelection) {
@@ -1527,6 +1679,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                         <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                         <td className="px-4 py-3">{displayFrom}</td>
+                        <td className="px-4 py-3">{viaValue}</td>
                         <td className="px-4 py-3">{displayTo}</td>
                         <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
                         {!partyHasTrips && <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>}
@@ -1537,7 +1690,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                   })()}
                   {partyTransactionRows.length === 0 && (
                     <tr>
-                      <td colSpan={partyHasTrips ? 6 : 8} className="px-4 py-6 text-center text-sm text-gray-500">
+                      <td colSpan={partyHasTrips ? 7 : 9} className="px-4 py-6 text-center text-sm text-gray-500">
                         No transactions found for this selection.
                       </td>
                     </tr>
@@ -1561,6 +1714,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         <th className="px-4 py-3 text-left">Date</th>
                         <th className="px-4 py-3 text-left">Type</th>
                         <th className="px-4 py-3 text-left">From</th>
+                        <th className="px-4 py-3 text-left">Via</th>
                         <th className="px-4 py-3 text-left">To</th>
                         <th className="px-4 py-3 text-left">Amount</th>
                         <th className="px-4 py-3 text-left">Opening Balance</th>
@@ -1573,6 +1727,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         return accountCreditRows.map((payment, index) => {
                           const { displayFrom, displayTo } = getAccountDisplay(payment);
                           const amountValue = Number(payment.amount || 0);
+                          const viaValue = (payment.via || '').trim() || 'N/A';
                           const openingBalance = runningBalance;
                           const closingBalance = openingBalance + amountValue;
                           runningBalance = closingBalance;
@@ -1582,6 +1737,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                               <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                               <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                               <td className="px-4 py-3">{displayFrom}</td>
+                              <td className="px-4 py-3">{viaValue}</td>
                               <td className="px-4 py-3">{displayTo}</td>
                               <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
                               <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>
@@ -1592,7 +1748,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                       })()}
                       {accountCreditRows.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
+                          <td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-500">
                             No credits found for this selection.
                           </td>
                         </tr>
@@ -1613,6 +1769,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         <th className="px-4 py-3 text-left">Date</th>
                         <th className="px-4 py-3 text-left">Type</th>
                         <th className="px-4 py-3 text-left">From</th>
+                        <th className="px-4 py-3 text-left">Via</th>
                         <th className="px-4 py-3 text-left">To</th>
                         <th className="px-4 py-3 text-left">Amount</th>
                         <th className="px-4 py-3 text-left">Opening Balance</th>
@@ -1625,6 +1782,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                         return accountDebitRows.map((payment, index) => {
                           const { displayFrom, displayTo } = getAccountDisplay(payment);
                           const amountValue = Number(payment.amount || 0);
+                          const viaValue = (payment.via || '').trim() || 'N/A';
                           const openingBalance = runningBalance;
                           const closingBalance = openingBalance - amountValue;
                           runningBalance = closingBalance;
@@ -1634,6 +1792,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                               <td className="px-4 py-3">{formatDateDisplay(payment.date)}</td>
                               <td className="px-4 py-3">{payment.type === 'PAYMENT' ? 'Payment' : 'Receipt'}</td>
                               <td className="px-4 py-3">{displayFrom}</td>
+                              <td className="px-4 py-3">{viaValue}</td>
                               <td className="px-4 py-3">{displayTo}</td>
                               <td className="px-4 py-3">{formatCurrency(amountValue)}</td>
                               <td className="px-4 py-3">{formatCurrency(openingBalance)}</td>
@@ -1644,7 +1803,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                       })()}
                       {accountDebitRows.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
+                          <td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-500">
                             No debits found for this selection.
                           </td>
                         </tr>
@@ -1833,6 +1992,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                 </div>
               ))}
 
+              {showGstTable && (
               <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
                   Trip GST Details
@@ -1858,7 +2018,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                       </tr>
                     </thead>
                     <tbody>
-                      {partyTripRowsSorted.map((row, index) => (
+                      {gstRows.map((row, index) => (
                         <tr key={`gst-${row.id}`} className="border-b border-gray-100 dark:border-gray-800">
                           <td className="px-4 py-3">{index + 1}</td>
                           <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
@@ -1873,7 +2033,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                           <td className="px-4 py-3">{formatCurrency(row.gstAmount)}</td>
                         </tr>
                       ))}
-                      {partyTripRowsSorted.length === 0 && (
+                      {gstRows.length === 0 && (
                         <tr>
                           <td colSpan={11} className="px-4 py-6 text-center text-sm text-gray-500">No trips found for this rate party.</td>
                         </tr>
@@ -1882,6 +2042,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                   </table>
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
