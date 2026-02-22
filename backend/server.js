@@ -1024,6 +1024,8 @@ const ensureMerchantTables = async () => {
   await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestBy TEXT`).catch(() => { });
   await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestRole TEXT`).catch(() => { });
   await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN pendingRequestAt TIMESTAMP`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN vendorCustomerGstPercentage REAL NOT NULL DEFAULT 18`).catch(() => { });
+  await prisma.$executeRawUnsafe(`ALTER TABLE TripRecord ADD COLUMN vendorCustomerGstAmount REAL NOT NULL DEFAULT 0`).catch(() => { });
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS NotificationRecord (
@@ -2646,6 +2648,8 @@ app.put('/api/trips/:id', async (req, res) => {
     'customer',
     'actualVendorCustomerName',
     'vendorCustomerRatePerTon',
+    'vendorCustomerGstPercentage',
+    'vendorCustomerGstAmount',
     'invoiceDCNumber',
     'quarryName',
     'mineQuarryIsOneOff',
@@ -2732,6 +2736,8 @@ app.put('/api/trips/:id', async (req, res) => {
         customer: sanitizedData.customer,
         actualVendorCustomerName: sanitizedData.actualVendorCustomerName,
         vendorCustomerRatePerTon: sanitizedData.vendorCustomerRatePerTon !== undefined ? Number(sanitizedData.vendorCustomerRatePerTon) : undefined,
+        vendorCustomerGstPercentage: sanitizedData.vendorCustomerGstPercentage !== undefined ? Number(sanitizedData.vendorCustomerGstPercentage) : undefined,
+        vendorCustomerGstAmount: sanitizedData.vendorCustomerGstAmount !== undefined ? Number(sanitizedData.vendorCustomerGstAmount) : undefined,
         invoiceDCNumber: sanitizedData.invoiceDCNumber,
         quarryName: sanitizedData.quarryName,
         mineQuarryIsOneOff: sanitizedData.mineQuarryIsOneOff !== undefined ? Boolean(sanitizedData.mineQuarryIsOneOff) : undefined,
@@ -4113,7 +4119,7 @@ app.post('/api/trip-rates/all-in', async (req, res) => {
 });
 
 app.post('/api/bills/apply', async (req, res) => {
-  const { tripId, actualVendorCustomerName, vendorCustomerRatePerTon } = req.body || {};
+  const { tripId, actualVendorCustomerName, vendorCustomerRatePerTon, vendorCustomerGstPercentage } = req.body || {};
   if (!tripId) {
     return res.status(400).json({ error: 'Trip is required.' });
   }
@@ -4125,6 +4131,10 @@ app.post('/api/bills/apply', async (req, res) => {
   if (Number.isNaN(rateValue)) {
     return res.status(400).json({ error: 'Vendor/customer rate per ton is required.' });
   }
+  const gstPercentValue = vendorCustomerGstPercentage === undefined ? 18 : Number(vendorCustomerGstPercentage);
+  if (Number.isNaN(gstPercentValue) || gstPercentValue < 0) {
+    return res.status(400).json({ error: 'Valid vendor/customer GST % is required.' });
+  }
   try {
     const trip = await prisma.tripRecord.findUnique({ where: { id: Number(tripId) } });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
@@ -4132,12 +4142,15 @@ app.post('/api/bills/apply', async (req, res) => {
       await ensureRateParty(tx, 'vendor-customer', trimmedName);
       const netWeight = Number(trip.netWeight || 0);
       const revenue = netWeight * rateValue;
+      const vendorCustomerGstAmount = revenue * (gstPercentValue / 100);
       const profit = revenue - Number(trip.materialCost || 0) - Number(trip.transportCost || 0) - Number(trip.royaltyCost || 0);
       return tx.tripRecord.update({
         where: { id: trip.id },
         data: {
           actualVendorCustomerName: trimmedName,
           vendorCustomerRatePerTon: rateValue,
+          vendorCustomerGstPercentage: gstPercentValue,
+          vendorCustomerGstAmount,
           customerRatePerTon: rateValue,
           revenue,
           profit,

@@ -191,6 +191,10 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     mineQuarries.forEach(item => values.add(item.name));
     transportOwnerProfiles.forEach(item => values.add(item.name));
     royaltyOwnerProfiles.forEach(item => values.add(item.name));
+    filteredTrips.forEach(item => {
+      const actualName = (item.actualVendorCustomerName || '').trim();
+      if (actualName) values.add(actualName);
+    });
     filteredPayments.forEach(item => {
       if (item.ratePartyName) values.add(item.ratePartyName);
       if (!item.ratePartyName && item.fromAccount) values.add(item.fromAccount);
@@ -202,7 +206,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     });
     accountOptions.forEach(option => values.add(option));
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, filteredPayments, ratePartyNameById, accountOptions]);
+  }, [vendorCustomers, mineQuarries, transportOwnerProfiles, royaltyOwnerProfiles, filteredTrips, filteredPayments, ratePartyNameById, accountOptions]);
 
   const headAccountOptions = useMemo(() => {
     const values = new Set<string>();
@@ -313,7 +317,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         const matchedCombo = comboAppliesToParty ? comboAmount : 0;
         const gstRate = Number(trip.gstRatePerTon || 0);
         const gstPercent = Number(trip.gstPercentage || 0);
-        const gstAmount = computeTripGstAmount(trip);
+        const gstAmount = matchesQuarry ? computeTripGstAmount(trip) : 0;
         const matchedTotal = matchedRevenue + matchedMaterial + matchedTransport + matchedRoyalty + matchedCombo;
         const mineDisplayRate = matchesQuarry && !comboMine
           ? (mineRate ? mineRatePerTon : (netWeight > 0 ? materialFallback / netWeight : 0))
@@ -407,6 +411,57 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
       return a.id - b.id;
     });
   }, [partyTripRows]);
+
+  const endCustomerTripRows = useMemo(() => {
+    if (!selectedPartyKey) return [] as Array<{
+      id: number;
+      date: string;
+      invoice?: string;
+      material?: string;
+      vehicleNumber?: string;
+      pickupPlace?: string;
+      dropOffPlace?: string;
+      netWeight: number;
+      finalRatePerTon: number;
+      hasFinalRate: boolean;
+      gstPercentage: number;
+      gstAmount: number;
+      totalAmount: number;
+      tripAmount: number;
+    }>;
+    return filteredTrips
+      .filter(trip => normalizeName(trip.actualVendorCustomerName || '') === selectedPartyKey)
+      .map(trip => {
+        const netWeight = Number(trip.netWeight || 0);
+        const finalRatePerTon = Number(trip.vendorCustomerRatePerTon || 0);
+        const hasFinalRate = finalRatePerTon > 0;
+        const gstPercentage = Number(trip.vendorCustomerGstPercentage ?? 18);
+        const tripAmount = hasFinalRate ? netWeight * finalRatePerTon : 0;
+        const gstAmount = tripAmount * (gstPercentage / 100);
+        return {
+          id: trip.id,
+          date: trip.date,
+          invoice: trip.invoiceDCNumber,
+          material: trip.material,
+          vehicleNumber: trip.vehicleNumber,
+          pickupPlace: trip.pickupPlace || trip.place,
+          dropOffPlace: trip.dropOffPlace || '',
+          netWeight,
+          finalRatePerTon,
+          hasFinalRate,
+          gstPercentage,
+          gstAmount,
+          totalAmount: tripAmount + gstAmount,
+          tripAmount,
+        };
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.date).getTime();
+        const bTime = new Date(b.date).getTime();
+        if (aTime !== bTime) return aTime - bTime;
+        return a.id - b.id;
+      });
+  }, [filteredTrips, selectedPartyKey]);
 
   const showCustomerColumns = partyTripRowsSorted.some(row => row.hasCustomer);
   const showCombinedColumns = partyTripRowsSorted.some(row => row.hasCombo);
@@ -647,6 +702,95 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     amount: partyTransactionRows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0),
   }), [partyTransactionRows]);
 
+  const isEndCustomerParty = !isAccountSelection && endCustomerTripRows.length > 0;
+
+  const endCustomerPaymentTotals = useMemo(() => {
+    return partyTransactionRows.reduce((acc, payment) => {
+      const amount = Number(payment.amount || 0);
+      if (payment.type === 'RECEIPT') {
+        acc.inCount += 1;
+        acc.inAmount += amount;
+      } else if (payment.type === 'PAYMENT') {
+        acc.outCount += 1;
+        acc.outAmount += amount;
+      }
+      acc.totalCount += 1;
+      acc.totalAmount += amount;
+      return acc;
+    }, {
+      inCount: 0,
+      inAmount: 0,
+      outCount: 0,
+      outAmount: 0,
+      totalCount: 0,
+      totalAmount: 0,
+    });
+  }, [partyTransactionRows]);
+
+  const endCustomerTripMaterialSummary = useMemo(() => {
+    const map = new Map<string, {
+      material: string;
+      tripsCount: number;
+      ratedTripsCount: number;
+      ratedQty: number;
+      amount: number;
+    }>();
+    endCustomerTripRows.forEach(row => {
+      const key = (row.material || '').trim() || 'Unknown';
+      const entry = map.get(key) || {
+        material: key,
+        tripsCount: 0,
+        ratedTripsCount: 0,
+        ratedQty: 0,
+        amount: 0,
+      };
+      entry.tripsCount += 1;
+      if (row.hasFinalRate) {
+        entry.ratedTripsCount += 1;
+        entry.ratedQty += row.netWeight;
+        entry.amount += row.tripAmount;
+      }
+      map.set(key, entry);
+    });
+    return Array.from(map.values()).sort((a, b) => a.material.localeCompare(b.material));
+  }, [endCustomerTripRows]);
+
+  const endCustomerTripTotals = useMemo(() => ({
+    totalTrips: endCustomerTripRows.length,
+    ratedTrips: endCustomerTripRows.filter(row => row.hasFinalRate).length,
+    ratedQty: endCustomerTripRows.reduce((sum, row) => sum + (row.hasFinalRate ? row.netWeight : 0), 0),
+    amount: endCustomerTripRows.reduce((sum, row) => sum + row.tripAmount, 0),
+    gstAmount: endCustomerTripRows.reduce((sum, row) => sum + row.gstAmount, 0),
+    totalWithGst: endCustomerTripRows.reduce((sum, row) => sum + row.totalAmount, 0),
+  }), [endCustomerTripRows]);
+
+  const endCustomerBalance = endCustomerTripTotals.totalWithGst - (endCustomerPaymentTotals.inAmount - endCustomerPaymentTotals.outAmount);
+  const endCustomerGstRows = useMemo(
+    () => endCustomerTripRows.filter(row => row.hasFinalRate && row.gstAmount > 0),
+    [endCustomerTripRows],
+  );
+  const showEndCustomerTripStatement = isEndCustomerParty;
+  const showSupplierTripBreakdown = partyHasTrips && !isEndCustomerParty;
+
+  const kpiTripTotal = isEndCustomerParty
+    ? endCustomerTripTotals.totalWithGst
+    : (partyHasTrips ? partySummary.tripTotal : partyPaymentTotals.inflow);
+  const kpiPaymentTotal = isEndCustomerParty
+    ? endCustomerPaymentTotals.inAmount
+    : (partyHasTrips ? partySummary.paymentTotal : partyPaymentTotals.outflow);
+  const kpiPaymentLabel = isEndCustomerParty ? 'Received Total' : paymentTotalLabel;
+  const kpiBalanceLabel = isEndCustomerParty
+    ? (endCustomerBalance === 0 ? 'Settled' : (endCustomerBalance > 0 ? 'Under Received' : 'Over Received'))
+    : balanceLabel;
+  const kpiBalanceValue = isEndCustomerParty
+    ? formatCurrency(Math.abs(endCustomerBalance))
+    : balanceValue;
+  const kpiBalanceTone = isEndCustomerParty
+    ? (endCustomerBalance === 0
+      ? 'text-green-600 dark:text-green-400'
+      : (endCustomerBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'))
+    : balanceTone;
+
   const gstRows = useMemo(
     () => partyTripRowsSorted.filter(row => row.hasMine),
     [partyTripRowsSorted],
@@ -820,6 +964,27 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
   };
 
   const handleExportTrips = () => {
+    if (isEndCustomerParty) {
+      const header = ['Date', 'Trip #', 'Invoice/DC', 'Vehicle Number', 'Material Type', 'Pickup', 'Drop-off', 'Qty', 'Final Rate/Ton', 'Base Amount', 'GST %', 'GST Amount', 'Total Amount', 'Rate Status'];
+      const rows = endCustomerTripRows.map(row => [
+        formatDateDisplay(row.date),
+        `#${row.id}`,
+        row.invoice || '-',
+        row.vehicleNumber || '-',
+        row.material || '-',
+        row.pickupPlace || '-',
+        row.dropOffPlace || '-',
+        row.netWeight.toFixed(2),
+        row.hasFinalRate ? row.finalRatePerTon.toFixed(2) : '',
+        row.tripAmount.toFixed(2),
+        row.hasFinalRate ? row.gstPercentage.toFixed(2) : '',
+        row.gstAmount.toFixed(2),
+        row.totalAmount.toFixed(2),
+        row.hasFinalRate ? 'With Final Rate' : 'Without Final Rate',
+      ]);
+      exportCsv(`end_customer_trips_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
+      return;
+    }
     const header = [
       'Trip #',
       'Date',
@@ -852,14 +1017,23 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
   };
 
   const handleExportPayments = () => {
-    const header = ['Date', 'Type', 'From', 'To', 'Amount'];
-    const rows = partyTransactionRows.map(payment => [
-      formatDateDisplay(payment.date),
-      payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
-      payment.fromAccount || '-',
-      payment.toAccount || payment.ratePartyName || '-',
-      Number(payment.amount || 0).toFixed(2),
-    ]);
+    const header = ['Date', 'Type', 'From', 'Via', 'To', 'Amount'];
+    const rows = partyTransactionRows.map(payment => {
+      const { displayFrom, displayTo } = isAccountSelection
+        ? getAccountDisplay(payment)
+        : {
+          displayFrom: payment.fromAccount || '-',
+          displayTo: payment.toAccount || payment.ratePartyName || '-',
+        };
+      return [
+        formatDateDisplay(payment.date),
+        payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
+        displayFrom,
+        (payment.via || '').trim() || 'N/A',
+        displayTo,
+        Number(payment.amount || 0).toFixed(2),
+      ];
+    });
     exportCsv(`reconciliation_payments_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
   };
 
@@ -881,24 +1055,81 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
           <thead>
             <tr>
               <th>${partyHasTrips ? 'Trips Total' : 'Total In'}</th>
-              <th>${paymentTotalLabel}</th>
-              <th>${balanceLabel}</th>
+              <th>${kpiPaymentLabel}</th>
+              <th>${kpiBalanceLabel}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>
-                <div>${partyHasTrips ? formatCurrency(partySummary.tripTotal) : formatCurrency(partyPaymentTotals.inflow)}</div>
-                ${partyHasTrips ? `<div style="font-size:11px;color:#6b7280;margin-top:4px;">Trip: ${formatCurrency(partySummary.tripBaseTotal)} · GST: ${formatCurrency(partySummary.gstTotal)}</div>` : ''}
+                <div>${formatCurrency(kpiTripTotal)}</div>
+                ${isEndCustomerParty
+                  ? `<div style="font-size:11px;color:#6b7280;margin-top:4px;">Base: ${formatCurrency(endCustomerTripTotals.amount)} · GST: ${formatCurrency(endCustomerTripTotals.gstAmount)} · Rated Trips: ${endCustomerTripTotals.ratedTrips}/${endCustomerTripTotals.totalTrips} · Rated Qty: ${endCustomerTripTotals.ratedQty.toFixed(2)}</div>`
+                  : (partyHasTrips ? `<div style="font-size:11px;color:#6b7280;margin-top:4px;">Trip: ${formatCurrency(partySummary.tripBaseTotal)} · GST: ${formatCurrency(partySummary.gstTotal)}</div>` : '')
+                }
               </td>
-              <td>${partyHasTrips ? formatCurrency(partySummary.paymentTotal) : formatCurrency(partyPaymentTotals.outflow)}</td>
-              <td>${balanceValue}</td>
+              <td>${formatCurrency(kpiPaymentTotal)}</td>
+              <td>${kpiBalanceValue}</td>
             </tr>
           </tbody>
         </table>
       `;
 
-      const mainSummaryHtml = partyHasTrips && mainSummaryRows.length > 0 ? `
+      const endCustomerSummaryHtml = isEndCustomerParty ? `
+        <h3>Main Summary</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>S. No.</th>
+              <th>Section</th>
+              <th>Total Count</th>
+              <th>Total Qty (With Final Rate)</th>
+              <th>Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Payments In</td>
+              <td>${endCustomerPaymentTotals.inCount}</td>
+              <td>-</td>
+              <td>${formatCurrency(endCustomerPaymentTotals.inAmount)}</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Payments Out</td>
+              <td>${endCustomerPaymentTotals.outCount}</td>
+              <td>-</td>
+              <td>${formatCurrency(endCustomerPaymentTotals.outAmount)}</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>End Customer GST</td>
+              <td>${endCustomerGstRows.length}</td>
+              <td>${endCustomerTripTotals.ratedQty.toFixed(2)}</td>
+              <td>${formatCurrency(endCustomerTripTotals.gstAmount)}</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td><strong>Total Trip Amount + GST</strong></td>
+              <td><strong>${endCustomerTripTotals.totalTrips}</strong></td>
+              <td><strong>${endCustomerTripTotals.ratedQty.toFixed(2)}</strong></td>
+              <td><strong>${formatCurrency(endCustomerTripTotals.totalWithGst)}</strong></td>
+            </tr>
+            ${endCustomerTripMaterialSummary.map((row, index) => `
+              <tr>
+                <td>${index + 5}</td>
+                <td style="padding-left:20px;">↳ ${row.material} (Trips: ${row.tripsCount}${row.ratedTripsCount !== row.tripsCount ? ` · Rated: ${row.ratedTripsCount}` : ''})</td>
+                <td>${row.tripsCount}</td>
+                <td>${row.ratedQty.toFixed(2)}</td>
+                <td>${formatCurrency(row.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '';
+
+      const mainSummaryHtml = !isEndCustomerParty && partyHasTrips && mainSummaryRows.length > 0 ? `
         <h3>Main Summary</h3>
         <table>
           <thead>
@@ -980,7 +1211,9 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
       const paymentTableHtml = !isAccountSelection ? `
         <h3>${partyHasTrips ? 'Payments' : 'Transactions'}</h3>
         <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
-          Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}
+          ${isEndCustomerParty
+            ? `In: ${endCustomerPaymentTotals.inCount} / ${formatCurrency(endCustomerPaymentTotals.inAmount)} · Out: ${endCustomerPaymentTotals.outCount} / ${formatCurrency(endCustomerPaymentTotals.outAmount)} · Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}`
+            : `Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}`}
         </div>
         <table>
           <thead>${paymentHeader}</thead>
@@ -1075,14 +1308,110 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
         </table>
       `).join('');
 
-      const tripsTable = partyHasTrips ? `
+      const endCustomerTripsTable = isEndCustomerParty ? `
+        <h3>Trips Statement</h3>
+        <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
+          Total Trips: ${endCustomerTripTotals.totalTrips} · Rated Trips: ${endCustomerTripTotals.ratedTrips} · Qty (With Final Rate): ${endCustomerTripTotals.ratedQty.toFixed(2)} · Base Amount: ${formatCurrency(endCustomerTripTotals.amount)} · GST Amount: ${formatCurrency(endCustomerTripTotals.gstAmount)} · Total Amount: ${formatCurrency(endCustomerTripTotals.totalWithGst)}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>S. No.</th>
+              <th>Date</th>
+              <th>Trip #</th>
+              <th>Invoice/DC</th>
+              <th>Vehicle Number</th>
+              <th>Material Type</th>
+              <th>Pickup</th>
+              <th>Drop-off</th>
+              <th>Qty</th>
+              <th>Final Rate/Ton</th>
+              <th>Base Amount</th>
+              <th>GST %</th>
+              <th>GST Amount</th>
+              <th>Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${endCustomerTripRows.map((row, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${formatDateDisplay(row.date)}</td>
+                <td>#${row.id}</td>
+                <td>${row.invoice || '-'}</td>
+                <td>${row.vehicleNumber || '-'}</td>
+                <td>${row.material || '-'}</td>
+                <td>${row.pickupPlace || '-'}</td>
+                <td>${row.dropOffPlace || '-'}</td>
+                <td>${row.netWeight.toFixed(2)}</td>
+                <td>${row.hasFinalRate ? formatCurrency(row.finalRatePerTon) : '-'}</td>
+                <td>${formatCurrency(row.tripAmount)}</td>
+                <td>${row.hasFinalRate ? row.gstPercentage.toFixed(2) : '-'}</td>
+                <td>${formatCurrency(row.gstAmount)}</td>
+                <td>${formatCurrency(row.totalAmount)}</td>
+              </tr>
+            `).join('')}
+            ${endCustomerTripRows.length > 0 ? `
+              <tr>
+                <td colspan="13"><strong>Total</strong></td>
+                <td><strong>${formatCurrency(endCustomerTripTotals.totalWithGst)}</strong></td>
+              </tr>
+            ` : '<tr><td colspan="14">No trips found for this end customer.</td></tr>'}
+          </tbody>
+        </table>
+      ` : '';
+
+      const endCustomerGstTable = isEndCustomerParty ? `
+        <h3>End Customer GST Details</h3>
+        <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
+          Total Count: ${endCustomerGstRows.length} · Total GST Amount: ${formatCurrency(endCustomerTripTotals.gstAmount)}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>S. No.</th>
+              <th>Date</th>
+              <th>Trip #</th>
+              <th>Invoice/DC</th>
+              <th>End Customer</th>
+              <th>Qty</th>
+              <th>Base Amount</th>
+              <th>GST %</th>
+              <th>GST Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${endCustomerGstRows.map((row, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${formatDateDisplay(row.date)}</td>
+                <td>#${row.id}</td>
+                <td>${row.invoice || '-'}</td>
+                <td>${selectedParty || '-'}</td>
+                <td>${row.netWeight.toFixed(2)}</td>
+                <td>${formatCurrency(row.tripAmount)}</td>
+                <td>${row.gstPercentage.toFixed(2)}</td>
+                <td>${formatCurrency(row.gstAmount)}</td>
+              </tr>
+            `).join('')}
+            ${endCustomerGstRows.length > 0 ? `
+              <tr>
+                <td colspan="7"><strong>Total GST</strong></td>
+                <td><strong>${formatCurrency(endCustomerTripTotals.gstAmount)}</strong></td>
+              </tr>
+            ` : '<tr><td colspan="9">No GST rows found for this end customer.</td></tr>'}
+          </tbody>
+        </table>
+      ` : '';
+
+      const tripsTable = showSupplierTripBreakdown ? `
         ${buildSimpleTripTable('Mine & Quarry', mineIndividualRows, 'Mine Rate/Ton', row => row.materialCost, row => row.mineRate)}
         ${buildSimpleTripTable('Royalty', royaltyIndividualRows, 'Royalty Rate/Ton', row => row.royaltyCost, row => row.royaltyRate)}
         ${buildSimpleTripTable('Transport', transportIndividualRows, 'Transport Rate/Ton', row => row.transportCost, row => row.transportRate, true)}
         ${comboTablesHtml}
       ` : '';
 
-      const gstTable = showGstTable ? `
+      const gstTable = showSupplierTripBreakdown && showGstTable ? `
         <h3>Trip GST Details</h3>
         <div style="font-size:12px;color:#6b7280;margin:4px 0 8px;">
           Total Count: ${gstTableTotals.count} · Total Qty: ${gstTableTotals.qty.toFixed(2)} · Total GST Amount: ${formatCurrency(gstTableTotals.amount)}
@@ -1267,10 +1596,13 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
             <div><strong>Name / Account:</strong> ${selectedParty}</div>
             <div><strong>Date Range:</strong> ${dateFrom ? formatDateDisplay(dateFrom) : 'All'} to ${dateTo ? formatDateDisplay(dateTo) : 'All'}</div>
             ${kpiHtml}
+            ${endCustomerSummaryHtml}
             ${mainSummaryHtml}
             ${isAccountSelection ? summaryTables : ''}
             ${paymentTableHtml}
             ${statementTables}
+            ${endCustomerTripsTable}
+            ${endCustomerGstTable}
             ${tripsTable}
             ${gstTable}
           </body>
@@ -1339,6 +1671,11 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     paymentTotalLabel,
     balanceLabel,
     balanceValue,
+    kpiTripTotal,
+    kpiPaymentTotal,
+    kpiPaymentLabel,
+    kpiBalanceLabel,
+    kpiBalanceValue,
     paymentTableTotals,
     mainSummaryRows,
     showGstTable,
@@ -1350,6 +1687,13 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     royaltyIndividualRows,
     transportIndividualRows,
     comboActivitySections,
+    isEndCustomerParty,
+    showSupplierTripBreakdown,
+    endCustomerTripRows,
+    endCustomerTripTotals,
+    endCustomerGstRows,
+    endCustomerTripMaterialSummary,
+    endCustomerPaymentTotals,
     showMineColumns,
     showTransportColumns,
     showCustomerColumns,
@@ -1433,27 +1777,98 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
                     <p className="text-gray-500 dark:text-gray-400">{partyHasTrips ? 'Trips Total' : 'Total In'}</p>
                     <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {partyHasTrips ? formatCurrency(partySummary.tripTotal) : formatCurrency(partyPaymentTotals.inflow)}
+                      {formatCurrency(kpiTripTotal)}
                     </p>
-                    {partyHasTrips && (
+                    {isEndCustomerParty ? (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Base: {formatCurrency(endCustomerTripTotals.amount)} · GST: {formatCurrency(endCustomerTripTotals.gstAmount)} · Rated Trips: {endCustomerTripTotals.ratedTrips}/{endCustomerTripTotals.totalTrips} · Rated Qty: {endCustomerTripTotals.ratedQty.toFixed(2)}
+                      </p>
+                    ) : partyHasTrips && (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Trip: {formatCurrency(partySummary.tripBaseTotal)} · GST: {formatCurrency(partySummary.gstTotal)}
                       </p>
                     )}
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">{paymentTotalLabel}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{kpiPaymentLabel}</p>
                     <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {partyHasTrips ? formatCurrency(partySummary.paymentTotal) : formatCurrency(partyPaymentTotals.outflow)}
+                      {formatCurrency(kpiPaymentTotal)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-                    <p className="text-gray-500 dark:text-gray-400">{balanceLabel}</p>
-                    <p className={`text-lg font-semibold ${balanceTone}`}>{balanceValue}</p>
+                    <p className="text-gray-500 dark:text-gray-400">{kpiBalanceLabel}</p>
+                    <p className={`text-lg font-semibold ${kpiBalanceTone}`}>{kpiBalanceValue}</p>
                   </div>
                 </div>
               )}
-              {selectedParty && partyHasTrips && mainSummaryRows.length > 0 && (
+              {selectedParty && isEndCustomerParty && (
+                <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                  <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                    Main Summary
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                        <tr>
+                          <th className="px-4 py-3 text-left">S. No.</th>
+                          <th className="px-4 py-3 text-left">Section</th>
+                          <th className="px-4 py-3 text-left">Total Count</th>
+                          <th className="px-4 py-3 text-left">Total Qty (With Final Rate)</th>
+                          <th className="px-4 py-3 text-left">Total Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">1</td>
+                          <td className="px-4 py-3">Payments In</td>
+                          <td className="px-4 py-3">{endCustomerPaymentTotals.inCount}</td>
+                          <td className="px-4 py-3">-</td>
+                          <td className="px-4 py-3">{formatCurrency(endCustomerPaymentTotals.inAmount)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">2</td>
+                          <td className="px-4 py-3">Payments Out</td>
+                          <td className="px-4 py-3">{endCustomerPaymentTotals.outCount}</td>
+                          <td className="px-4 py-3">-</td>
+                          <td className="px-4 py-3">{formatCurrency(endCustomerPaymentTotals.outAmount)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100 dark:border-gray-800">
+                          <td className="px-4 py-3">3</td>
+                          <td className="px-4 py-3">End Customer GST</td>
+                          <td className="px-4 py-3">{endCustomerGstRows.length}</td>
+                          <td className="px-4 py-3">{endCustomerTripTotals.ratedQty.toFixed(2)}</td>
+                          <td className="px-4 py-3">{formatCurrency(endCustomerTripTotals.gstAmount)}</td>
+                        </tr>
+                        <tr className="bg-gray-50 font-semibold dark:bg-gray-800/50">
+                          <td className="px-4 py-3">4</td>
+                          <td className="px-4 py-3">Total Trip Amount + GST</td>
+                          <td className="px-4 py-3">{endCustomerTripTotals.totalTrips}</td>
+                          <td className="px-4 py-3">{endCustomerTripTotals.ratedQty.toFixed(2)}</td>
+                          <td className="px-4 py-3">{formatCurrency(endCustomerTripTotals.totalWithGst)}</td>
+                        </tr>
+                        {endCustomerTripMaterialSummary.map((row, index) => (
+                          <tr key={`end-customer-summary-${row.material}`} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="px-4 py-3">{index + 5}</td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center pl-4 text-gray-700 dark:text-gray-300">
+                                <span className="mr-2 text-gray-400">↳</span>
+                                {row.material}
+                              </span>
+                              <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                Trips: {row.tripsCount}{row.ratedTripsCount !== row.tripsCount ? ` · Rated: ${row.ratedTripsCount}` : ''}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">{row.tripsCount}</td>
+                            <td className="px-4 py-3">{row.ratedQty.toFixed(2)}</td>
+                            <td className="px-4 py-3">{formatCurrency(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {selectedParty && partyHasTrips && !isEndCustomerParty && mainSummaryRows.length > 0 && (
                 <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                   <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
                     Main Summary
@@ -1604,7 +2019,9 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
               <span>
                 {partyHasTrips ? 'Payments' : 'Transactions'}
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                  Total Count: {paymentTableTotals.count} · Total Amount: {formatCurrency(paymentTableTotals.amount)}
+                  {isEndCustomerParty
+                    ? `In: ${endCustomerPaymentTotals.inCount} / ${formatCurrency(endCustomerPaymentTotals.inAmount)} · Out: ${endCustomerPaymentTotals.outCount} / ${formatCurrency(endCustomerPaymentTotals.outAmount)} · Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}`
+                    : `Total Count: ${paymentTableTotals.count} · Total Amount: ${formatCurrency(paymentTableTotals.amount)}`}
                 </span>
               </span>
               <div className="flex items-center gap-2 text-xs">
@@ -1814,7 +2231,145 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
               </div>
             </div>
           )}
-          {partyHasTrips && (
+          {showEndCustomerTripStatement && (
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                <span>
+                  Trips Statement
+                  <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                    Total Trips: {endCustomerTripTotals.totalTrips} · Rated Trips: {endCustomerTripTotals.ratedTrips} · Qty (With Final Rate): {endCustomerTripTotals.ratedQty.toFixed(2)} · Base Amount: {formatCurrency(endCustomerTripTotals.amount)} · GST Amount: {formatCurrency(endCustomerTripTotals.gstAmount)} · Total Amount: {formatCurrency(endCustomerTripTotals.totalWithGst)}
+                  </span>
+                </span>
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={handleExportTrips}
+                    className="rounded-md border border-primary px-3 py-1 text-primary transition hover:bg-primary hover:text-white"
+                  >
+                    Export Trips CSV
+                  </button>
+                  {!hidePrint && (
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="rounded-md border border-gray-300 px-3 py-1 text-gray-600 transition hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      Print
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                    <tr>
+                      <th className="px-4 py-3 text-left">S. No.</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Trip #</th>
+                      <th className="px-4 py-3 text-left">Invoice/DC</th>
+                      <th className="px-4 py-3 text-left">Vehicle Number</th>
+                      <th className="px-4 py-3 text-left">Material Type</th>
+                      <th className="px-4 py-3 text-left">Pickup</th>
+                      <th className="px-4 py-3 text-left">Drop-off</th>
+                      <th className="px-4 py-3 text-left">Qty</th>
+                      <th className="px-4 py-3 text-left">Final Rate/Ton</th>
+                      <th className="px-4 py-3 text-left">Base Amount</th>
+                      <th className="px-4 py-3 text-left">GST %</th>
+                      <th className="px-4 py-3 text-left">GST Amount</th>
+                      <th className="px-4 py-3 text-left">Total Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endCustomerTripRows.map((row, index) => (
+                      <tr key={`end-customer-trip-${row.id}`} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="px-4 py-3">{index + 1}</td>
+                        <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
+                        <td className="px-4 py-3">#{row.id}</td>
+                        <td className="px-4 py-3">{row.invoice || '-'}</td>
+                        <td className="px-4 py-3">{row.vehicleNumber || '-'}</td>
+                        <td className="px-4 py-3">{row.material || '-'}</td>
+                        <td className="px-4 py-3">{row.pickupPlace || '-'}</td>
+                        <td className="px-4 py-3">{row.dropOffPlace || '-'}</td>
+                        <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
+                        <td className="px-4 py-3">{row.hasFinalRate ? formatCurrency(row.finalRatePerTon) : '-'}</td>
+                        <td className="px-4 py-3">{formatCurrency(row.tripAmount)}</td>
+                        <td className="px-4 py-3">{row.hasFinalRate ? row.gstPercentage.toFixed(2) : '-'}</td>
+                        <td className="px-4 py-3">{formatCurrency(row.gstAmount)}</td>
+                        <td className="px-4 py-3">{formatCurrency(row.totalAmount)}</td>
+                      </tr>
+                    ))}
+                    {endCustomerTripRows.length > 0 && (
+                      <tr className="bg-gray-50 dark:bg-gray-800/50 font-semibold">
+                        <td className="px-4 py-3" colSpan={13}>Total</td>
+                        <td className="px-4 py-3">{formatCurrency(endCustomerTripTotals.totalWithGst)}</td>
+                      </tr>
+                    )}
+                    {endCustomerTripRows.length === 0 && (
+                      <tr>
+                        <td colSpan={14} className="px-4 py-6 text-center text-sm text-gray-500">
+                          No trips found for this end customer.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {showEndCustomerTripStatement && (
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+              <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
+                End Customer GST Details
+                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                  Total Count: {endCustomerGstRows.length} · Total GST Amount: {formatCurrency(endCustomerTripTotals.gstAmount)}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                    <tr>
+                      <th className="px-4 py-3 text-left">S. No.</th>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Trip #</th>
+                      <th className="px-4 py-3 text-left">Invoice/DC</th>
+                      <th className="px-4 py-3 text-left">Qty</th>
+                      <th className="px-4 py-3 text-left">Base Amount</th>
+                      <th className="px-4 py-3 text-left">GST %</th>
+                      <th className="px-4 py-3 text-left">GST Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endCustomerGstRows.map((row, index) => (
+                      <tr key={`end-customer-gst-${row.id}`} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="px-4 py-3">{index + 1}</td>
+                        <td className="px-4 py-3">{formatDateDisplay(row.date)}</td>
+                        <td className="px-4 py-3">#{row.id}</td>
+                        <td className="px-4 py-3">{row.invoice || '-'}</td>
+                        <td className="px-4 py-3">{row.netWeight.toFixed(2)}</td>
+                        <td className="px-4 py-3">{formatCurrency(row.tripAmount)}</td>
+                        <td className="px-4 py-3">{row.gstPercentage.toFixed(2)}</td>
+                        <td className="px-4 py-3">{formatCurrency(row.gstAmount)}</td>
+                      </tr>
+                    ))}
+                    {endCustomerGstRows.length > 0 && (
+                      <tr className="bg-gray-50 dark:bg-gray-800/50 font-semibold">
+                        <td className="px-4 py-3" colSpan={7}>Total GST</td>
+                        <td className="px-4 py-3">{formatCurrency(endCustomerTripTotals.gstAmount)}</td>
+                      </tr>
+                    )}
+                    {endCustomerGstRows.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
+                          No GST rows found for this end customer.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {showSupplierTripBreakdown && (
             <>
               {mineIndividualRows.length > 0 && (
                 <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -1992,7 +2547,7 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
                 </div>
               ))}
 
-              {showGstTable && (
+              {showSupplierTripBreakdown && showGstTable && (
               <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div className="border-b border-gray-200 px-6 py-4 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">
                   Trip GST Details
