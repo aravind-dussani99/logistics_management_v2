@@ -23,16 +23,22 @@ const getDefaultDate = () => {
 type BillDialogProps = {
   trip: Trip;
   mode: 'view' | 'edit';
-  onSave: (nameValue: string, rateValue: string) => Promise<void>;
+  onSave: (nameValue: string, rateValue: string, gstPercentValue: string) => Promise<void>;
   onClose: () => void;
 };
 
 const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) => {
   const [nameValue, setNameValue] = useState(trip.actualVendorCustomerName || '');
   const [rateValue, setRateValue] = useState(trip.vendorCustomerRatePerTon ? String(trip.vendorCustomerRatePerTon) : '');
+  const [gstPercentValue, setGstPercentValue] = useState(
+    trip.vendorCustomerGstPercentage !== undefined ? String(trip.vendorCustomerGstPercentage) : '18',
+  );
   const netQty = Number(trip.netWeight || 0);
   const numericRate = Number(rateValue || 0);
-  const tripAmount = netQty * (Number.isFinite(numericRate) ? numericRate : 0);
+  const baseAmount = netQty * (Number.isFinite(numericRate) ? numericRate : 0);
+  const numericGstPercent = Number(gstPercentValue || 0);
+  const gstAmount = baseAmount * ((Number.isFinite(numericGstPercent) ? numericGstPercent : 0) / 100);
+  const totalAmount = baseAmount + gstAmount;
 
   return (
     <div className="space-y-6 max-w-3xl w-full mx-auto">
@@ -55,8 +61,16 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
             <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Trip Amount</div>
-            <div className="text-base font-semibold">{tripAmount.toFixed(2)}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Base Amount</div>
+            <div className="text-base font-semibold">{baseAmount.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">GST Amount</div>
+            <div className="text-base font-semibold">{gstAmount.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Total Amount</div>
+            <div className="text-base font-semibold">{totalAmount.toFixed(2)}</div>
           </div>
         </div>
       </div>
@@ -76,22 +90,41 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
         )}
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Vendor & Customer Rate</label>
-        {mode === 'edit' ? (
-          <input
-            type="text"
-            inputMode="decimal"
-            value={rateValue}
-            onChange={event => setRateValue(event.target.value)}
-            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
-            placeholder="Enter rate"
-          />
-        ) : (
-          <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {Number.isFinite(numericRate) ? numericRate.toFixed(2) : '0.00'}
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">Vendor & Customer Rate</label>
+          {mode === 'edit' ? (
+            <input
+              type="text"
+              inputMode="decimal"
+              value={rateValue}
+              onChange={event => setRateValue(event.target.value)}
+              className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+              placeholder="Enter rate"
+            />
+          ) : (
+            <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {Number.isFinite(numericRate) ? numericRate.toFixed(2) : '0.00'}
+            </div>
+          )}
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">GST %</label>
+          {mode === 'edit' ? (
+            <input
+              type="text"
+              inputMode="decimal"
+              value={gstPercentValue}
+              onChange={event => setGstPercentValue(event.target.value)}
+              className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+              placeholder="18"
+            />
+          ) : (
+            <div className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {Number.isFinite(numericGstPercent) ? numericGstPercent.toFixed(2) : '18.00'}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end gap-3">
@@ -105,7 +138,7 @@ const BillDialog: React.FC<BillDialogProps> = ({ trip, mode, onSave, onClose }) 
         {mode === 'edit' && (
           <button
             type="button"
-            onClick={() => onSave(nameValue, rateValue)}
+            onClick={() => onSave(nameValue, rateValue, gstPercentValue)}
             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
           >
             Save
@@ -133,7 +166,7 @@ const Bills: React.FC = () => {
   const [selectedTrips, setSelectedTrips] = useState<Set<number>>(new Set());
   const [bulkRateInput, setBulkRateInput] = useState('');
   const [bulkNameInput, setBulkNameInput] = useState('');
-  const [billInputs, setBillInputs] = useState<Record<number, { name: string; rate: string }>>({});
+  const [billInputs, setBillInputs] = useState<Record<number, { name: string; rate: string; gstPercent: string }>>({});
   const [optimisticTripUpdates, setOptimisticTripUpdates] = useState<Record<number, Partial<Trip>>>({});
   const [pageIndex, setPageIndex] = useState({ awaiting: 1 });
   const [bulkApplying, setBulkApplying] = useState(false);
@@ -260,12 +293,13 @@ const Bills: React.FC = () => {
   const awaitingStart = awaitingTotal === 0 ? 0 : (awaitingPage - 1) * PAGE_SIZE + 1;
   const awaitingEnd = Math.min(awaitingPage * PAGE_SIZE, awaitingTotal);
 
-  const updateBillInput = (tripId: number, field: 'name' | 'rate', value: string) => {
+  const updateBillInput = (tripId: number, field: 'name' | 'rate' | 'gstPercent', value: string) => {
     setBillInputs(prev => ({
       ...prev,
       [tripId]: {
         name: prev[tripId]?.name || '',
         rate: prev[tripId]?.rate || '',
+        gstPercent: prev[tripId]?.gstPercent || '18',
         [field]: value,
       },
     }));
@@ -277,10 +311,11 @@ const Bills: React.FC = () => {
     return {
       name: trip.actualVendorCustomerName || '',
       rate: trip.vendorCustomerRatePerTon ? String(trip.vendorCustomerRatePerTon) : '',
+      gstPercent: trip.vendorCustomerGstPercentage !== undefined ? String(trip.vendorCustomerGstPercentage) : '18',
     };
   };
 
-  const applyBillForTrip = async (trip: Trip, nameValue: string, rateValue: string) => {
+  const applyBillForTrip = async (trip: Trip, nameValue: string, rateValue: string, gstPercentValue: string) => {
     const trimmedName = (nameValue || '').trim();
     if (!trimmedName) {
       await alert('Missing Name', 'Please enter the actual vendor/customer name for this trip.');
@@ -291,10 +326,16 @@ const Bills: React.FC = () => {
       await alert('Missing Rate', 'Please enter the vendor/customer rate for this trip.');
       return undefined;
     }
+    const gstPercentNumber = gstPercentValue.trim() === '' ? 18 : Number(gstPercentValue || 0);
+    if (Number.isNaN(gstPercentNumber) || gstPercentNumber < 0) {
+      await alert('Invalid GST %', 'Please enter a valid GST percentage (0 or greater).');
+      return undefined;
+    }
     const updatedTrip = await billsApi.apply({
       tripId: trip.id,
       actualVendorCustomerName: trimmedName,
       vendorCustomerRatePerTon: rateNumber,
+      vendorCustomerGstPercentage: gstPercentNumber,
     });
     setOptimisticTripUpdates(prev => ({ ...prev, [trip.id]: updatedTrip }));
     setBillInputs(prev => {
@@ -323,10 +364,11 @@ const Bills: React.FC = () => {
     setBillInputs(prev => {
       const next = { ...prev };
       selectedTrips.forEach(tripId => {
-        const existing = next[tripId] || { name: '', rate: '' };
+        const existing = next[tripId] || { name: '', rate: '', gstPercent: '18' };
         next[tripId] = {
           name: bulkNameInput || existing.name,
           rate: bulkRateInput || existing.rate,
+          gstPercent: existing.gstPercent || '18',
         };
       });
       return next;
@@ -353,8 +395,8 @@ const Bills: React.FC = () => {
       for (const tripId of selectedTrips) {
         const trip = awaitingTrips.find(item => item.id === tripId);
         if (!trip) continue;
-        const { name, rate } = getBillInput(trip);
-        await applyBillForTrip(trip, name, rate);
+        const { name, rate, gstPercent } = getBillInput(trip);
+        await applyBillForTrip(trip, name, rate, gstPercent);
       }
       setBulkNameInput('');
       setBulkRateInput('');
@@ -583,16 +625,22 @@ const Bills: React.FC = () => {
                       <th className="px-3 py-2">Actual Vendor & Customer Name</th>
                       <th className="px-3 py-2">Vendor & Customer Rate</th>
                       <th className="px-3 py-2">Net Qty</th>
-                      <th className="px-3 py-2">Trip Amount</th>
+                      <th className="px-3 py-2">GST %</th>
+                      <th className="px-3 py-2">GST Amount</th>
+                      <th className="px-3 py-2">Base Amount</th>
+                      <th className="px-3 py-2">Total Amount</th>
                       <th className="px-3 py-2">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {awaitingSlice.map((trip, idx) => {
-                      const { name, rate } = getBillInput(trip);
+                      const { name, rate, gstPercent } = getBillInput(trip);
                       const netQty = Number(trip.netWeight || 0);
                       const rateNumber = Number(rate || 0);
-                      const tripAmount = netQty * rateNumber;
+                      const gstPercentNumber = gstPercent.trim() === '' ? 18 : Number(gstPercent || 0);
+                      const baseAmount = netQty * rateNumber;
+                      const gstAmount = baseAmount * ((Number.isFinite(gstPercentNumber) ? gstPercentNumber : 0) / 100);
+                      const totalAmount = baseAmount + gstAmount;
                       return (
                         <tr key={trip.id} className="border-b border-gray-100 text-gray-700 dark:border-gray-800 dark:text-gray-200">
                           <td className="px-3 py-2">
@@ -635,10 +683,22 @@ const Bills: React.FC = () => {
                             />
                           </td>
                           <td className="px-3 py-2">{netQty.toFixed(2)}</td>
-                          <td className="px-3 py-2">{tripAmount.toFixed(2)}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={gstPercent}
+                              onChange={event => updateBillInput(trip.id, 'gstPercent', event.target.value)}
+                              className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                              placeholder="18"
+                            />
+                          </td>
+                          <td className="px-3 py-2">{gstAmount.toFixed(2)}</td>
+                          <td className="px-3 py-2">{baseAmount.toFixed(2)}</td>
+                          <td className="px-3 py-2">{totalAmount.toFixed(2)}</td>
                           <td className="px-3 py-2">
                             <button
-                              onClick={() => applyBillForTrip(trip, name, rate)}
+                              onClick={() => applyBillForTrip(trip, name, rate, gstPercent)}
                               className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white hover:bg-primary-dark"
                             >
                               Apply Rate

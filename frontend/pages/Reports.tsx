@@ -314,13 +314,16 @@ const GstRateDialog: React.FC<{
 const BillRateDialog: React.FC<{
     mode: 'view' | 'edit';
     trip: Trip;
-    onSave: (values: { name: string; rate: string }) => Promise<void>;
+    onSave: (values: { name: string; rate: string; gstPercent: string }) => Promise<void>;
     onClose: () => void;
 }> = ({ mode, trip, onSave, onClose }) => {
     const [name, setName] = useState(trip.actualVendorCustomerName || '');
     const [rate, setRate] = useState(trip.vendorCustomerRatePerTon ? String(trip.vendorCustomerRatePerTon) : '');
+    const [gstPercent, setGstPercent] = useState(trip.vendorCustomerGstPercentage !== undefined ? String(trip.vendorCustomerGstPercentage) : '18');
     const netQty = Number(trip.netWeight || 0);
-    const billAmount = Number(rate || 0) * netQty;
+    const baseAmount = Number(rate || 0) * netQty;
+    const gstAmount = baseAmount * (Number(gstPercent || 0) / 100);
+    const totalAmount = baseAmount + gstAmount;
 
     return (
         <div className="space-y-6 max-w-3xl w-full">
@@ -343,13 +346,21 @@ const BillRateDialog: React.FC<{
                         <div className="text-base font-semibold">{netQty.toFixed(2)}</div>
                     </div>
                     <div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Bill Amount</div>
-                        <div className="text-base font-semibold">{billAmount.toFixed(2)}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Base Amount</div>
+                        <div className="text-base font-semibold">{baseAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">GST Amount</div>
+                        <div className="text-base font-semibold">{gstAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Amount</div>
+                        <div className="text-base font-semibold">{totalAmount.toFixed(2)}</div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                     <label className="text-xs text-gray-500 dark:text-gray-400">Actual Name</label>
                     {mode === 'edit' ? (
@@ -377,6 +388,20 @@ const BillRateDialog: React.FC<{
                         <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(rate || 0).toFixed(2)}</div>
                     )}
                 </div>
+                <div>
+                    <label className="text-xs text-gray-500 dark:text-gray-400">GST %</label>
+                    {mode === 'edit' ? (
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={gstPercent}
+                            onChange={event => setGstPercent(event.target.value)}
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-800"
+                        />
+                    ) : (
+                        <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{Number(gstPercent || 0).toFixed(2)}</div>
+                    )}
+                </div>
             </div>
 
             {mode === 'edit' ? (
@@ -390,7 +415,7 @@ const BillRateDialog: React.FC<{
                     </button>
                     <button
                         type="button"
-                        onClick={() => onSave({ name, rate })}
+                        onClick={() => onSave({ name, rate, gstPercent })}
                         className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
                     >
                         Save
@@ -642,13 +667,18 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 });
                 break;
             case 'bills':
-                headers = ["Date", "Trip #", "Invoice/DC", "Actual Name", "Rate/Ton", "Net Tons", "Bill Amount", "Bill Status"];
+                headers = ["Date", "Trip #", "Invoice/DC", "Actual Name", "Rate/Ton", "GST %", "Net Tons", "Base Amount", "GST Amount", "Total Amount", "Bill Status"];
                 rows = filteredData.map(d => {
                     const t = d as Trip;
                     const rate = Number(t.vendorCustomerRatePerTon || 0);
                     const net = Number(t.netWeight || 0);
+                    const gstPercent = Number(t.vendorCustomerGstPercentage ?? 18);
+                    const baseAmount = (rate * net) || 0;
+                    const gstAmount = t.vendorCustomerGstAmount !== undefined
+                        ? Number(t.vendorCustomerGstAmount || 0)
+                        : (baseAmount * (gstPercent / 100));
                     const billStatus = getBillStatus(t);
-                    return [t.date, t.id, t.invoiceDCNumber, t.actualVendorCustomerName || '', rate, net, (rate * net) || 0, billStatus];
+                    return [t.date, t.id, t.invoiceDCNumber, t.actualVendorCustomerName || '', rate, gstPercent, net, baseAmount, gstAmount, baseAmount + gstAmount, billStatus];
                 });
                 break;
         }
@@ -1094,6 +1124,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         tripId: trip.id,
                         actualVendorCustomerName: (values.name || '').trim(),
                         vendorCustomerRatePerTon: Number(values.rate || 0),
+                        vendorCustomerGstPercentage: values.gstPercent.trim() === '' ? 18 : Number(values.gstPercent || 0),
                     });
                     closeModal();
                 }}
@@ -1128,6 +1159,8 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         await updateTrip(trip.id, {
             actualVendorCustomerName: '',
             vendorCustomerRatePerTon: 0,
+            vendorCustomerGstPercentage: 18,
+            vendorCustomerGstAmount: 0,
         });
     };
 
@@ -1510,11 +1543,16 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
             }
             case 'bills': {
                 const headers = showActions
-                  ? ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status', 'Actions']
-                  : ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'Net Tons', 'Bill Amount', 'Bill Status'];
+                  ? ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'GST %', 'Net Tons', 'Base Amount', 'GST Amount', 'Total Amount', 'Bill Status', 'Actions']
+                  : ['Date', 'Trip #', 'Invoice/DC', 'Actual Name', 'Rate/Ton', 'GST %', 'Net Tons', 'Base Amount', 'GST Amount', 'Total Amount', 'Bill Status'];
                 return <DataTable title="" headers={headers} data={tableData} renderRow={(t: Trip) => {
                     const rate = Number(t.vendorCustomerRatePerTon || 0);
                     const net = Number(t.netWeight || 0);
+                    const gstPercent = Number(t.vendorCustomerGstPercentage ?? 18);
+                    const baseAmount = rate * net;
+                    const gstAmount = t.vendorCustomerGstAmount !== undefined
+                      ? Number(t.vendorCustomerGstAmount || 0)
+                      : (baseAmount * (gstPercent / 100));
                     const billStatus = getBillStatus(t);
                     return (
                       <tr key={t.id}>
@@ -1523,8 +1561,11 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.invoiceDCNumber || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{t.actualVendorCustomerName || '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(rate)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{gstPercent.toFixed(2)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{net.toFixed(2)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(rate * net)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(baseAmount)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(gstAmount)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatCurrency(baseAmount + gstAmount)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">{billStatus}</td>
                         {showActions && (
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 no-print">

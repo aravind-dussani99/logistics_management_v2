@@ -55,6 +55,8 @@ export interface Trip {
     gstAmount?: number;
     actualVendorCustomerName?: string;
     vendorCustomerRatePerTon?: number;
+    vendorCustomerGstPercentage?: number;
+    vendorCustomerGstAmount?: number;
     profit: number;
     paymentStatus: 'paid' | 'unpaid' | 'partial';
     agent?: string;

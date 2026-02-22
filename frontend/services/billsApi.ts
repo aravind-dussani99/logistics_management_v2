@@ -12,7 +12,7 @@ const handleResponse = async (response: Response) => {
 };
 
 export const billsApi = {
-  apply: async (payload: { tripId: number; actualVendorCustomerName: string; vendorCustomerRatePerTon: number }): Promise<Trip> => {
+  apply: async (payload: { tripId: number; actualVendorCustomerName: string; vendorCustomerRatePerTon: number; vendorCustomerGstPercentage?: number }): Promise<Trip> => {
     const response = await authFetch('/api/bills/apply', {
       method: 'POST',
       body: JSON.stringify(payload),
