@@ -34,6 +34,13 @@ const getDefaultDateRange = () => {
     };
 };
 
+const sanitizeFilenamePart = (value: string) => value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60);
+
 type TripRateDialogValues = {
     combinedRate?: string;
     mineRate?: string;
@@ -581,31 +588,123 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         return hasRate && hasName ? 'Applied' : 'Awaiting';
     };
 
+    const buildExportFilename = () => {
+        const reportLabelMap: Record<ReportType, string> = {
+            trips: 'trips',
+            payments: 'payments',
+            expenses: 'daily_expenses',
+            'trip-rates': 'trip_rates',
+            'gst-trip-rates': 'gst_trip_rates',
+            bills: 'bills_invoices',
+        };
+        const dateFromPart = sanitizeFilenamePart(filters.dateFrom || 'all');
+        const dateToPart = sanitizeFilenamePart(filters.dateTo || 'all');
+        const filterEntries: Array<[string, string | undefined]> = reportType === 'payments'
+            ? [
+                ['from', filters.from],
+                ['to', filters.to],
+                ['type', filters.paymentType],
+                ['via', filters.via],
+            ]
+            : reportType === 'expenses'
+                ? [
+                    ['from', filters.from],
+                    ['to', filters.to],
+                    ['type', filters.paymentType],
+                    ['via', filters.via],
+                ]
+                : [
+                    ['vehicle', filters.vehicle],
+                    ['vendor', filters.vendor],
+                    ['material', filters.material],
+                    ['mine', filters.mine],
+                    ['transport', filters.transportOwner],
+                ];
+
+        const activeFilterParts = filterEntries
+            .filter(([, value]) => Boolean(value))
+            .map(([label, value]) => `${label}_${sanitizeFilenamePart(value || '')}`)
+            .filter(Boolean);
+
+        const parts = [
+            'management_ledger',
+            reportLabelMap[reportType],
+            `${dateFromPart}_to_${dateToPart}`,
+            ...activeFilterParts,
+        ].filter(Boolean);
+
+        return `${parts.join('__')}.csv`;
+    };
+
     const handleExport = () => {
+        const exportCsv = (filename: string, headers: string[], rows: (string | number)[][]) => {
+            const csv = [headers, ...rows]
+                .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+                .join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
         let headers: string[] = [];
         let rows: (string|number)[][] = [];
-        let filename = `report_${reportType}_${new Date().toISOString().split('T')[0]}.csv`;
+        const filename = buildExportFilename();
+        const exportRows = filteredData;
 
         switch(reportType) {
             case 'trips':
                 headers = ["Date", "Invoice & DC Number", "Vendor & Customer Name", "Transport & Owner Name", "Vehicle Number", "Mine & Quarry Name", "Material Type", "Royalty Owner Name", "Net Weight", "Pickup Place", "Drop-off Place", "Status"];
-                rows = filteredData.map(d => {
+                rows = exportRows.map(d => {
                     const t = d as Trip;
-                    return [t.date, t.invoiceDCNumber, t.customer, t.transporterName, t.vehicleNumber, t.quarryName, t.material, t.royaltyOwnerName, t.netWeight, t.pickupPlace, t.dropOffPlace || t.place, t.status];
+                    return [
+                        formatDateDisplay(t.date),
+                        t.invoiceDCNumber || '',
+                        t.customer || '',
+                        t.transporterName || '',
+                        t.vehicleNumber || '',
+                        t.quarryName || '',
+                        t.material || '',
+                        t.royaltyOwnerName || '',
+                        t.netWeight || 0,
+                        t.pickupPlace || '',
+                        t.dropOffPlace || t.place || '',
+                        t.status || '',
+                    ];
                 });
                 break;
             case 'payments':
                 headers = ["S. No.", "Payment #", "Date", "Transaction Type", "From Account", "Via", "To Name", "Amount", "Remarks", "To Account", "Head Account", "Category", "Sub-Category", "Trip ID"];
-                rows = filteredData.map((d, index) => {
+                rows = exportRows.map((d, index) => {
                     const p = d as Payment;
-                    return [index + 1, p.paymentNumber || '', p.date, p.type, p.fromAccount || '', p.via || '', p.ratePartyName || '', p.amount, p.remarks || '', p.toAccount || '', p.headAccount || '', p.category || '', p.subCategory || '', p.tripId || ''];
+                    return [
+                        index + 1,
+                        p.paymentNumber || '',
+                        formatDateDisplay(p.date),
+                        p.type || '',
+                        p.fromAccount || '',
+                        p.via || '',
+                        p.ratePartyName || p.toAccount || '',
+                        p.amount || 0,
+                        p.remarks || '',
+                        p.toAccount || '',
+                        p.headAccount || '',
+                        p.category || '',
+                        p.subCategory || '',
+                        p.tripId || '',
+                    ];
                 });
                 break;
             case 'expenses':
                 headers = ["Date", "Supervisor", "To", "Amount", "Type"];
-                 rows = filteredData.map(d => {
+                 rows = exportRows.map(d => {
                     const e = d as DailyExpense;
-                    return [e.date, e.from, e.to, e.amount, e.type];
+                    return [formatDateDisplay(e.date), e.from || '', e.to || '', e.amount || 0, e.type || ''];
                 });
                 break;
             case 'trip-rates':
@@ -625,7 +724,7 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     "Pair/All-Activity Amount",
                     "Total Amount",
                 ];
-                rows = filteredData.map(d => {
+                rows = exportRows.map(d => {
                     const t = d as Trip;
                     const mineRate = getRateForTrip(t, 'mine-quarry', false);
                     const transportRate = getRateForTrip(t, 'transport-owner', false);
@@ -641,9 +740,9 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     const comboTypes = getExplicitComboTypes(t);
                     const rateMode = getRateModeLabel(t, comboTypes);
                     return [
-                        t.date,
+                        formatDateDisplay(t.date),
                         t.id,
-                        t.invoiceDCNumber,
+                        t.invoiceDCNumber || '',
                         rateMode,
                         rateStatus,
                         mineRate?.ratePerTon || '',
@@ -660,15 +759,15 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                 break;
             case 'gst-trip-rates':
                 headers = ["Date", "Trip #", "Invoice/DC", "Material Owner", "Vehicle Number", "Net Tons", "GST Rate/Ton", "GST %", "GST Amount"];
-                rows = filteredData.map(d => {
+                rows = exportRows.map(d => {
                     const t = d as Trip;
                     const gstAmount = computeTripGstAmount(t);
-                    return [t.date, t.id, t.invoiceDCNumber, t.quarryName || '', t.vehicleNumber || '', t.netWeight || 0, t.gstRatePerTon || 0, t.gstPercentage || 0, gstAmount];
+                    return [formatDateDisplay(t.date), t.id, t.invoiceDCNumber || '', t.quarryName || '', t.vehicleNumber || '', t.netWeight || 0, t.gstRatePerTon || 0, t.gstPercentage || 0, gstAmount];
                 });
                 break;
             case 'bills':
                 headers = ["Date", "Trip #", "Invoice/DC", "Actual Name", "Rate/Ton", "GST %", "Net Tons", "Base Amount", "GST Amount", "Total Amount", "Bill Status"];
-                rows = filteredData.map(d => {
+                rows = exportRows.map(d => {
                     const t = d as Trip;
                     const rate = Number(t.vendorCustomerRatePerTon || 0);
                     const net = Number(t.netWeight || 0);
@@ -678,20 +777,11 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                         ? Number(t.vendorCustomerGstAmount || 0)
                         : (baseAmount * (gstPercent / 100));
                     const billStatus = getBillStatus(t);
-                    return [t.date, t.id, t.invoiceDCNumber, t.actualVendorCustomerName || '', rate, gstPercent, net, baseAmount, gstAmount, baseAmount + gstAmount, billStatus];
+                    return [formatDateDisplay(t.date), t.id, t.invoiceDCNumber || '', t.actualVendorCustomerName || '', rate, gstPercent, net, baseAmount, gstAmount, baseAmount + gstAmount, billStatus];
                 });
                 break;
         }
-
-        const csvContent = "data:text/csv;charset=utf-8," 
-            + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-        
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", filename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        exportCsv(filename, headers, rows);
     };
 
     const filteredData = useMemo(() => {
@@ -745,6 +835,26 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                     if (vendorName !== filters.vendor) return false;
                 }
             }
+            if (reportType === 'payments') {
+                const fromValue = item.fromAccount || '';
+                const toValue = item.ratePartyName || item.toAccount || '';
+                const typeValue = item.type || '';
+                const viaValue = item.via || '';
+                if (filters.from && fromValue !== filters.from) return false;
+                if (filters.to && toValue !== filters.to) return false;
+                if (filters.paymentType && typeValue !== filters.paymentType) return false;
+                if (filters.via && viaValue !== filters.via) return false;
+            }
+            if (reportType === 'expenses') {
+                const fromValue = item.from || '';
+                const toValue = item.to || '';
+                const typeValue = item.type || '';
+                const viaValue = item.via || '';
+                if (filters.from && fromValue !== filters.from) return false;
+                if (filters.to && toValue !== filters.to) return false;
+                if (filters.paymentType && typeValue !== filters.paymentType) return false;
+                if (filters.via && viaValue !== filters.via) return false;
+            }
             return true;
         }).sort((a, b) => {
             if (a?.id === 'opening') return -1;
@@ -777,6 +887,30 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
         const names = trips.map(item => item.transporterName || '').filter(Boolean);
         return Array.from(new Set(names));
     }, [trips]);
+    const paymentFromOptions = useMemo(() => (
+        Array.from(new Set(payments.map(item => item.fromAccount || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [payments]);
+    const paymentToOptions = useMemo(() => (
+        Array.from(new Set(payments.map(item => item.ratePartyName || item.toAccount || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [payments]);
+    const paymentViaOptions = useMemo(() => (
+        Array.from(new Set(payments.map(item => item.via || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [payments]);
+    const paymentTypeOptions = useMemo(() => (
+        Array.from(new Set(payments.map(item => item.type || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [payments]);
+    const expenseFromOptions = useMemo(() => (
+        Array.from(new Set(allExpenses.map(item => item.from || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [allExpenses]);
+    const expenseToOptions = useMemo(() => (
+        Array.from(new Set(allExpenses.map(item => item.to || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [allExpenses]);
+    const expenseViaOptions = useMemo(() => (
+        Array.from(new Set(allExpenses.map(item => item.via || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [allExpenses]);
+    const expenseTypeOptions = useMemo(() => (
+        Array.from(new Set(allExpenses.map(item => item.type || '').filter(Boolean))).sort((a, b) => a.localeCompare(b))
+    ), [allExpenses]);
 
     const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
     const paginatedData = useMemo(() => {
@@ -1655,83 +1789,194 @@ const Reports: React.FC<{ mode?: 'reports' | 'dashboard' }> = ({ mode = 'reports
                                             onChange={e => updateDraft('dateTo', e.target.value)}
                                         />
                                     </div>
-                                    <div>
-                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
-                                        <select
-                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                            value={draftFilters.vehicle || ''}
-                                            onChange={e => updateDraft('vehicle', e.target.value)}
-                                        >
-                                            <option value="">All Vehicles</option>
-                                            {uniqueVehicles.map(vehicle => (
-                                                <option key={`reports-vehicle-${vehicle}`} value={vehicle}>
-                                                    {vehicle}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
-                                        <select
-                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                            value={draftFilters.vendor || ''}
-                                            onChange={e => updateDraft('vendor', e.target.value)}
-                                        >
-                                            <option value="">All Vendors</option>
-                                            {uniqueVendors.map(vendor => (
-                                                <option key={`reports-vendor-${vendor}`} value={vendor}>
-                                                    {vendor}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    {(reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') && (
+                                        <>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Vehicle</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.vehicle || ''}
+                                                    onChange={e => updateDraft('vehicle', e.target.value)}
+                                                >
+                                                    <option value="">All Vehicles</option>
+                                                    {uniqueVehicles.map(vehicle => (
+                                                        <option key={`reports-vehicle-${vehicle}`} value={vehicle}>
+                                                            {vehicle}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Vendor & Customer</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.vendor || ''}
+                                                    onChange={e => updateDraft('vendor', e.target.value)}
+                                                >
+                                                    <option value="">All Vendors</option>
+                                                    {uniqueVendors.map(vendor => (
+                                                        <option key={`reports-vendor-${vendor}`} value={vendor}>
+                                                            {vendor}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+                                    {reportType === 'payments' && (
+                                        <>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">From</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.from || ''}
+                                                    onChange={e => updateDraft('from', e.target.value)}
+                                                >
+                                                    <option value="">All From</option>
+                                                    {paymentFromOptions.map(option => (
+                                                        <option key={`reports-payment-from-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">To</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.to || ''}
+                                                    onChange={e => updateDraft('to', e.target.value)}
+                                                >
+                                                    <option value="">All To</option>
+                                                    {paymentToOptions.map(option => (
+                                                        <option key={`reports-payment-to-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Payment Type</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.paymentType || ''}
+                                                    onChange={e => updateDraft('paymentType', e.target.value)}
+                                                >
+                                                    <option value="">All Types</option>
+                                                    {paymentTypeOptions.map(option => (
+                                                        <option key={`reports-payment-type-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+                                    {reportType === 'expenses' && (
+                                        <>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">From</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.from || ''}
+                                                    onChange={e => updateDraft('from', e.target.value)}
+                                                >
+                                                    <option value="">All From</option>
+                                                    {expenseFromOptions.map(option => (
+                                                        <option key={`reports-expense-from-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">To</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.to || ''}
+                                                    onChange={e => updateDraft('to', e.target.value)}
+                                                >
+                                                    <option value="">All To</option>
+                                                    {expenseToOptions.map(option => (
+                                                        <option key={`reports-expense-to-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Type</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.paymentType || ''}
+                                                    onChange={e => updateDraft('paymentType', e.target.value)}
+                                                >
+                                                    <option value="">All Types</option>
+                                                    {expenseTypeOptions.map(option => (
+                                                        <option key={`reports-expense-type-${option}`} value={option}>{option}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 items-end">
-                                    <div>
-                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
-                                        <select
-                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                            value={draftFilters.material || ''}
-                                            onChange={e => updateDraft('material', e.target.value)}
-                                        >
-                                            <option value="">All Materials</option>
-                                            {uniqueMaterials.map(material => (
-                                                <option key={`reports-material-${material}`} value={material}>
-                                                    {material}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Mine & Quarry</label>
-                                        <select
-                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                            value={draftFilters.mine || ''}
-                                            onChange={e => updateDraft('mine', e.target.value)}
-                                        >
-                                            <option value="">All Mines/Quarries</option>
-                                            {uniqueMines.map(mine => (
-                                                <option key={`reports-mine-${mine}`} value={mine}>
-                                                    {mine}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[11px] text-gray-500 dark:text-gray-400">Transport & Owner</label>
-                                        <select
-                                            className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                            value={draftFilters.transportOwner || ''}
-                                            onChange={e => updateDraft('transportOwner', e.target.value)}
-                                        >
-                                            <option value="">All Transport Owners</option>
-                                            {uniqueTransportOwners.map(owner => (
-                                                <option key={`reports-transport-${owner}`} value={owner}>
-                                                    {owner}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    {(reportType === 'trips' || reportType === 'trip-rates' || reportType === 'gst-trip-rates' || reportType === 'bills') && (
+                                        <>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Material</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.material || ''}
+                                                    onChange={e => updateDraft('material', e.target.value)}
+                                                >
+                                                    <option value="">All Materials</option>
+                                                    {uniqueMaterials.map(material => (
+                                                        <option key={`reports-material-${material}`} value={material}>
+                                                            {material}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Mine & Quarry</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.mine || ''}
+                                                    onChange={e => updateDraft('mine', e.target.value)}
+                                                >
+                                                    <option value="">All Mines/Quarries</option>
+                                                    {uniqueMines.map(mine => (
+                                                        <option key={`reports-mine-${mine}`} value={mine}>
+                                                            {mine}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] text-gray-500 dark:text-gray-400">Transport & Owner</label>
+                                                <select
+                                                    className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                    value={draftFilters.transportOwner || ''}
+                                                    onChange={e => updateDraft('transportOwner', e.target.value)}
+                                                >
+                                                    <option value="">All Transport Owners</option>
+                                                    {uniqueTransportOwners.map(owner => (
+                                                        <option key={`reports-transport-${owner}`} value={owner}>
+                                                            {owner}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
+                                    {(reportType === 'payments' || reportType === 'expenses') && (
+                                        <div>
+                                            <label className="text-[11px] text-gray-500 dark:text-gray-400">Via</label>
+                                            <select
+                                                className="w-full h-7 text-[11px] px-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                                value={draftFilters.via || ''}
+                                                onChange={e => updateDraft('via', e.target.value)}
+                                            >
+                                                <option value="">All Via</option>
+                                                {(reportType === 'payments' ? paymentViaOptions : expenseViaOptions).map(option => (
+                                                    <option key={`reports-via-${reportType}-${option}`} value={option}>
+                                                        {option}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                     <div className="flex flex-wrap justify-end gap-2 lg:col-span-1">
                                         <button
                                             type="button"
