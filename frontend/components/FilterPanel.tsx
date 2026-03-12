@@ -12,6 +12,10 @@ export interface Filters {
     transportOwner?: string;
     mine?: string;
     material?: string;
+    from?: string;
+    to?: string;
+    paymentType?: string;
+    via?: string;
 }
 
 export type FilterField = 'date' | 'singleDate' | 'transporter' | 'quarry' | 'customer' | 'vehicle' | 'royalty' | 'vendor' | 'transportOwner' | 'mine' | 'material';

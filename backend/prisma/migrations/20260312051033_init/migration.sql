@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "TripRecord" ALTER COLUMN "vendorCustomerGstPercentage" SET DATA TYPE DOUBLE PRECISION,
+ALTER COLUMN "vendorCustomerGstAmount" SET DATA TYPE DOUBLE PRECISION;

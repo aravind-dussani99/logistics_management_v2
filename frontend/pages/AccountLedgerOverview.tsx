@@ -1,11 +1,12 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import PageHeader from '../components/PageHeader';
 import { Filters } from '../components/FilterPanel';
 import AccountReconciliation, { AccountReconciliationHandle } from './AccountReconciliation';
 import { useData } from '../contexts/DataContext';
 import { dailyExpenseApi } from '../services/dailyExpenseApi';
 import { DailyExpense, Payment, PaymentType, RatePartyType, Trip } from '../types';
-import { computeTripGstAmount, formatCurrency, getCombinedRatePerTon, getComboPartyTypes, resolveTripRate } from '../utils';
+import { computeTripGstAmount, formatCurrency, formatDateDisplay, getCombinedRatePerTon, getComboPartyTypes, resolveTripRate } from '../utils';
 
 type RatePartySummary = {
   key: string;
@@ -505,37 +506,44 @@ const AccountLedgerOverview: React.FC = () => {
   };
 
   const exportCsv = () => {
+    const displayText = (value: unknown, fallback = '-') => {
+      if (value === undefined || value === null) return fallback;
+      const text = String(value).trim();
+      return text ? text : fallback;
+    };
+    const sanitizeFilePart = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'report';
+    const downloadWorkbook = (filename: string, sheetName: string, rows: Array<Array<string | number>>) => {
+      const normalizedRows = rows.map(row => row.map(cell => (cell ?? '').toString()));
+      const maxCols = normalizedRows.reduce((max, row) => Math.max(max, row.length), 1);
+      const worksheet = XLSX.utils.aoa_to_sheet(normalizedRows);
+      worksheet['!merges'] = normalizedRows
+        .map((row, index) => (row.length === 1 && maxCols > 1 ? { s: { r: index, c: 0 }, e: { r: index, c: maxCols - 1 } } : null))
+        .filter(Boolean) as XLSX.Range[];
+      worksheet['!cols'] = Array.from({ length: maxCols }, (_, colIndex) => {
+        const width = normalizedRows.reduce((max, row) => {
+          const value = row[colIndex] ?? '';
+          return Math.max(max, value.length);
+        }, 10);
+        return { wch: Math.min(Math.max(width + 2, 12), 40) };
+      });
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31) || 'Report');
+      XLSX.writeFile(workbook, filename, { compression: true });
+    };
+    const reportRange = `${filters.dateFrom ? formatDateDisplay(filters.dateFrom) : 'All'} to ${filters.dateTo ? formatDateDisplay(filters.dateTo) : 'All'}`;
+    const rangeKey = `${filters.dateFrom || 'all'}_to_${filters.dateTo || 'all'}`;
+
     if (activeTab === 'monthly') {
       const csvRows: Array<Array<string | number>> = [];
-      csvRows.push(['Monthly Extract']);
-      csvRows.push(['Selected Date Range', selectedDateRangeLabel]);
-      csvRows.push(['Selected Months', selectedMonthRangeLabel]);
-      csvRows.push(['Total Received', monthlyKpis.received.toFixed(2), 'Total Paid', monthlyKpis.paid.toFixed(2), 'Balance', monthlyKpis.balance.toFixed(2)]);
-      csvRows.push([]);
-
-      const pushPartyTable = (title: string, rows: MonthlyExtractPartyRow[], isEndCustomer = false) => {
+      const addSection = (title: string, headers: string[], rows: Array<Array<string | number>>) => {
         if (rows.length === 0) return;
         csvRows.push([title]);
-        csvRows.push(['S. No.', 'Person Name', 'Material Types', 'Trips', 'Total Qty', 'Total Amount', isEndCustomer ? 'Received' : 'Paid', 'Pending', 'Overpaid', 'Remarks']);
-        rows.forEach((row, index) => {
-          csvRows.push([
-            index + 1,
-            row.personName,
-            row.materialTypes.length ? row.materialTypes.join(', ') : '-',
-            row.tripCount,
-            row.totalQty.toFixed(2),
-            row.totalAmount.toFixed(2),
-            row.paidOrReceived.toFixed(2),
-            row.pending.toFixed(2),
-            row.overpaid.toFixed(2),
-            row.remarks,
-          ]);
-        });
+        csvRows.push(headers);
+        csvRows.push(...rows);
         csvRows.push([]);
       };
-
-      const pushBankFlow = (title: string, rows: MonthlyExtractBankFlowRow[], counterpartyLabel: string) => {
-        if (rows.length === 0) return;
+      const buildBankFlowRows = (rows: MonthlyExtractBankFlowRow[]) => {
         const summaryMap = new Map<string, { name: string; txCount: number; amount: number }>();
         rows.forEach(row => {
           row.counterparties.forEach(cp => {
@@ -546,93 +554,148 @@ const AccountLedgerOverview: React.FC = () => {
             summaryMap.set(key, item);
           });
         });
-        const summaryRows = Array.from(summaryMap.values()).sort((a, b) => b.amount - a.amount);
-        if (summaryRows.length === 0) return;
-        csvRows.push([title]);
-        csvRows.push(['S. No.', counterpartyLabel, 'Transactions', 'Total Amount']);
-        summaryRows.forEach((row, index) => csvRows.push([
-          index + 1,
-          row.name,
-          row.txCount,
-          row.amount.toFixed(2),
-        ]));
-        csvRows.push([]);
+        return Array.from(summaryMap.values()).sort((a, b) => b.amount - a.amount);
       };
-
-      const pushGst = (title: string, rows: MonthlyExtractGstRow[]) => {
-        if (rows.length === 0) return;
-        csvRows.push([title]);
-        csvRows.push(['S. No.', 'Name', 'Trips', 'Qty', 'GST Amount']);
-        rows.forEach((row, index) => csvRows.push([index + 1, row.name, row.count, row.qty.toFixed(2), row.gstAmount.toFixed(2)]));
-        csvRows.push([]);
-      };
-
-      const pushNonTrip = (rows: MonthlyExtractNonTripRow[]) => {
-        if (rows.length === 0) return;
-        csvRows.push(['Other / Non-Trip Transactions']);
-        csvRows.push(['S. No.', 'Person / Name', 'Type', 'Transactions', 'Amount', 'Account Split']);
-        rows.forEach((row, index) => csvRows.push([
-          index + 1,
-          row.personName,
-          row.txType,
-          row.txCount,
-          row.amount.toFixed(2),
-          row.accounts.map(item => `${item.account}: ${item.amount.toFixed(2)}`).join(' | '),
-        ]));
-        csvRows.push([]);
-      };
+      csvRows.push(['Monthly Extract']);
+      csvRows.push(['Selected Date Range', selectedDateRangeLabel]);
+      csvRows.push(['Selected Months', selectedMonthRangeLabel]);
+      csvRows.push(['Total Received', formatCurrency(monthlyKpis.received), 'Total Paid', formatCurrency(monthlyKpis.paid), 'Balance', formatCurrency(monthlyKpis.balance)]);
+      csvRows.push([]);
 
       if (monthlyExtractCombinedReport) {
-        csvRows.push(['Selected Range Summary']);
+        csvRows.push(['Selected Range Summary', selectedMonthRangeLabel]);
         csvRows.push([
           'Trips', monthlyExtractCombinedReport.tripsCount,
           'Qty', monthlyExtractCombinedReport.totalQty.toFixed(2),
-          'Credits', monthlyExtractCombinedReport.totalCredits.toFixed(2),
-          'Debits', monthlyExtractCombinedReport.totalDebits.toFixed(2),
-          'Net', monthlyExtractCombinedReport.netBankMovement.toFixed(2),
+          'Credits', formatCurrency(monthlyExtractCombinedReport.totalCredits),
+          'Debits', formatCurrency(monthlyExtractCombinedReport.totalDebits),
+          'Net', formatCurrency(monthlyExtractCombinedReport.netBankMovement),
         ]);
         csvRows.push([]);
-        pushBankFlow('Credits Summary', monthlyExtractCombinedReport.creditSummary, 'From');
-        pushBankFlow('Debits Summary', monthlyExtractCombinedReport.debitSummary, 'To');
+
+        const creditSummaryRows = buildBankFlowRows(monthlyExtractCombinedReport.creditSummary);
+        addSection(
+          `Credits Summary · ${formatCurrency(creditSummaryRows.reduce((sum, row) => sum + row.amount, 0))}`,
+          ['S. No.', 'From', 'Transactions', 'Total Amount'],
+          creditSummaryRows.map((row, index) => [index + 1, displayText(row.name), row.txCount, formatCurrency(row.amount)]),
+        );
+
+        const debitSummaryRows = buildBankFlowRows(monthlyExtractCombinedReport.debitSummary);
+        addSection(
+          `Debits Summary · ${formatCurrency(debitSummaryRows.reduce((sum, row) => sum + row.amount, 0))}`,
+          ['S. No.', 'To', 'Transactions', 'Total Amount'],
+          debitSummaryRows.map((row, index) => [index + 1, displayText(row.name), row.txCount, formatCurrency(row.amount)]),
+        );
+
         (['individual', 'two-plus-one', 'all-activities', 'two-activities'] as MonthlyExtractSectionKey[]).forEach(sectionKey => {
-          pushPartyTable(`${activitySectionTitles[sectionKey]} - Rate Parties`, monthlyExtractCombinedReport.activityTables[sectionKey], false);
+          addSection(
+            `${activitySectionTitles[sectionKey]} - Rate Parties`,
+            ['S. No.', 'Person Name', 'Material Types', 'Trips', 'Total Qty', 'Total Amount', 'Paid', 'Pending', 'Overpaid', 'Remarks'],
+            monthlyExtractCombinedReport.activityTables[sectionKey].map((row, index) => [
+              index + 1,
+              displayText(row.personName),
+              row.materialTypes.length ? row.materialTypes.join(', ') : '-',
+              row.tripCount,
+              row.totalQty.toFixed(2),
+              formatCurrency(row.totalAmount),
+              formatCurrency(row.paidOrReceived),
+              formatCurrency(row.pending),
+              formatCurrency(row.overpaid),
+              displayText(row.remarks),
+            ]),
+          );
         });
-        pushPartyTable('End Customer Summary', monthlyExtractCombinedReport.endCustomerRows, true);
-        pushGst('Rate Party GST Summary (Payable)', monthlyExtractCombinedReport.ratePartyGstRows);
-        pushGst('End Customer GST Summary (Receivable)', monthlyExtractCombinedReport.endCustomerGstRows);
-        pushNonTrip(monthlyExtractCombinedReport.nonTripRows);
+
+        addSection(
+          'End Customer Summary',
+          ['S. No.', 'Person Name', 'Material Types', 'Trips', 'Total Qty', 'Total Amount', 'Received', 'Pending', 'Overpaid', 'Remarks'],
+          monthlyExtractCombinedReport.endCustomerRows.map((row, index) => [
+            index + 1,
+            displayText(row.personName),
+            row.materialTypes.length ? row.materialTypes.join(', ') : '-',
+            row.tripCount,
+            row.totalQty.toFixed(2),
+            formatCurrency(row.totalAmount),
+            formatCurrency(row.paidOrReceived),
+            formatCurrency(row.pending),
+            formatCurrency(row.overpaid),
+            displayText(row.remarks),
+          ]),
+        );
+
+        addSection(
+          'Rate Party GST Summary (Payable)',
+          ['S. No.', 'Name', 'Trips', 'Qty', 'GST Amount'],
+          monthlyExtractCombinedReport.ratePartyGstRows.map((row, index) => [
+            index + 1,
+            displayText(row.name),
+            row.count,
+            row.qty.toFixed(2),
+            formatCurrency(row.gstAmount),
+          ]),
+        );
+
+        addSection(
+          'End Customer GST Summary (Receivable)',
+          ['S. No.', 'Name', 'Trips', 'Qty', 'GST Amount'],
+          monthlyExtractCombinedReport.endCustomerGstRows.map((row, index) => [
+            index + 1,
+            displayText(row.name),
+            row.count,
+            row.qty.toFixed(2),
+            formatCurrency(row.gstAmount),
+          ]),
+        );
+
+        addSection(
+          'Other / Non-Trip Transactions',
+          ['S. No.', 'Person / Name', 'Type', 'Transactions', 'Amount', 'Account Split'],
+          monthlyExtractCombinedReport.nonTripRows.map((row, index) => [
+            index + 1,
+            displayText(row.personName),
+            displayText(row.txType),
+            row.txCount,
+            formatCurrency(row.amount),
+            row.accounts.map(item => `${displayText(item.account)}: ${formatCurrency(item.amount)}`).join(' | '),
+          ]),
+        );
       }
 
-      const csv = csvRows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'monthly_extract.csv';
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadWorkbook(`monthly_extract_${rangeKey}.xlsx`, 'Monthly Extract', csvRows);
+      return;
+    }
+    if (activeTab === 'party') {
+      const csvExport = partyExportRef.current?.buildCsvRows();
+      if (!csvExport) return;
+      downloadWorkbook(csvExport.filename.replace(/\.csv$/i, '.xlsx'), 'Name Account', csvExport.rows);
+      return;
+    }
+    if (activeTab === 'head') {
+      const csvExport = headExportRef.current?.buildCsvRows();
+      if (!csvExport) return;
+      downloadWorkbook(csvExport.filename.replace(/\.csv$/i, '.xlsx'), 'Head Account', csvExport.rows);
       return;
     }
     const exportItems = activeTab === 'history' ? historicalMergedSummaries : filteredSummaries;
-    const header = ['Type', 'Name/Account', 'Trips', 'Net Tons', 'Total Amount', 'Paid', 'Balance', 'Action'];
-    const rows = exportItems.map(item => [
-      RATE_PARTY_LABELS[item.type],
-      item.name,
-      item.trips.length,
-      item.totalTons.toFixed(2),
-      item.grossAmount.toFixed(2),
-      item.paidAmount.toFixed(2),
-      item.balance.toFixed(2),
-      getActionLabel(item),
-    ]);
-    const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'logistics_accounts_reports.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    const title = activeTab === 'history' ? 'Historical Abstract' : 'Abstract';
+    const csvRows: Array<Array<string | number>> = [
+      ['Logistics Accounts Reports'],
+      [title],
+      ['Date Range', reportRange],
+      [],
+      ['Name/Account', 'Type', 'Trips', 'Net Tons', 'Total Amount', 'Paid', 'Balance', 'Action'],
+      ...exportItems.map(item => [
+        displayText(item.name),
+        displayText(RATE_PARTY_LABELS[item.type]),
+        item.trips.length,
+        item.totalTons.toFixed(2),
+        formatCurrency(item.grossAmount),
+        formatCurrency(item.paidAmount),
+        formatCurrency(item.balance),
+        displayText(getActionLabel(item)),
+      ]),
+    ];
+    downloadWorkbook(`logistics_accounts_reports_${sanitizeFilePart(title)}_${rangeKey}.xlsx`, title, csvRows);
   };
 
   const exportPdf = (items: RatePartySummary[]) => {
@@ -1852,7 +1915,7 @@ const AccountLedgerOverview: React.FC = () => {
         filterData={{ vehicles: [], transportOwners: [], customers: [], quarries: [], royaltyOwners: [] }}
         showFilters={[]}
         showMoreFilters={[]}
-        pageAction={{ label: 'Export CSV', action: exportCsv }}
+        pageAction={{ label: 'Export XLSX', action: exportCsv }}
         secondaryAction={{ label: 'Export PDF', action: exportCurrentTabPdf }}
         headerRight={activeTab === 'history' ? undefined : (
           <div className="rounded-xl border border-gray-200/60 bg-white/90 dark:bg-gray-900/70 dark:border-gray-700/60 shadow-md px-3 py-2">

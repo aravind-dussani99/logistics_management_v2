@@ -51,6 +51,7 @@ const getRateModeLabel = (trip: Trip, comboTypes: RatePartyType[]): string => {
 
 export type AccountReconciliationHandle = {
   buildPrintHtml: () => string | null;
+  buildCsvRows: () => { filename: string; rows: string[][] } | null;
 };
 
 const AccountReconciliation = React.forwardRef(function AccountReconciliation({
@@ -1037,6 +1038,297 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
     exportCsv(`reconciliation_payments_${selectedPartyKey || 'party'}.csv`, [header, ...rows]);
   };
 
+  const buildCsvRows = useCallback(() => {
+    if (mode === 'party' && !selectedParty) return null;
+    if (mode === 'head' && !selectedHeadAccount) return null;
+
+    const rows: string[][] = [];
+    const displayText = (value: unknown, fallback = '-') => {
+      if (value === undefined || value === null) return fallback;
+      const text = String(value).trim();
+      return text ? text : fallback;
+    };
+    const addSection = (title: string, header: string[], body: string[][]) => {
+      if (body.length === 0) return;
+      rows.push([title]);
+      rows.push(header);
+      rows.push(...body);
+      rows.push([]);
+    };
+
+    if (mode === 'head') {
+      rows.push(['Logistics Accounts Reports']);
+      rows.push(['Head Account', selectedHeadAccount]);
+      rows.push(['Date Range', `${dateFrom ? formatDateDisplay(dateFrom) : 'All'} to ${dateTo ? formatDateDisplay(dateTo) : 'All'}`]);
+      rows.push([]);
+      addSection(
+        'Head Account Payments',
+        ['S. No.', 'Date', 'Type', 'From', 'To', 'Amount', 'Name'],
+        headPaymentRows.map((payment, index) => [
+          String(index + 1),
+          formatDateDisplay(payment.date),
+          payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
+          displayText(payment.fromAccount),
+          displayText(payment.toAccount),
+          formatCurrency(Number(payment.amount || 0)),
+          displayText(payment.ratePartyName),
+        ]),
+      );
+      return {
+        filename: `head_account_${normalizeName(selectedHeadAccount) || 'report'}.csv`,
+        rows,
+      };
+    }
+
+    rows.push(['Logistics Accounts Reports']);
+    rows.push(['Party / Account', selectedParty]);
+    rows.push(['Date Range', `${dateFrom ? formatDateDisplay(dateFrom) : 'All'} to ${dateTo ? formatDateDisplay(dateTo) : 'All'}`]);
+    rows.push([]);
+    rows.push(['KPI Summary']);
+    rows.push([partyHasTrips ? 'Trips Total' : 'Total In', kpiPaymentLabel, kpiBalanceLabel]);
+    rows.push([formatCurrency(kpiTripTotal), formatCurrency(kpiPaymentTotal), kpiBalanceValue]);
+    rows.push([]);
+
+    if (isEndCustomerParty) {
+      addSection(
+        'Main Summary',
+        ['S. No.', 'Section', 'Total Count', 'Total Qty (With Final Rate)', 'Total Amount'],
+        [
+          ['1', 'Payments In', String(endCustomerPaymentTotals.inCount), '-', formatCurrency(endCustomerPaymentTotals.inAmount)],
+          ['2', 'Payments Out', String(endCustomerPaymentTotals.outCount), '-', formatCurrency(endCustomerPaymentTotals.outAmount)],
+          ['3', 'End Customer GST', String(endCustomerGstRows.length), endCustomerTripTotals.ratedQty.toFixed(2), formatCurrency(endCustomerTripTotals.gstAmount)],
+          ['4', 'Total Trip Amount + GST', String(endCustomerTripTotals.totalTrips), endCustomerTripTotals.ratedQty.toFixed(2), formatCurrency(endCustomerTripTotals.totalWithGst)],
+          ...endCustomerTripMaterialSummary.map((row, index) => [
+            String(index + 5),
+            `↳ ${row.material} (Trips: ${row.tripsCount}${row.ratedTripsCount !== row.tripsCount ? ` · Rated: ${row.ratedTripsCount}` : ''})`,
+            String(row.tripsCount),
+            row.ratedQty.toFixed(2),
+            formatCurrency(row.amount),
+          ]),
+        ],
+      );
+    } else if (mainSummaryRows.length > 0) {
+      addSection(
+        'Main Summary',
+        ['S. No.', 'Section', 'Total Count', 'Total Qty', 'Total Amount'],
+        mainSummaryRows.map((row, index) => [
+          String(index + 1),
+          row.label,
+          String(row.count),
+          row.qty === null ? '-' : row.qty.toFixed(2),
+          formatCurrency(row.amount),
+        ]),
+      );
+    }
+
+    if (isAccountSelection) {
+      addSection(
+        'Credits Summary',
+        ['S. No.', 'From', 'Transactions', 'Total Amount'],
+        accountCreditSummary.map((row, index) => [
+          String(index + 1),
+          displayText(row.name),
+          String(row.count),
+          formatCurrency(row.total),
+        ]),
+      );
+      addSection(
+        'Debits Summary',
+        ['S. No.', 'To', 'Transactions', 'Total Amount'],
+        accountDebitSummary.map((row, index) => [
+          String(index + 1),
+          displayText(row.name),
+          String(row.count),
+          formatCurrency(row.total),
+        ]),
+      );
+    }
+
+    addSection(
+      mode === 'party' ? 'Payments Statement' : 'Payments',
+      ['S. No.', 'Date', 'Type', 'From', 'Via', 'To', 'Amount'],
+      partyTransactionRows.map((payment, index) => {
+        const { displayFrom, displayTo } = isAccountSelection
+          ? getAccountDisplay(payment)
+          : {
+            displayFrom: displayText(payment.fromAccount),
+            displayTo: displayText(payment.toAccount || payment.ratePartyName),
+          };
+        return [
+          String(index + 1),
+          formatDateDisplay(payment.date),
+          payment.type === 'PAYMENT' ? 'Payment' : 'Receipt',
+          displayText(displayFrom),
+          displayText((payment.via || '').trim(), 'N/A'),
+          displayText(displayTo),
+          formatCurrency(Number(payment.amount || 0)),
+        ];
+      }),
+    );
+
+    if (isEndCustomerParty) {
+      addSection(
+        'Trips Statement',
+        ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Vehicle Number', 'Material Type', 'Pickup', 'Drop-off', 'Qty', 'Final Rate/Ton', 'Base Amount', 'GST %', 'GST Amount', 'Total Amount', 'Rate Status'],
+        endCustomerTripRows.map((row, index) => [
+          String(index + 1),
+          formatDateDisplay(row.date),
+          `#${row.id}`,
+          displayText(row.invoice),
+          displayText(row.vehicleNumber),
+          displayText(row.material),
+          displayText(row.pickupPlace),
+          displayText(row.dropOffPlace),
+          row.netWeight.toFixed(2),
+          row.hasFinalRate ? formatCurrency(row.finalRatePerTon) : '-',
+          formatCurrency(row.tripAmount),
+          row.hasFinalRate ? row.gstPercentage.toFixed(2) : '-',
+          formatCurrency(row.gstAmount),
+          formatCurrency(row.totalAmount),
+          row.hasFinalRate ? 'With Final Rate' : 'Without Final Rate',
+        ]),
+      );
+      addSection(
+        'End Customer GST Details',
+        ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Qty', 'Base Amount', 'GST %', 'GST Amount'],
+        endCustomerGstRows.map((row, index) => [
+          String(index + 1),
+          formatDateDisplay(row.date),
+          `#${row.id}`,
+          displayText(row.invoice),
+          row.netWeight.toFixed(2),
+          formatCurrency(row.tripAmount),
+          row.gstPercentage.toFixed(2),
+          formatCurrency(row.gstAmount),
+        ]),
+      );
+    } else {
+      if (mineIndividualRows.length > 0) {
+        addSection(
+          'Mine & Quarry',
+          ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Material Type', 'Net Qty', 'Mine Rate/Ton', 'Mine Amount'],
+          mineIndividualRows.map((row, index) => [
+            String(index + 1),
+            formatDateDisplay(row.date),
+            `#${row.id}`,
+            displayText(row.invoice),
+            displayText(row.material),
+            row.netWeight.toFixed(2),
+            formatCurrency(row.mineRate),
+            formatCurrency(row.materialCost),
+          ]),
+        );
+      }
+      if (royaltyIndividualRows.length > 0) {
+        addSection(
+          'Royalty',
+          ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Net Qty', 'Royalty Rate/Ton', 'Royalty Amount'],
+          royaltyIndividualRows.map((row, index) => [
+            String(index + 1),
+            formatDateDisplay(row.date),
+            `#${row.id}`,
+            displayText(row.invoice),
+            row.netWeight.toFixed(2),
+            formatCurrency(row.royaltyRate),
+            formatCurrency(row.royaltyCost),
+          ]),
+        );
+      }
+      if (transportIndividualRows.length > 0) {
+        addSection(
+          'Transport',
+          ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Pickup', 'Drop-off', 'Net Qty', 'Transport Rate/Ton', 'Transport Amount'],
+          transportIndividualRows.map((row, index) => [
+            String(index + 1),
+            formatDateDisplay(row.date),
+            `#${row.id}`,
+            displayText(row.invoice),
+            displayText(row.pickupPlace),
+            displayText(row.dropOffPlace),
+            row.netWeight.toFixed(2),
+            formatCurrency(row.transportRate),
+            formatCurrency(row.transportCost),
+          ]),
+        );
+      }
+      comboActivitySections.forEach(section => {
+        addSection(
+          section.title,
+          ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Material Type', 'Pickup', 'Drop-off', 'Net Qty', 'Combined Rate/Ton', 'Combined Amount'],
+          section.rows.map((row, index) => [
+            String(index + 1),
+            formatDateDisplay(row.date),
+            `#${row.id}`,
+            displayText(row.invoice),
+            displayText(row.material),
+            displayText(row.pickupPlace),
+            displayText(row.dropOffPlace),
+            row.netWeight.toFixed(2),
+            formatCurrency(row.comboRate),
+            formatCurrency(row.comboAmount),
+          ]),
+        );
+      });
+      if (showGstTable) {
+        addSection(
+          'Trip GST Details',
+          ['S. No.', 'Date', 'Trip #', 'Invoice/DC', 'Material Owner', 'Vehicle Number', 'Material Type', 'Net Tons', 'Trip Rate for GST', 'GST %', 'GST Amount'],
+          gstRows.map((row, index) => [
+            String(index + 1),
+            formatDateDisplay(row.date),
+            `#${row.id}`,
+            displayText(row.invoice),
+            displayText(row.mineQuarryName),
+            displayText(row.vehicleNumber),
+            displayText(row.material),
+            row.netWeight.toFixed(2),
+            formatCurrency(row.gstRatePerTon),
+            row.gstPercentage.toFixed(2),
+            formatCurrency(row.gstAmount),
+          ]),
+        );
+      }
+    }
+
+    return {
+      filename: `reconciliation_${selectedPartyKey || 'party'}.csv`,
+      rows,
+    };
+  }, [
+    mode,
+    selectedParty,
+    selectedHeadAccount,
+    dateFrom,
+    dateTo,
+    partyHasTrips,
+    kpiTripTotal,
+    kpiPaymentLabel,
+    kpiPaymentTotal,
+    kpiBalanceLabel,
+    kpiBalanceValue,
+    headPaymentRows,
+    isEndCustomerParty,
+    endCustomerPaymentTotals,
+    endCustomerGstRows,
+    endCustomerTripTotals,
+    endCustomerTripMaterialSummary,
+    mainSummaryRows,
+    isAccountSelection,
+    accountCreditSummary,
+    accountDebitSummary,
+    partyTransactionRows,
+    getAccountDisplay,
+    endCustomerTripRows,
+    mineIndividualRows,
+    royaltyIndividualRows,
+    transportIndividualRows,
+    comboActivitySections,
+    showGstTable,
+    gstRows,
+    selectedPartyKey,
+    normalizeName,
+  ]);
+
   const buildPrintHtml = useCallback(() => {
     if (mode === 'party' && !selectedParty) return null;
     if (mode === 'head' && !selectedHeadAccount) return null;
@@ -1704,7 +1996,8 @@ const AccountReconciliation = React.forwardRef(function AccountReconciliation({
 
   useImperativeHandle(ref, () => ({
     buildPrintHtml,
-  }), [buildPrintHtml]);
+    buildCsvRows,
+  }), [buildPrintHtml, buildCsvRows]);
 
   const handlePrint = () => {
     const html = buildPrintHtml();
